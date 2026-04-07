@@ -110,8 +110,16 @@ module.exports = {
         }, { quoted: message });
       }
 
+      // Reload plugins to include newly installed ones
+      try {
+        const commandHandler = require('../lib/commandHandler');
+        commandHandler.loadCommands();
+      } catch (e) {
+        console.error('Error reloading plugins:', e.message);
+      }
+
       return await sock.sendMessage(chatId, {
-        text: `✅ Installed pack "${packName}".\n• Installed: ${result.installed}\n• Skipped: ${result.skipped}\n• Total: ${result.total}`
+        text: `✅ Installed pack "${packName}".\n• Installed: ${result.installed}\n• Skipped: ${result.skipped}\n• Total: ${result.total}\n\n🔄 Plugins reloaded!`
       }, { quoted: message });
     }
 
@@ -138,7 +146,15 @@ module.exports = {
         await fs.promises.writeFile(pluginPath, file.content);
       }
 
-      await sock.sendMessage(chatId, { text: '*✅ Successfully installed plugin from Gist.*' }, { quoted: message });
+      // Reload plugins to include newly installed ones
+      try {
+        const commandHandler = require('../lib/commandHandler');
+        commandHandler.loadCommands();
+      } catch (e) {
+        console.error('Error reloading plugins:', e.message);
+      }
+
+      await sock.sendMessage(chatId, { text: '*✅ Successfully installed plugin from Gist.*\n🔄 Plugins reloaded!' }, { quoted: message });
     } catch (error) {
       console.error('install plugin error:', error);
       await sock.sendMessage(chatId, { text: `❌ Error fetching or saving the plugin: ${error.message}` }, { quoted: message });
