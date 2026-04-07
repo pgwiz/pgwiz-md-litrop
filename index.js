@@ -697,7 +697,7 @@ async function startQasimDev() {
                             };
 
                             await QasimDev.sendMessage(ownerJid, {
-                                text: '🤖 Startup check — reply to this message to confirm bot status.\n\nReply with `.owner` to verify the bot is responding.',
+                                text: '🤖 Startup check — reply to this message to confirm bot status.\n\nReply with `.menu` to verify the bot is responding.',
                             });
 
                             printLog('info', `Startup debug message sent to ${ownerJid.split('@')[0]}`);

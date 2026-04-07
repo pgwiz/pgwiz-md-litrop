@@ -21,7 +21,7 @@ function normalizeNewsletterJid(input) {
 async function getCurrentChannel() {
   const stored = await store.getSetting('global', 'menuChannel');
   return {
-    newsletterJid: stored?.newsletterJid || settings.newsletterJid || '120363319098372999@newsletter',
+    newsletterJid: stored?.newsletterJid || settings.newsletterJid || '120363179639202475@newsletter',
     newsletterName: stored?.newsletterName || settings.newsletterName || 'PGWIZ-MD',
     isCustom: !!stored?.newsletterJid
   };
