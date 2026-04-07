@@ -768,6 +768,57 @@ async function startQasimDev() {
             await handleStatus(QasimDev, reaction);
         });
 
+        // ===== PERFORMANCE & HEALTH MONITORING =====
+        // WebSocket health check - detect stale connections
+        let lastActivityTime = Date.now();
+        const INACTIVITY_TIMEOUT = 5 * 60 * 1000; // 5 minutes
+        
+        QasimDev.ev.on('messages.upsert', () => {
+            lastActivityTime = Date.now();
+        });
+
+        QasimDev.ev.on('messages.update', () => {
+            lastActivityTime = Date.now();
+        });
+
+        // Health check every 3 minutes
+        const healthCheckInterval = setInterval(() => {
+            const timeSinceLastActivity = Date.now() - lastActivityTime;
+            
+            // Check WebSocket state
+            const wsState = QasimDev?.ws?.readyState;
+            const isConnected = QasimDev?.user !== undefined;
+            
+            if (!isConnected || wsState !== 1) {
+                printLog('warning', `⚠️ WebSocket unhealthy (state: ${wsState}, connected: ${isConnected}) - restarting...`);
+                clearInterval(healthCheckInterval);
+                process.exit(0); // Let PM2/Heroku restart
+            }
+            
+            if (timeSinceLastActivity > INACTIVITY_TIMEOUT) {
+                printLog('warning', `⚠️ No activity for ${(timeSinceLastActivity/1000/60).toFixed(1)} minutes - reconnecting...`);
+                clearInterval(healthCheckInterval);
+                process.exit(0);
+            }
+        }, 3 * 60 * 1000); // Every 3 minutes
+
+        // Scheduled restart every 6 hours to prevent memory creep
+        const scheduledRestartInterval = setInterval(() => {
+            printLog('info', '🔄 Scheduled 6-hour restart to maintain stability...');
+            clearInterval(healthCheckInterval);
+            clearInterval(scheduledRestartInterval);
+            process.exit(0);
+        }, 6 * 60 * 60 * 1000); // Every 6 hours
+
+        // Garbage collection every 30 minutes
+        const gcInterval = setInterval(() => {
+            if (global.gc) {
+                global.gc();
+                const memUsage = (process.memoryUsage().rss / 1024 / 1024).toFixed(2);
+                printLog('info', `🧹 Garbage collection completed (RAM: ${memUsage}MB)`);
+            }
+        }, 30 * 60 * 1000); // Every 30 minutes
+
         return QasimDev;
     } catch (error) {
         printLog('error', `Error in startQasimDev: ${error.message}`);
