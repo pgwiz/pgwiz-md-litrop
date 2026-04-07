@@ -36,13 +36,13 @@
     "multi-device",
     "mega-ai"
   ],
-  "homepage": "https://github.com/pgwiz/PGWIZ-MD",
+  "homepage": "https://github.com/pgwiz/pgwiz-md-litrop",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/pgwiz/pgwiz-md-litrop.git"
   },
   "bugs": {
-    "url": "https://github.com/pgwiz/PGWIZ-MD/issues"
+    "url": "https://github.com/pgwiz/pgwiz-md-litrop/issues"
   },
   "license": "MIT",
   "author": "pgwiz",
