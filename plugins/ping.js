@@ -1,3 +1,5 @@
+const settings = require('../settings');
+
 module.exports = {
   command: 'ping',
   aliases: ['p', 'pong'],
@@ -11,13 +13,25 @@ module.exports = {
     const chatId = message.key.remoteJid;
     
     const sent = await sock.sendMessage(chatId, { 
-      text: 'Pinging...' 
+      text: '⏱️ Measuring latency...' 
     });
     
     const end = Date.now();
+    const latency = end - start;
+    
+    let statusEmoji = '🟢';
+    if (latency > 100) statusEmoji = '🟡';
+    if (latency > 500) statusEmoji = '🔴';
+    
+    const text = `${statusEmoji} *PING RESPONSE*
+
+⚡ Latency: *${latency}ms*
+🤖 Bot: *${settings.botName}*
+📦 Version: *${settings.version}*
+⏰ Timestamp: *${new Date().toLocaleTimeString()}*`;
     
     await sock.sendMessage(chatId, {
-      text: `🏓 Pong!\nLatency: ${end - start}ms`,
+      text: text,
       edit: sent.key
     });
   }
