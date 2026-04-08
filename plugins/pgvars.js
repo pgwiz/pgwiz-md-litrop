@@ -46,9 +46,10 @@ module.exports = {
     command: 'pgvars',
     aliases: ['setenv', 'getenv', 'pgvar'],
     category: 'admin',
-    description: 'Manage .env variables (Owner Only)',
+    description: 'Manage .env variables (Owner/Admin Only)',
     usage: '.pgvars <list/update/delete> [KEY=VALUE]',
     ownerOnly: true,
+    adminAllowed: true,
 
     async handler(sock, message, args, context = {}) {
         const { chatId } = context;

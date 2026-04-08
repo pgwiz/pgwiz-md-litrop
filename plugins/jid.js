@@ -38,19 +38,47 @@ module.exports = {
       } catch (e) {}
     }
 
-    // Extract clean ID
+    // Extract clean ID and determine type
     const cleanId = resolved.split('@')[0].split(':')[0];
-    const idType = resolved.includes('@g.us') ? 'GROUP' : 'USER';
+    let idType = 'USER';
+    let idDetails = '';
+
+    if (resolved.includes('@g.us')) {
+      idType = 'GROUP';
+      idDetails = '(Group JID)';
+    } else if (resolved.includes('@s.whatsapp.net')) {
+      idType = 'USER (Phone)';
+      idDetails = `(Regular user, ${cleanId})`;
+    } else if (resolved.includes('@lid')) {
+      idType = 'USER (LID)';
+      idDetails = '(Linked ID - internal WhatsApp ID)';
+    } else if (resolved.includes(':')) {
+      idType = 'BROADCAST';
+      idDetails = '(Broadcast/Newsletter)';
+    } else if (resolved.includes('@newsletter')) {
+      idType = 'NEWSLETTER';
+      idDetails = '(WhatsApp Newsletter)';
+    }
 
     const text = `
-═══════════════════════════
-🆔 JID LOOKUP
-═══════════════════════════
+═══════════════════════════════════
+🆔 JID LOOKUP & ID TYPE
+═══════════════════════════════════
 
 📱 *Full JID:* \`${resolved}\`
-👤 *Number/ID:* ${cleanId}
+👤 *Clean ID:* ${cleanId}
 🏷️ *Type:* ${idType}
-⏰ *Retrieved:* ${new Date().toLocaleTimeString()}`;
+ℹ️ *Details:* ${idDetails}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📚 *ID Format Guide:*
+• \`xxx@s.whatsapp.net\` = Regular User
+• \`xxx@g.us\` = Group
+• \`xxx@lid\` = Linked ID (Groups)
+• \`xxx@newsletter\` = Newsletter
+• \`xxx:yy@g.us\` = Broadcast
+
+⏰ Retrieved: ${new Date().toLocaleTimeString()}`;
 
     await sock.sendMessage(chatId, {
       text: text
