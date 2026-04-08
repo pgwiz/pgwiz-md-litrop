@@ -61,18 +61,18 @@ module.exports = {
 
 ✅ *STATUS:* ACTIVE & RUNNING
 
-━━━━━━━━━━━ BOT INFO ━━━━━━━━━━━
+━━━━━━ BOT INFO ━━━━━━
 📦 *Version:* ${settings.version}
 👤 *Owner:* ${settings.botOwner}
 ⏱️ *Uptime:* ${uptimeText}
 
-━━━━━━━━━ SYSTEM RESOURCES ━━━━━━━━━
+━━━━ SYSTEM RESOURCES ━━━━
 ${memEmoji} *RAM:* ${usedMem}MB / ${totalMem}MB (${memPercent}%)
 ${cpuEmoji} *CPU:* ${cpuLoad} load avg
 🖥️ *Platform:* ${platform} (${arch})
 ⚙️ *Node.js:* ${nodeVersion}
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━
 ⏰ Timestamp: ${new Date().toLocaleString()}`;
 
       await sock.sendMessage(chatId, {
