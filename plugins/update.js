@@ -278,13 +278,16 @@ module.exports = {
       }, { quoted: message });
 
       let changesSummary = '';
+      let hasUpdates = false;
 
       if (await hasGitRepo()) {
         const { oldRev, newRev, alreadyUpToDate, commits, files } = await updateViaGit();
 
         if (alreadyUpToDate) {
-          changesSummary = `✅ Already up to date\nCurrent: ${newRev.substring(0, 7)}`;
+          // No updates available - just restart silently
+          hasUpdates = false;
         } else {
+          hasUpdates = true;
           changesSummary = `✅ Updated successfully!\n\n`;
           changesSummary += `📌 Old: ${oldRev.substring(0, 7)}\n`;
           changesSummary += `📌 New: ${newRev.substring(0, 7)}\n\n`;
@@ -324,14 +327,26 @@ module.exports = {
         delete require.cache[require.resolve('../settings')];
         const newSettings = require('../settings');
         const v = newSettings.version || 'unknown';
-        changesSummary += `\n\n🔖 Version: ${v}`;
+        if (hasUpdates) {
+          changesSummary += `\n\n🔖 Version: ${v}`;
+        }
       } catch { }
 
-      const restartMsg = isHeroku ? '♻️ Restarting dyno...' : '♻️ Restarting bot...';
-      await sock.sendMessage(chatId, {
-        text: changesSummary + '\n\n' + restartMsg,
-        ...channelInfo
-      }, { quoted: message });
+      // Only send message if there are actual updates
+      if (hasUpdates) {
+        const restartMsg = isHeroku ? '♻️ Restarting dyno...' : '♻️ Restarting bot...';
+        await sock.sendMessage(chatId, {
+          text: changesSummary + '\n\n' + restartMsg,
+          ...channelInfo
+        }, { quoted: message });
+      } else {
+        // No updates - just restart silently
+        const restartMsg = isHeroku ? '♻️ Restarting dyno...' : '♻️ Restarting bot...';
+        await sock.sendMessage(chatId, {
+          text: restartMsg,
+          ...channelInfo
+        }, { quoted: message });
+      }
 
       await new Promise(resolve => setTimeout(resolve, 1000));
       await restartProcess();
