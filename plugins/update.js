@@ -36,7 +36,7 @@ async function updateViaGit() {
   const newRev = (await run('git rev-parse origin/main')).trim();
   const alreadyUpToDate = oldRev === newRev;
   const commits = alreadyUpToDate ? '' : await run(`git log --pretty=format:"%h %s (%an)" ${oldRev}..${newRev}`).catch(() => '');
-  const files = alreadyUpToDate ? '' : await run(`git diff --name-status ${oldRev} ${newRev}`).catch(() => '');
+  const files = alreadyUpToDate ? '' : await run(`git diff --name-status ${newRev}^..${newRev}`).catch(() => '');
   await run(`git reset --hard ${newRev}`);
   await run('git clean -fd -e session -e .env -e store.json -e session/');
 
