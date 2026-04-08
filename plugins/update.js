@@ -281,44 +281,75 @@ module.exports = {
       let hasUpdates = false;
 
       // Check if git repository exists
-      if (await hasGitRepo()) {
-        // Fetch latest from remote and get commit diff
-        const { oldRev, newRev, alreadyUpToDate, commits, files } = await updateViaGit();
+      let gitAvailable = false;
+      try {
+        gitAvailable = await hasGitRepo();
+      } catch (e) {
+        console.error('Git check failed:', e);
+      }
 
-        if (alreadyUpToDate) {
-          // No updates available - just restart silently
-          hasUpdates = false;
-        } else {
-          // Updates found - show detailed changelog
-          hasUpdates = true;
-          changesSummary = `✅ Updated successfully!\n\n`;
-          changesSummary += `📌 Old: ${oldRev.substring(0, 7)}\n`;
-          changesSummary += `📌 New: ${newRev.substring(0, 7)}\n\n`;
+      if (gitAvailable) {
+        try {
+          // Fetch latest from remote and get commit diff
+          const { oldRev, newRev, alreadyUpToDate, commits, files } = await updateViaGit();
 
-          // Show last 5 commits
-          if (commits) {
-            const commitLines = commits.split('\n').slice(0, 5);
-            changesSummary += `📝 Recent commits:\n${commitLines.map(c => `• ${c}`).join('\n')}\n\n`;
+          if (alreadyUpToDate) {
+            // No updates available - just restart silently
+            hasUpdates = false;
+          } else {
+            // Updates found - show detailed changelog
+            hasUpdates = true;
+            changesSummary = `✅ Updated successfully!\n\n`;
+            changesSummary += `📌 Old: ${oldRev.substring(0, 7)}\n`;
+            changesSummary += `📌 New: ${newRev.substring(0, 7)}\n\n`;
+
+            // Show last 5 commits
+            if (commits && commits.trim()) {
+              const commitLines = commits.split('\n').filter(l => l.trim()).slice(0, 5);
+              if (commitLines.length > 0) {
+                changesSummary += `📝 Recent commits:\n${commitLines.map(c => `• ${c}`).join('\n')}\n\n`;
+              }
+            }
+
+            // Show changed files (max 10)
+            if (files && files.trim()) {
+              const fileLines = files.split('\n').filter(l => l.trim()).slice(0, 10);
+              if (fileLines.length > 0) {
+                changesSummary += `📁 Changed files:\n${fileLines.map(f => `• ${f}`).join('\n')}`;
+                const totalFiles = files.split('\n').filter(l => l.trim()).length;
+                if (totalFiles > 10) {
+                  changesSummary += `\n... and ${totalFiles - 10} more`;
+                }
+              }
+            }
           }
 
-          // Show changed files (max 10)
-          if (files) {
-            const fileLines = files.split('\n').slice(0, 10);
-            changesSummary += `📁 Changed files:\n${fileLines.map(f => `• ${f}`).join('\n')}`;
-            if (files.split('\n').length > 10) {
-              changesSummary += `\n... and ${files.split('\n').length - 10} more`;
+          // Install dependencies after update
+          await run('npm install --no-audit --no-fund');
+        } catch (gitError) {
+          console.error('Git update failed, trying ZIP:', gitError);
+          const zipOverride = args[0] || null;
+          const { copiedFiles } = await updateViaZip(sock, chatId, message, zipOverride);
+
+          changesSummary = `✅ Updated from ZIP!\n\n`;
+          changesSummary += `📁 Files updated: ${copiedFiles.length}\n\n`;
+          hasUpdates = copiedFiles.length > 0;
+
+          if (copiedFiles.length > 0) {
+            const shown = copiedFiles.slice(0, 10);
+            changesSummary += `Recent changes:\n${shown.map(f => `• ${f}`).join('\n')}`;
+            if (copiedFiles.length > 10) {
+              changesSummary += `\n... and ${copiedFiles.length - 10} more files`;
             }
           }
         }
-
-        // Install dependencies after update
-        await run('npm install --no-audit --no-fund');
       } else {
         const zipOverride = args[0] || null;
         const { copiedFiles } = await updateViaZip(sock, chatId, message, zipOverride);
 
         changesSummary = `✅ Updated from ZIP!\n\n`;
         changesSummary += `📁 Files updated: ${copiedFiles.length}\n\n`;
+        hasUpdates = copiedFiles.length > 0;
 
         if (copiedFiles.length > 0) {
           const shown = copiedFiles.slice(0, 10);
@@ -333,20 +364,20 @@ module.exports = {
         delete require.cache[require.resolve('../settings')];
         const newSettings = require('../settings');
         const v = newSettings.version || 'unknown';
-        if (hasUpdates) {
+        if (hasUpdates || changesSummary) {
           changesSummary += `\n\n🔖 Version: ${v}`;
         }
       } catch { }
 
-      // Only send message if there are actual updates
-      if (hasUpdates) {
+      // Always send detailed message
+      if (changesSummary.trim()) {
         const restartMsg = isHeroku ? '♻️ Restarting dyno...' : '♻️ Restarting bot...';
         await sock.sendMessage(chatId, {
           text: changesSummary + '\n\n' + restartMsg,
           ...channelInfo
         }, { quoted: message });
       } else {
-        // No updates - just restart silently
+        // Fallback - minimal message
         const restartMsg = isHeroku ? '♻️ Restarting dyno...' : '♻️ Restarting bot...';
         await sock.sendMessage(chatId, {
           text: restartMsg,
