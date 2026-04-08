@@ -55,9 +55,9 @@ module.exports = {
 
       // Build status message with dev formatting
       const text = `
-╔════════════════════════════════════╗
-║    🤖 ${settings.botName} STATUS         ║
-╚════════════════════════════════════╝
+╔═══════════════════════════════╗
+║  🤖 PGWIZ-MD STATUS          ║
+╚═══════════════════════════════╝
 
 ✅ *STATUS:* ACTIVE & RUNNING
 
