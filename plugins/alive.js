@@ -55,9 +55,9 @@ module.exports = {
 
       // Build status message with dev formatting
       const text = `
-╔═══════════════════════════════╗
-║  🤖 PGWIZ-MD STATUS          ║
-╚═══════════════════════════════╝
+═══════════════════════════════════
+🤖 PGWIZ-MD STATUS
+═══════════════════════════════════
 
 ✅ *STATUS:* ACTIVE & RUNNING
 
@@ -72,7 +72,7 @@ ${cpuEmoji} *CPU:* ${cpuLoad} load avg
 🖥️ *Platform:* ${platform} (${arch})
 ⚙️ *Node.js:* ${nodeVersion}
 
-━━━━━━━━━━━━━━━━━━━━
+═══════════════════════════════════
 ⏰ Timestamp: ${new Date().toLocaleString()}`;
 
       await sock.sendMessage(chatId, {
