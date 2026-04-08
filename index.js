@@ -769,9 +769,9 @@ async function startQasimDev() {
         });
 
         // ===== PERFORMANCE & HEALTH MONITORING =====
-        // WebSocket health check - detect stale connections
+        // Silent WebSocket health check - reconnects without sending messages
         let lastActivityTime = Date.now();
-        const INACTIVITY_TIMEOUT = 5 * 60 * 1000; // 5 minutes
+        const HEALTH_CHECK_INTERVAL = 5 * 60 * 1000; // 5 minutes
         
         QasimDev.ev.on('messages.upsert', () => {
             lastActivityTime = Date.now();
@@ -781,26 +781,26 @@ async function startQasimDev() {
             lastActivityTime = Date.now();
         });
 
-        // Health check every 3 minutes
-        const healthCheckInterval = setInterval(() => {
-            const timeSinceLastActivity = Date.now() - lastActivityTime;
-            
-            // Check WebSocket state
-            const wsState = QasimDev?.ws?.readyState;
-            const isConnected = QasimDev?.user !== undefined;
-            
-            if (!isConnected || wsState !== 1) {
-                printLog('warning', `⚠️ WebSocket unhealthy (state: ${wsState}, connected: ${isConnected}) - restarting...`);
-                clearInterval(healthCheckInterval);
-                process.exit(0); // Let PM2/Heroku restart
+        // Silent health check every 5 minutes (no messages to user)
+        const healthCheckInterval = setInterval(async () => {
+            try {
+                const wsState = QasimDev?.ws?.readyState;
+                const isConnected = QasimDev?.user !== undefined;
+                
+                // Only log in debug, don't message user
+                if (!isConnected || wsState !== 1) {
+                    console.log(`[HEALTH] WebSocket unhealthy - attempting silent reconnect (state: ${wsState})`);
+                    // Silently attempt to reconnect by resending presence
+                    try {
+                        await QasimDev.sendPresenceUpdate('available');
+                    } catch (e) {
+                        // Fail silently, Baileys will handle reconnection
+                    }
+                }
+            } catch (err) {
+                // Silently ignore errors, don't interrupt the bot
             }
-            
-            if (timeSinceLastActivity > INACTIVITY_TIMEOUT) {
-                printLog('warning', `⚠️ No activity for ${(timeSinceLastActivity/1000/60).toFixed(1)} minutes - reconnecting...`);
-                clearInterval(healthCheckInterval);
-                process.exit(0);
-            }
-        }, 3 * 60 * 1000); // Every 3 minutes
+        }, HEALTH_CHECK_INTERVAL);
 
         // Scheduled restart every 6 hours to prevent memory creep
         const scheduledRestartInterval = setInterval(() => {
@@ -815,7 +815,7 @@ async function startQasimDev() {
             if (global.gc) {
                 global.gc();
                 const memUsage = (process.memoryUsage().rss / 1024 / 1024).toFixed(2);
-                printLog('info', `🧹 Garbage collection completed (RAM: ${memUsage}MB)`);
+                console.log(`[GC] Garbage collection completed (RAM: ${memUsage}MB)`);
             }
         }, 30 * 60 * 1000); // Every 30 minutes
 
