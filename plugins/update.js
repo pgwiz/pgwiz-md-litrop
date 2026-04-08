@@ -294,8 +294,9 @@ module.exports = {
           const { oldRev, newRev, alreadyUpToDate, commits, files } = await updateViaGit();
 
           if (alreadyUpToDate) {
-            // No updates available - just restart silently
+            // No updates available - show message but don't restart
             hasUpdates = false;
+            changesSummary = `✅ Already up to date!\n📌 Current: ${newRev.substring(0, 7)}\n\nNo new updates available from remote.`;
           } else {
             // Updates found - show detailed changelog
             hasUpdates = true;
@@ -364,29 +365,22 @@ module.exports = {
         delete require.cache[require.resolve('../settings')];
         const newSettings = require('../settings');
         const v = newSettings.version || 'unknown';
-        if (hasUpdates || changesSummary) {
+        if (changesSummary) {
           changesSummary += `\n\n🔖 Version: ${v}`;
         }
       } catch { }
 
-      // Always send detailed message
-      if (changesSummary.trim()) {
-        const restartMsg = isHeroku ? '♻️ Restarting dyno...' : '♻️ Restarting bot...';
-        await sock.sendMessage(chatId, {
-          text: changesSummary + '\n\n' + restartMsg,
-          ...channelInfo
-        }, { quoted: message });
-      } else {
-        // Fallback - minimal message
-        const restartMsg = isHeroku ? '♻️ Restarting dyno...' : '♻️ Restarting bot...';
-        await sock.sendMessage(chatId, {
-          text: restartMsg,
-          ...channelInfo
-        }, { quoted: message });
-      }
+      // Send status message
+      await sock.sendMessage(chatId, {
+        text: changesSummary,
+        ...channelInfo
+      }, { quoted: message });
 
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      await restartProcess();
+      // Only restart if there are actual updates
+      if (hasUpdates) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        await restartProcess();
+      }
 
     } catch (err) {
       console.error('Update failed:', err);
