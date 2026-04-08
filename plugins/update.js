@@ -280,23 +280,28 @@ module.exports = {
       let changesSummary = '';
       let hasUpdates = false;
 
+      // Check if git repository exists
       if (await hasGitRepo()) {
+        // Fetch latest from remote and get commit diff
         const { oldRev, newRev, alreadyUpToDate, commits, files } = await updateViaGit();
 
         if (alreadyUpToDate) {
           // No updates available - just restart silently
           hasUpdates = false;
         } else {
+          // Updates found - show detailed changelog
           hasUpdates = true;
           changesSummary = `✅ Updated successfully!\n\n`;
           changesSummary += `📌 Old: ${oldRev.substring(0, 7)}\n`;
           changesSummary += `📌 New: ${newRev.substring(0, 7)}\n\n`;
 
+          // Show last 5 commits
           if (commits) {
             const commitLines = commits.split('\n').slice(0, 5);
             changesSummary += `📝 Recent commits:\n${commitLines.map(c => `• ${c}`).join('\n')}\n\n`;
           }
 
+          // Show changed files (max 10)
           if (files) {
             const fileLines = files.split('\n').slice(0, 10);
             changesSummary += `📁 Changed files:\n${fileLines.map(f => `• ${f}`).join('\n')}`;
@@ -306,6 +311,7 @@ module.exports = {
           }
         }
 
+        // Install dependencies after update
         await run('npm install --no-audit --no-fund');
       } else {
         const zipOverride = args[0] || null;

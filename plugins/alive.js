@@ -14,6 +14,7 @@ module.exports = {
     const chatId = context.chatId || message.key.remoteJid;
 
     try {
+      // Calculate uptime from process start
       let uptime = Math.floor(process.uptime());
 
       const days = Math.floor(uptime / 86400);
@@ -23,6 +24,7 @@ module.exports = {
       const minutes = Math.floor(uptime / 60);
       const seconds = uptime % 60;
 
+      // Format uptime as readable string (e.g., "2d 5h 30m")
       const uptimeParts = [];
       if (days) uptimeParts.push(`${days}d`);
       if (hours) uptimeParts.push(`${hours}h`);
@@ -30,6 +32,8 @@ module.exports = {
       if (seconds || uptimeParts.length === 0) uptimeParts.push(`${seconds}s`);
 
       const uptimeText = uptimeParts.join(' ');
+      
+      // Get system resource info
       const totalMem = (os.totalmem() / 1024 / 1024).toFixed(2);
       const freeMem = (os.freemem() / 1024 / 1024).toFixed(2);
       const usedMem = (totalMem - freeMem).toFixed(2);
@@ -38,6 +42,7 @@ module.exports = {
       const arch = os.arch();
       const nodeVersion = process.version;
 
+      // Build status message
       const text =
         `*🤖 ${settings.botName} IS ACTIVE!*\n\n` +
         `*Version:* ${settings.version}\n` +
