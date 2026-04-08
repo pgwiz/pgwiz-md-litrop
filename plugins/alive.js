@@ -4,7 +4,7 @@ const settings = require("../settings");
 
 module.exports = {
   command: 'alive',
-  aliases: ['status', 'bot'],
+  aliases: ['status', 'bot', 'info'],
   category: 'general',
   description: 'Check bot status and system info',
   usage: '.alive',
@@ -37,20 +37,43 @@ module.exports = {
       const totalMem = (os.totalmem() / 1024 / 1024).toFixed(2);
       const freeMem = (os.freemem() / 1024 / 1024).toFixed(2);
       const usedMem = (totalMem - freeMem).toFixed(2);
+      const memPercent = ((usedMem / totalMem) * 100).toFixed(1);
       const cpuLoad = os.loadavg()[0].toFixed(2);
       const platform = os.platform();
       const arch = os.arch();
       const nodeVersion = process.version;
 
-      // Build status message
-      const text =
-        `*🤖 ${settings.botName} IS ACTIVE!*\n\n` +
-        `*Version:* ${settings.version}\n` +
-        `*Uptime:* ${uptimeText}\n` +
-        `*RAM Usage:* ${usedMem} MB / ${totalMem} MB\n` +
-        `*CPU Load:* ${cpuLoad}\n` +
-        `*Platform:* ${platform} (${arch})\n` +
-        `*Node.js:* ${nodeVersion}\n`;
+      // Memory health indicator
+      let memEmoji = '🟢';
+      if (memPercent > 70) memEmoji = '🟡';
+      if (memPercent > 85) memEmoji = '🔴';
+
+      // CPU health indicator
+      let cpuEmoji = '🟢';
+      if (cpuLoad > 0.7) cpuEmoji = '🟡';
+      if (cpuLoad > 1.5) cpuEmoji = '🔴';
+
+      // Build status message with dev formatting
+      const text = `
+╔════════════════════════════════════╗
+║    🤖 ${settings.botName} STATUS         ║
+╚════════════════════════════════════╝
+
+✅ *STATUS:* ACTIVE & RUNNING
+
+━━━━━━━━━━━ BOT INFO ━━━━━━━━━━━
+📦 *Version:* ${settings.version}
+👤 *Owner:* ${settings.botOwner}
+⏱️ *Uptime:* ${uptimeText}
+
+━━━━━━━━━ SYSTEM RESOURCES ━━━━━━━━━
+${memEmoji} *RAM:* ${usedMem}MB / ${totalMem}MB (${memPercent}%)
+${cpuEmoji} *CPU:* ${cpuLoad} load avg
+🖥️ *Platform:* ${platform} (${arch})
+⚙️ *Node.js:* ${nodeVersion}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⏰ Timestamp: ${new Date().toLocaleString()}`;
 
       await sock.sendMessage(chatId, {
         text,
@@ -67,7 +90,9 @@ module.exports = {
 
     } catch (error) {
       console.error('Error in alive command:', error);
-      await sock.sendMessage(chatId, { text: '✅ Bot is alive and running!' }, { quoted: message });
+      await sock.sendMessage(chatId, {
+        text: '✅ Bot is alive and running!'
+      }, { quoted: message });
     }
   }
 };
