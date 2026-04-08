@@ -12,7 +12,7 @@ const settings = {
   tempCleanupInterval: 1 * 60 * 60 * 1000, // 1 hours
   storeWriteInterval: 10000,
   description: "This is a bot for managing group commands and automating tasks.",
-  version: "5.1.2",
+  version: "5.1.3",
   updateZipUrl: "https://github.com/pgwiz/pgwiz-md-litrop/archive/refs/heads/main.zip",
   channelLink: "https://whatsapp.com/channel/0029Va8cpObHwXbDoZE9VY3K",
   ytch: "pgwiz",
