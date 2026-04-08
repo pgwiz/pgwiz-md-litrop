@@ -15,7 +15,16 @@ function run(cmd) {
 
 async function hasGitRepo() {
   const gitDir = path.join(process.cwd(), '.git');
-  if (!fs.existsSync(gitDir)) return false;
+  if (!fs.existsSync(gitDir)) {
+    // On Heroku, try to initialize git if it doesn't exist
+    try {
+      await run('git init');
+      await run('git remote add origin https://github.com/pgwiz/pgwiz-md-litrop.git').catch(() => {});
+      return true;
+    } catch {
+      return false;
+    }
+  }
   try {
     await run('git --version');
     return true;
