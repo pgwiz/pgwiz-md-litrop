@@ -3,37 +3,8 @@
 const fs = require('fs');
 const path = require('path');
 
-// Auto-clear session files on Bad MAC (keeps creds.json)
-let lastSessionClear = 0;
-function autoSessionClear() {
-    const now = Date.now();
-    if (now - lastSessionClear < 120000) return; // Rate limit: once per 2 minutes
-    lastSessionClear = now;
-
-    const sessionDir = path.join(__dirname, 'session');
-    if (!fs.existsSync(sessionDir)) return;
-
-    try {
-        const files = fs.readdirSync(sessionDir);
-        let cleared = 0;
-        for (const file of files) {
-            // Only keep creds.json - clear everything else including auth files
-            if (file === 'creds.json') continue;
-            try {
-                fs.unlinkSync(path.join(sessionDir, file));
-                cleared++;
-            } catch { }
-        }
-        if (cleared > 0) {
-            console.log(`[AUTO-REPAIR] Cleared ${cleared} corrupted session files - Session will re-initialize on next connection`);
-            // Force exit so PM2/systemd can restart with clean state
-            console.log(`[AUTO-REPAIR] Restarting bot in 3 seconds for clean recovery...`);
-            setTimeout(() => {
-                process.exit(0);
-            }, 3000);
-        }
-    } catch { }
-}
+// Prevent restart loops by warning on repeated Bad MAC errors instead of deleting session files.
+let lastBadMacWarning = 0;
 
 // Stream-level suppression disabled on Koyeb/container platforms to prevent log duplication
 // The console.log/error/warn overrides are sufficient for suppressing encryption logs
@@ -110,12 +81,15 @@ console.log = (...args) => {
 
 console.error = (...args) => {
     if (shouldSuppress(args)) {
-        // Auto-repair on Bad MAC errors
         const badMacFound = args.some(arg =>
             typeof arg === 'string' && arg.toLowerCase().includes('bad mac')
         );
         if (badMacFound) {
-            autoSessionClear();
+            const now = Date.now();
+            if (now - lastBadMacWarning > 120000) {
+                originalConsoleWarn('[AUTO-REPAIR] Bad MAC detected. Preserving session files to avoid restart loops.');
+                lastBadMacWarning = now;
+            }
         }
         return;
     }
@@ -881,31 +855,6 @@ setInterval(() => {
     });
     //  console.log('🧹 Temp folder auto-cleaned');
 }, 1 * 60 * 60 * 1000);
-
-// Auto-clear session files every 3 minutes to prevent memory leaks and encryption conflicts
-setInterval(() => {
-    try {
-        const sessionDir = path.join(process.cwd(), 'session');
-        if (!fs.existsSync(sessionDir)) return;
-
-        const files = fs.readdirSync(sessionDir);
-        let clearedCount = 0;
-
-        for (const file of files) {
-            if (file === 'creds.json') continue; // Never delete creds
-            try {
-                fs.unlinkSync(path.join(sessionDir, file));
-                clearedCount++;
-            } catch { }
-        }
-
-        if (clearedCount > 0) {
-            console.log(chalk.gray(`🧹 Auto-cleared ${clearedCount} session files`));
-        }
-    } catch (err) {
-        // Silently fail, not critical
-    }
-}, 3 * 60 * 1000); // Every 3 minutes (2-4 minute range as requested)
 
 // CPU throttling detection and monitoring
 setInterval(() => {

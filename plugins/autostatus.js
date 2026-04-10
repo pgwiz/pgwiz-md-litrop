@@ -10,10 +10,15 @@ const MYSQL_URL = process.env.MYSQL_URL;
 const SQLITE_URL = process.env.DB_URL;
 const HAS_DB = !!(MONGO_URL || POSTGRES_URL || MYSQL_URL || SQLITE_URL);
 
-// Get random emoji from STATUS_EMOJIS env variable (comma-separated) or default to 💚
+// Get random emoji from STATUS_EMOJIS env variable (comma-separated) or default to blue heart + star.
 function getRandomStatusEmoji() {
-    const emojis = (process.env.STATUS_EMOJIS || '💚').split(',').map(e => e.trim()).filter(Boolean);
+    const emojis = (process.env.STATUS_EMOJIS || '💙,⭐').split(',').map(e => e.trim()).filter(Boolean);
     return emojis[Math.floor(Math.random() * emojis.length)];
+}
+
+function getEnvBoolean(key, defaultValue) {
+    if (process.env[key] === undefined) return defaultValue;
+    return String(process.env[key]).toLowerCase() === 'true';
 }
 
 
@@ -24,8 +29,8 @@ if (!HAS_DB && !fs.existsSync(configPath)) {
         fs.mkdirSync(path.dirname(configPath), { recursive: true });
     }
     fs.writeFileSync(configPath, JSON.stringify({
-        enabled: false,
-        reactOn: false
+        enabled: true,
+        reactOn: true
     }, null, 2));
 }
 
@@ -48,44 +53,43 @@ async function readConfig() {
 
             // If no config exists, check environment variables for initial setup
             if (!config) {
-                const envEnabled = process.env.AUTO_STATUS_VIEW === 'true';
-                const envReactOn = process.env.AUTO_STATUS_REACT === 'true';
+                const envEnabled = getEnvBoolean('AUTO_STATUS_VIEW', true);
+                const envReactOn = getEnvBoolean('AUTO_STATUS_REACT', true);
 
-                if (envEnabled || envReactOn) {
-                    const initialConfig = { enabled: envEnabled, reactOn: envReactOn };
-                    await store.saveSetting('global', 'autoStatus', initialConfig);
-                    console.log('[AUTOSTATUS] Initialized from environment variables:', initialConfig);
-                    return initialConfig;
-                }
+                const initialConfig = { enabled: envEnabled, reactOn: envReactOn };
+                await store.saveSetting('global', 'autoStatus', initialConfig);
+                console.log('[AUTOSTATUS] Initialized from environment variables:', initialConfig);
+                return initialConfig;
             }
 
-            return config || { enabled: false, reactOn: false };
+            return {
+                enabled: typeof config.enabled === 'boolean' ? config.enabled : true,
+                reactOn: typeof config.reactOn === 'boolean' ? config.reactOn : true
+            };
         } else {
             // File system mode
             if (!fs.existsSync(configPath)) {
                 // Check environment variables for initial setup
-                const envEnabled = process.env.AUTO_STATUS_VIEW === 'true';
-                const envReactOn = process.env.AUTO_STATUS_REACT === 'true';
+                const envEnabled = getEnvBoolean('AUTO_STATUS_VIEW', true);
+                const envReactOn = getEnvBoolean('AUTO_STATUS_REACT', true);
 
                 const initialConfig = { enabled: envEnabled, reactOn: envReactOn };
                 fs.writeFileSync(configPath, JSON.stringify(initialConfig, null, 2));
 
-                if (envEnabled || envReactOn) {
-                    console.log('[AUTOSTATUS] Initialized from environment variables:', initialConfig);
-                }
+                console.log('[AUTOSTATUS] Initialized from environment variables:', initialConfig);
 
                 return initialConfig;
             }
 
             const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
             return {
-                enabled: !!config.enabled,
-                reactOn: !!config.reactOn
+                enabled: typeof config.enabled === 'boolean' ? config.enabled : true,
+                reactOn: typeof config.reactOn === 'boolean' ? config.reactOn : true
             };
         }
     } catch (error) {
         console.error('Error reading auto status config:', error);
-        return { enabled: false, reactOn: false };
+        return { enabled: true, reactOn: true };
     }
 }
 
@@ -308,7 +312,7 @@ module.exports = {
 
                     await sock.sendMessage(chatId, {
                         text: '💫 *Status reactions enabled!*\n\n' +
-                            'Bot will now react to status updates with 💚',
+                            'Bot will now react to status updates with 💙 and ⭐',
                         ...channelInfo
                     }, { quoted: message });
 
