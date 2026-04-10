@@ -1,4 +1,4 @@
-const Qasim = require('api-qasim');
+const apiClient = require('api-qasim');
 
 module.exports = {
   command: 'stext',
@@ -16,7 +16,7 @@ module.exports = {
         }, { quoted: message });
         return;
       }
-      const styledResult = await Qasim.styletext(text);
+      const styledResult = await apiClient.styletext(text);
 
       if (!Array.isArray(styledResult) || styledResult.length === 0) {
         throw new Error('No styled text found.');

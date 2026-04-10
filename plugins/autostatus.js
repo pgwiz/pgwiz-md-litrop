@@ -10,15 +10,22 @@ const MYSQL_URL = process.env.MYSQL_URL;
 const SQLITE_URL = process.env.DB_URL;
 const HAS_DB = !!(MONGO_URL || POSTGRES_URL || MYSQL_URL || SQLITE_URL);
 
-// Get random emoji from STATUS_EMOJIS env variable (comma-separated) or default to blue heart + star.
+// Get random emoji from STATUS_EMOJIS env variable (comma-separated) or default to blue heart + black heart + star.
 function getRandomStatusEmoji() {
-    const emojis = (process.env.STATUS_EMOJIS || '💙,⭐').split(',').map(e => e.trim()).filter(Boolean);
+    const emojis = (process.env.STATUS_EMOJIS || '💙,🖤,⭐').split(',').map(e => e.trim()).filter(Boolean);
     return emojis[Math.floor(Math.random() * emojis.length)];
 }
 
 function getEnvBoolean(key, defaultValue) {
     if (process.env[key] === undefined) return defaultValue;
     return String(process.env[key]).toLowerCase() === 'true';
+}
+
+function getStartupAutoStatusPolicy() {
+    return {
+        enabled: getEnvBoolean('AUTO_STATUS_VIEW', true),
+        reactOn: getEnvBoolean('AUTO_STATUS_REACT', true)
+    };
 }
 
 
@@ -152,6 +159,27 @@ async function writeConfig(config) {
     }
 }
 
+async function applyStartupAutoStatusPolicy() {
+    try {
+        const policy = getStartupAutoStatusPolicy();
+
+        if (HAS_DB) {
+            await store.saveSetting('global', 'autoStatus', policy);
+        } else {
+            if (!fs.existsSync(path.dirname(configPath))) {
+                fs.mkdirSync(path.dirname(configPath), { recursive: true });
+            }
+            fs.writeFileSync(configPath, JSON.stringify(policy, null, 2));
+        }
+
+        console.log('[AUTOSTATUS] Startup policy enforced from env:', policy);
+        return policy;
+    } catch (error) {
+        console.error('[AUTOSTATUS] Failed to apply startup policy:', error.message);
+        return getStartupAutoStatusPolicy();
+    }
+}
+
 async function isAutoStatusEnabled() {
     const config = await readConfig();
     return config.enabled;
@@ -253,6 +281,8 @@ module.exports = {
 
         try {
             let config = await readConfig();
+            const policy = getStartupAutoStatusPolicy();
+
             if (!args || args.length === 0) {
                 const viewStatus = config.enabled ? '✅ Enabled' : '❌ Disabled';
                 const reactStatus = config.reactOn ? '✅ Enabled' : '❌ Disabled';
@@ -261,88 +291,22 @@ module.exports = {
                     text: `🔄 *Auto Status Settings*\n\n` +
                         `📱 *Auto Status View:* ${viewStatus}\n` +
                         `💫 *Status Reactions:* ${reactStatus}\n` +
+                        `🔒 *Startup Policy (ENV):* View=${policy.enabled ? 'true' : 'false'}, React=${policy.reactOn ? 'true' : 'false'}\n` +
                         `🗄️ *Storage:* ${HAS_DB ? 'Database' : 'File System'}\n\n` +
-                        `*Commands:*\n` +
-                        `• \`.autostatus on\` - Enable auto view\n` +
-                        `• \`.autostatus off\` - Disable auto view\n` +
-                        `• \`.autostatus react on\` - Enable reaction\n` +
-                        `• \`.autostatus react off\` - Disable reaction`,
+                        `*Note:* This setting is enforced on every startup from .env variables.`,
                     ...channelInfo
                 }, { quoted: message });
                 return;
             }
 
-            const command = args[0].toLowerCase();
-
-            if (command === 'on') {
-                config.enabled = true;
-                await writeConfig(config);
-
-                await sock.sendMessage(chatId, {
-                    text: '✅ *Auto status view enabled!*\n\n' +
-                        'Bot will now automatically view all contact statuses.',
-                    ...channelInfo
-                }, { quoted: message });
-
-            } else if (command === 'off') {
-                config.enabled = false;
-                await writeConfig(config);
-
-                await sock.sendMessage(chatId, {
-                    text: '❌ *Auto status view disabled!*\n\n' +
-                        'Bot will no longer automatically view statuses.',
-                    ...channelInfo
-                }, { quoted: message });
-
-            } else if (command === 'react') {
-                if (!args[1]) {
-                    await sock.sendMessage(chatId, {
-                        text: '❌ *Please specify on/off for reactions!*\n\n' +
-                            'Usage: `.autostatus react on/off`',
-                        ...channelInfo
-                    }, { quoted: message });
-                    return;
-                }
-
-                const reactCommand = args[1].toLowerCase();
-
-                if (reactCommand === 'on') {
-                    config.reactOn = true;
-                    await writeConfig(config);
-
-                    await sock.sendMessage(chatId, {
-                        text: '💫 *Status reactions enabled!*\n\n' +
-                            'Bot will now react to status updates with 💙 and ⭐',
-                        ...channelInfo
-                    }, { quoted: message });
-
-                } else if (reactCommand === 'off') {
-                    config.reactOn = false;
-                    await writeConfig(config);
-
-                    await sock.sendMessage(chatId, {
-                        text: '❌ *Status reactions disabled!*\n\n' +
-                            'Bot will no longer react to status updates.',
-                        ...channelInfo
-                    }, { quoted: message });
-
-                } else {
-                    await sock.sendMessage(chatId, {
-                        text: '❌ *Invalid reaction command!*\n\n' +
-                            'Usage: `.autostatus react on/off`',
-                        ...channelInfo
-                    }, { quoted: message });
-                }
-
-            } else {
-                await sock.sendMessage(chatId, {
-                    text: '❌ *Invalid command!*\n\n' +
-                        '*Usage:*\n' +
-                        '• `.autostatus on/off` - Enable/disable auto view\n' +
-                        '• `.autostatus react on/off` - Enable/disable reactions',
-                    ...channelInfo
-                }, { quoted: message });
-            }
+            await sock.sendMessage(chatId, {
+                text: '🔒 *Auto status is locked by startup policy.*\n\n' +
+                    `AUTO_STATUS_VIEW=${policy.enabled ? 'true' : 'false'}\n` +
+                    `AUTO_STATUS_REACT=${policy.reactOn ? 'true' : 'false'}\n\n` +
+                    'To change behavior, update .env and restart the bot.',
+                ...channelInfo
+            }, { quoted: message });
+            return;
 
         } catch (error) {
             console.error('Error in autostatus command:', error);
@@ -359,5 +323,6 @@ module.exports = {
     isStatusReactionEnabled,
     reactToStatus,
     readConfig,
-    writeConfig
+    writeConfig,
+    applyStartupAutoStatusPolicy
 };

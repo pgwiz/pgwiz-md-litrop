@@ -1,4 +1,4 @@
-const Qasim = require('api-qasim');
+const apiClient = require('api-qasim');
 
 module.exports = {
   command: 'trends',
@@ -20,7 +20,7 @@ module.exports = {
         return;
       }
 
-      const result = await Qasim.trendtwit(country);
+      const result = await apiClient.trendtwit(country);
 
       if (!result) {
         throw new Error('No data received');

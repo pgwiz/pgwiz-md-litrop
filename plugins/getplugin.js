@@ -1,6 +1,6 @@
 /*****************************************************************************
  *                                                                           *
- *                     Developed By Qasim Ali                                *
+ *                     Developed By Bot Owner                                *
  *                                                                           *
  *  🌐  GitHub   : https://github.com/pgwiz                         *
  *  ▶️  YouTube  : https://youtube.com/@pgwiz                       *
@@ -67,7 +67,7 @@ module.exports = {
 
 /*****************************************************************************
  *                                                                           *
- *                     Developed By Qasim Ali                                *
+ *                     Developed By Bot Owner                                *
  *                                                                           *
  *  🌐  GitHub   : https://github.com/pgwiz                         *
  *  ▶️  YouTube  : https://youtube.com/@pgwiz                       *
@@ -80,3 +80,4 @@ module.exports = {
  *                                                                           *
  *****************************************************************************/
  
+

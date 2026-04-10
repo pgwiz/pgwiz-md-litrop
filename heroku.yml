@@ -1,3 +1,11 @@
+setup:
+  config:
+    DB_URL: "./baileys_store.db"
+    AUTO_STATUS_VIEW: "true"
+    AUTO_STATUS_REACT: "true"
+    STATUS_EMOJIS: "💙,🖤,⭐"
+    FORCE_SESSION_RESET: "true"
+
 build:
   docker:
     web: Dockerfile

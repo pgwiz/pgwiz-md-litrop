@@ -18,7 +18,7 @@ module.exports = {
       return;
     }
     try {
-      const apiUrl = `https://discardapi.dpdns.org/api/music/lyrics?apikey=qasim&song=${encodeURIComponent(songTitle)}`;
+      const apiUrl = `https://discardapi.dpdns.org/api/music/lyrics?apikey=guru&song=${encodeURIComponent(songTitle)}`;
       const res = await fetch(apiUrl);
       if (!res.ok) throw `API request failed with status ${res.status}`;
       const data = await res.json();

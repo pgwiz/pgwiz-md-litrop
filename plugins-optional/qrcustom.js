@@ -31,7 +31,7 @@ module.exports = {
 .customqr <text> | <size> | <color>
 
 ✨ Example:
-.customqr Qasim | 400×400 | 0-0-255
+.customqr Hello | 400×400 | 0-0-255
 
 🧩 Generates a colorful QR image`
         },

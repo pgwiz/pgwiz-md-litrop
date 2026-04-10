@@ -240,9 +240,9 @@ If you like this project, please give it a [⭐️ star on GitHub](https://githu
 
 ## Credits
 
-| [![Qasim Ali](https://github.com/pgwiz.png?size=100)](https://github.com/pgwiz) | [![WhiskeySockets](https://github.com/WhiskeySockets.png?size=100)](https://github.com/WhiskeySockets) |
+| [![Bot Owner](https://github.com/pgwiz.png?size=100)](https://github.com/pgwiz) | [![WhiskeySockets](https://github.com/WhiskeySockets.png?size=100)](https://github.com/WhiskeySockets) |
 | --- | --- 
-| [Qasim Ali](https://github.com/pgwiz) |[WhiskeySockets](https://github.com/WhiskeySockets) |
+| [Bot Owner](https://github.com/pgwiz) |[WhiskeySockets](https://github.com/WhiskeySockets) |
 
 ---
 
@@ -272,4 +272,5 @@ This project contains code from various open source projects:
 - If A plugin's code is obfuscated , You don't have permission to edit it in any form 
 - Don't Forget to Give Credits If you are using or Reuploading My Plugins/files
 - Have A Good Day
+
 

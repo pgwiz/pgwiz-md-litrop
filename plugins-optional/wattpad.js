@@ -1,4 +1,4 @@
-const Qasim = require('api-qasim');
+const apiClient = require('api-qasim');
 const google = require('google-it');
 const settings = require('../settings');
 const { channelInfo } = require('../lib/messageConfig');
@@ -23,7 +23,7 @@ module.exports = {
     }
 
     try {
-      const results = await Qasim.wattpad(query);
+      const results = await apiClient.wattpad(query);
 
       if (!Array.isArray(results) || results.length === 0) {
         throw new Error('No results found for your query.');

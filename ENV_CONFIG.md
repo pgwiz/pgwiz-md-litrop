@@ -54,19 +54,26 @@ This document explains all available environment variables for PGWIZ-MD bot conf
 ### `AUTO_STATUS_VIEW`
 - **Description**: Automatically view all WhatsApp statuses
 - **Values**: `"true"` or `"false"`
-- **Default**: `"false"`
+- **Default**: `"true"`
 - **Example**: `AUTO_STATUS_VIEW="true"`
 
 ### `AUTO_STATUS_REACT`
 - **Description**: Automatically react to all WhatsApp statuses
 - **Values**: `"true"` or `"false"`
-- **Default**: `"false"`
+- **Default**: `"true"`
 - **Example**: `AUTO_STATUS_REACT="true"`
 
 ### `STATUS_EMOJIS`
 - **Description**: Comma-separated list of emojis for status reactions
-- **Default**: `"💚,❤️,🔥,😍,👏"`
-- **Example**: `STATUS_EMOJIS="💚,❤️,🔥,😍,👏,🎉,✨"`
+- **Default**: `"💙,🖤,⭐"`
+- **Example**: `STATUS_EMOJIS="💙,🖤,⭐,✨"`
+
+### `FORCE_SESSION_RESET`
+- **Description**: Force full session reset at startup
+- **Values**: `"true"` or `"false"`
+- **Default**: `"false"`
+- **Example**: `FORCE_SESSION_RESET="true"`
+- **Note**: Best used as a one-time recovery toggle, then switch back to `"false"`
 
 ---
 
@@ -112,7 +119,10 @@ PORT="5000"
 # Auto Status
 AUTO_STATUS_VIEW="true"
 AUTO_STATUS_REACT="true"
-STATUS_EMOJIS="💚,❤️,🔥,😍,👏"
+STATUS_EMOJIS="💙,🖤,⭐"
+
+# Session recovery
+FORCE_SESSION_RESET="false"
 
 # Sudo Users
 SUDO_USERS="254789462334,1234567890"

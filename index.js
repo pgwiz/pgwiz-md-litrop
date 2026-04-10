@@ -350,7 +350,7 @@ if (!server.listening) {
     });
 }
 
-async function startQasimDev() {
+async function startBot() {
     try {
         let { version, isLatest } = await fetchLatestBaileysVersion();
 
@@ -371,7 +371,7 @@ async function startQasimDev() {
             printLog('info', '👻 STEALTH MODE IS ACTIVE - Starting in stealth mode');
         }
 
-        const QasimDev = makeWASocket({
+        const botSocket = makeWASocket({
             version,
             logger: pino({ level: 'silent' }, nullStream), // Silent logger with null stream
             printQRInTerminal: !pairingCode,
@@ -409,14 +409,14 @@ async function startQasimDev() {
         });
 
         // Expose bot instance globally for /ping endpoint
-        global.botInstance = QasimDev;
+        global.botInstance = botSocket;
 
-        const originalSendPresenceUpdate = QasimDev.sendPresenceUpdate;
-        const originalReadMessages = QasimDev.readMessages;
-        const originalSendReceipt = QasimDev.sendReceipt;
-        const originalSendReadReceipt = QasimDev.sendReadReceipt;
+        const originalSendPresenceUpdate = botSocket.sendPresenceUpdate;
+        const originalReadMessages = botSocket.readMessages;
+        const originalSendReceipt = botSocket.sendReceipt;
+        const originalSendReadReceipt = botSocket.sendReadReceipt;
 
-        QasimDev.sendPresenceUpdate = async function (...args) {
+        botSocket.sendPresenceUpdate = async function (...args) {
             const ghostMode = await store.getSetting('global', 'stealthMode');
             if (ghostMode && ghostMode.enabled) {
                 printLog('info', '👻 Blocked presence update (stealth mode)');
@@ -425,7 +425,7 @@ async function startQasimDev() {
             return originalSendPresenceUpdate.apply(this, args);
         };
 
-        QasimDev.readMessages = async function (...args) {
+        botSocket.readMessages = async function (...args) {
             const ghostMode = await store.getSetting('global', 'stealthMode');
             if (ghostMode && ghostMode.enabled) {
                 return;
@@ -434,7 +434,7 @@ async function startQasimDev() {
         };
 
         if (originalSendReceipt) {
-            QasimDev.sendReceipt = async function (...args) {
+            botSocket.sendReceipt = async function (...args) {
                 const ghostMode = await store.getSetting('global', 'stealthMode');
                 if (ghostMode && ghostMode.enabled) {
                     return;
@@ -444,7 +444,7 @@ async function startQasimDev() {
         }
 
         if (originalSendReadReceipt) {
-            QasimDev.sendReadReceipt = async function (...args) {
+            botSocket.sendReadReceipt = async function (...args) {
                 const ghostMode = await store.getSetting('global', 'stealthMode');
                 if (ghostMode && ghostMode.enabled) {
                     return;
@@ -453,8 +453,8 @@ async function startQasimDev() {
             };
         }
 
-        const originalQuery = QasimDev.query;
-        QasimDev.query = async function (node, ...args) {
+        const originalQuery = botSocket.query;
+        botSocket.query = async function (node, ...args) {
             const ghostMode = await store.getSetting('global', 'stealthMode');
             if (ghostMode && ghostMode.enabled) {
                 if (node && node.tag === 'receipt') {
@@ -467,15 +467,15 @@ async function startQasimDev() {
             return originalQuery.apply(this, [node, ...args]);
         };
 
-        QasimDev.isGhostMode = async () => {
+        botSocket.isGhostMode = async () => {
             const ghostMode = await store.getSetting('global', 'stealthMode');
             return ghostMode && ghostMode.enabled;
         };
 
-        QasimDev.ev.on('creds.update', saveCreds);
-        store.bind(QasimDev.ev);
+        botSocket.ev.on('creds.update', saveCreds);
+        store.bind(botSocket.ev);
 
-        QasimDev.ev.on('messages.upsert', async (chatUpdate) => {
+        botSocket.ev.on('messages.upsert', async (chatUpdate) => {
             try {
                 // Only process real-time messages, ignore history/append
                 if (chatUpdate.type !== 'notify') return;
@@ -488,27 +488,27 @@ async function startQasimDev() {
                     : mek.message;
 
                 if (mek.key && mek.key.remoteJid === 'status@broadcast') {
-                    handleStatus(QasimDev, chatUpdate).catch(err => printLog('error', `AutoStatus Error: ${err.message}`));
+                    handleStatus(botSocket, chatUpdate).catch(err => printLog('error', `AutoStatus Error: ${err.message}`));
                     return;
                 }
 
-                if (!QasimDev.public && !mek.key.fromMe && chatUpdate.type === 'notify') {
+                if (!botSocket.public && !mek.key.fromMe && chatUpdate.type === 'notify') {
                     const isGroup = mek.key?.remoteJid?.endsWith('@g.us');
                     if (!isGroup) return;
                 }
 
                 if (mek.key.id.startsWith('BAE5') && mek.key.id.length === 16) return;
 
-                if (QasimDev?.msgRetryCounterCache) {
-                    QasimDev.msgRetryCounterCache.clear();
+                if (botSocket?.msgRetryCounterCache) {
+                    botSocket.msgRetryCounterCache.clear();
                 }
 
                 try {
-                    await handleMessages(QasimDev, chatUpdate);
+                    await handleMessages(botSocket, chatUpdate);
                 } catch (err) {
                     printLog('error', `Error in handleMessages: ${err.message}`);
                     if (mek.key && mek.key.remoteJid) {
-                        await QasimDev.sendMessage(mek.key.remoteJid, {
+                        await botSocket.sendMessage(mek.key.remoteJid, {
                             text: '❌ An error occurred while processing your message.',
                             contextInfo: {
                                 forwardingScore: 1,
@@ -527,7 +527,7 @@ async function startQasimDev() {
             }
         });
 
-        QasimDev.decodeJid = (jid) => {
+        botSocket.decodeJid = (jid) => {
             if (!jid) return jid;
             if (/:\d+@/gi.test(jid)) {
                 let decode = jidDecode(jid) || {};
@@ -535,33 +535,33 @@ async function startQasimDev() {
             } else return jid;
         };
 
-        QasimDev.ev.on('contacts.update', update => {
+        botSocket.ev.on('contacts.update', update => {
             for (let contact of update) {
-                let id = QasimDev.decodeJid(contact.id);
+                let id = botSocket.decodeJid(contact.id);
                 if (store && store.contacts) store.contacts[id] = { id, name: contact.notify };
             }
         });
 
-        QasimDev.getName = (jid, withoutContact = false) => {
-            id = QasimDev.decodeJid(jid);
-            withoutContact = QasimDev.withoutContact || withoutContact;
+        botSocket.getName = (jid, withoutContact = false) => {
+            id = botSocket.decodeJid(jid);
+            withoutContact = botSocket.withoutContact || withoutContact;
             let v;
             if (id.endsWith("@g.us")) return new Promise(async (resolve) => {
                 v = store.contacts[id] || {};
-                if (!(v.name || v.subject)) v = QasimDev.groupMetadata(id) || {};
+                if (!(v.name || v.subject)) v = botSocket.groupMetadata(id) || {};
                 resolve(v.name || v.subject || PhoneNumber('+' + id.replace('@s.whatsapp.net', '')).getNumber('international'));
             });
             else v = id === '0@s.whatsapp.net' ? {
                 id,
                 name: 'WhatsApp'
-            } : id === QasimDev.decodeJid(QasimDev.user.id) ?
-                QasimDev.user :
+            } : id === botSocket.decodeJid(botSocket.user.id) ?
+                botSocket.user :
                 (store.contacts[id] || {});
             return (withoutContact ? '' : v.name) || v.subject || v.verifiedName || PhoneNumber('+' + jid.replace('@s.whatsapp.net', '')).getNumber('international');
         };
 
-        QasimDev.public = true;
-        QasimDev.serializeM = (m) => smsg(QasimDev, m, store);
+        botSocket.public = true;
+        botSocket.serializeM = (m) => smsg(botSocket, m, store);
 
         const isRegistered = state.creds?.registered === true;
         const hasValidMe = state.creds?.me?.id ? true : false;
@@ -607,7 +607,7 @@ async function startQasimDev() {
 
             setTimeout(async () => {
                 try {
-                    let code = await QasimDev.requestPairingCode(phoneNumberInput);
+                    let code = await botSocket.requestPairingCode(phoneNumberInput);
                     code = code?.match(/.{1,4}/g)?.join("-") || code;
                     console.log(chalk.black(chalk.bgGreen(`Your Pairing Code : `)), chalk.black(chalk.white(code)));
                     printLog('success', `Pairing code generated: ${code}`);
@@ -628,7 +628,7 @@ async function startQasimDev() {
             }
         }
 
-        QasimDev.ev.on('connection.update', async (s) => {
+        botSocket.ev.on('connection.update', async (s) => {
             const { connection, lastDisconnect, qr } = s;
 
             if (qr) {
@@ -662,7 +662,7 @@ async function startQasimDev() {
                 global.botConnectedTime = Date.now(); // Track connection time for old message filtering
                 printLog('success', 'Bot connected successfully!');
                 const { startAutoBio } = require('./plugins/a-setbio');
-                startAutoBio(QasimDev);
+                startAutoBio(botSocket);
                 const ghostMode = await store.getSetting('global', 'stealthMode');
                 if (ghostMode && ghostMode.enabled) {
                     printLog('info', '👻 STEALTH MODE ACTIVE - Bot is in stealth mode');
@@ -670,13 +670,13 @@ async function startQasimDev() {
                     console.log(chalk.gray('• No typing indicators'));
                 }
 
-                // console.log(chalk.yellow(`🌿Connected to => ` + JSON.stringify(QasimDev.user, null, 2))); // Verbose
+                // console.log(chalk.yellow(`🌿Connected to => ` + JSON.stringify(botSocket.user, null, 2))); // Verbose
 
                 try {
-                    const botNumber = QasimDev.user.id.split(':')[0] + '@s.whatsapp.net';
+                    const botNumber = botSocket.user.id.split(':')[0] + '@s.whatsapp.net';
                     const ghostStatus = (ghostMode && ghostMode.enabled) ? '\n👻 Stealth Mode: ACTIVE' : '';
 
-                    await QasimDev.sendMessage(botNumber, {
+                    await botSocket.sendMessage(botNumber, {
                         text: `🤖 Bot Connected Successfully!\n\n⏰ Time: ${new Date().toLocaleString()}\n✅ Status: Online and Ready!${ghostStatus}\n\n✅Make sure to join below channel`,
                         contextInfo: {
                             forwardingScore: 1,
@@ -703,7 +703,7 @@ async function startQasimDev() {
                                 expiresAt: Date.now() + 10 * 60 * 1000
                             };
 
-                            await QasimDev.sendMessage(ownerJid, {
+                            await botSocket.sendMessage(ownerJid, {
                                 text: '🤖 Startup check — reply to this message to confirm bot status.\n\nReply with `.menu` to verify the bot is responding.',
                             });
 
@@ -725,7 +725,7 @@ async function startQasimDev() {
                 // console.log(chalk.magenta(`\n${global.themeemoji || '•'} YT CHANNEL: pgwiz`));
                 // console.log(chalk.magenta(`${global.themeemoji || '•'} GITHUB: pgwiz`));
                 // console.log(chalk.magenta(`${global.themeemoji || '•'} WA NUMBER: ${owner}`));
-                // console.log(chalk.magenta(`${global.themeemoji || '•'} CREDIT: Qasim Ali`));
+                // console.log(chalk.magenta(`${global.themeemoji || '•'} CREDIT: ${settings.botOwner}`));
                 // console.log(chalk.green(`${global.themeemoji || '•'} 🤖 Bot Connected Successfully! ✅`));
                 // console.log(chalk.blue(`Bot Version: ${settings.version}`));
                 // console.log(chalk.cyan(`Loaded Commands: ${commandHandler.commands.size}`));
@@ -754,25 +754,25 @@ async function startQasimDev() {
                     const waitTime = 8000; // Wait 8 seconds for other errors
                     printLog('connection', `Reconnecting in ${waitTime/1000} seconds...`);
                     await delay(waitTime);
-                    startQasimDev();
+                    startBot();
                 }
             }
         });
 
-        QasimDev.ev.on('call', async (calls) => {
-            await handleCall(QasimDev, calls);
+        botSocket.ev.on('call', async (calls) => {
+            await handleCall(botSocket, calls);
         });
 
-        QasimDev.ev.on('group-participants.update', async (update) => {
-            await handleGroupParticipantUpdate(QasimDev, update);
+        botSocket.ev.on('group-participants.update', async (update) => {
+            await handleGroupParticipantUpdate(botSocket, update);
         });
 
-        QasimDev.ev.on('status.update', async (status) => {
-            await handleStatus(QasimDev, status);
+        botSocket.ev.on('status.update', async (status) => {
+            await handleStatus(botSocket, status);
         });
 
-        QasimDev.ev.on('messages.reaction', async (reaction) => {
-            await handleStatus(QasimDev, reaction);
+        botSocket.ev.on('messages.reaction', async (reaction) => {
+            await handleStatus(botSocket, reaction);
         });
 
         // ===== PERFORMANCE & HEALTH MONITORING =====
@@ -780,26 +780,26 @@ async function startQasimDev() {
         let lastActivityTime = Date.now();
         const HEALTH_CHECK_INTERVAL = 5 * 60 * 1000; // 5 minutes
         
-        QasimDev.ev.on('messages.upsert', () => {
+        botSocket.ev.on('messages.upsert', () => {
             lastActivityTime = Date.now();
         });
 
-        QasimDev.ev.on('messages.update', () => {
+        botSocket.ev.on('messages.update', () => {
             lastActivityTime = Date.now();
         });
 
         // Silent health check every 5 minutes (no messages to user)
         const healthCheckInterval = setInterval(async () => {
             try {
-                const wsState = QasimDev?.ws?.readyState;
-                const isConnected = QasimDev?.user !== undefined;
+                const wsState = botSocket?.ws?.readyState;
+                const isConnected = botSocket?.user !== undefined;
                 
                 // Only log in debug, don't message user
                 if (!isConnected || wsState !== 1) {
                     console.log(`[HEALTH] WebSocket unhealthy - attempting silent reconnect (state: ${wsState})`);
                     // Silently attempt to reconnect by resending presence
                     try {
-                        await QasimDev.sendPresenceUpdate('available');
+                        await botSocket.sendPresenceUpdate('available');
                     } catch (e) {
                         // Fail silently, Baileys will handle reconnection
                     }
@@ -826,9 +826,9 @@ async function startQasimDev() {
             }
         }, 30 * 60 * 1000); // Every 30 minutes
 
-        return QasimDev;
+        return botSocket;
     } catch (error) {
-        printLog('error', `Error in startQasimDev: ${error.message}`);
+        printLog('error', `Error in startBot: ${error.message}`);
 
         if (rl && !rl.closed) {
             rl.close();
@@ -836,7 +836,7 @@ async function startQasimDev() {
         }
 
         await delay(5000);
-        startQasimDev();
+        startBot();
     }
 }
 
@@ -844,6 +844,13 @@ async function startQasimDev() {
 async function main() {
     printLog('info', 'Starting PGWIZ-MD BOT...');
     startupSessionCleanup();
+
+    try {
+        const { applyStartupAutoStatusPolicy } = require('./plugins/autostatus');
+        await applyStartupAutoStatusPolicy();
+    } catch (error) {
+        printLog('error', `Auto status startup policy failed: ${error.message}`);
+    }
 
     const sessionReady = await initializeSession();
 
@@ -855,7 +862,7 @@ async function main() {
 
     await delay(3000);
 
-    startQasimDev().catch(error => {
+    startBot().catch(error => {
         printLog('error', `Fatal error: ${error.message}`);
 
         if (rl && !rl.closed) {

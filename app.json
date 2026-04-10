@@ -37,6 +37,31 @@
       "required": true,
       "value": ""
     },
+    "DB_URL": {
+      "description": "SQLite database file path",
+      "required": false,
+      "value": "./baileys_store.db"
+    },
+    "AUTO_STATUS_VIEW": {
+      "description": "Automatically view all WhatsApp statuses",
+      "required": false,
+      "value": "true"
+    },
+    "AUTO_STATUS_REACT": {
+      "description": "Automatically react to all WhatsApp statuses",
+      "required": false,
+      "value": "true"
+    },
+    "STATUS_EMOJIS": {
+      "description": "Comma-separated emojis for status reactions",
+      "required": false,
+      "value": "💙,🖤,⭐"
+    },
+    "FORCE_SESSION_RESET": {
+      "description": "Force full session reset at startup (one-time recovery toggle)",
+      "required": false,
+      "value": "true"
+    },
      "REMOVEBG_KEY": {
       "description": "Put your Remove background api key",
       "required": false,

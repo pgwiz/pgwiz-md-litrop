@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const fetch = require('node-fetch');
 const store = require('../lib/lightweight_store');
+const settings = require('../settings');
 
 const MONGO_URL = process.env.MONGO_URL;
 const POSTGRES_URL = process.env.POSTGRES_URL;
@@ -310,7 +311,7 @@ You:
                 .replace(/crying/g, '😢')
                 .replace(/thinking/g, '🤔')
                 .replace(/sleeping/g, '😴')
-                .replace(/google/gi, 'qasim')
+                .replace(/google/gi, (settings.botOwner || 'bot owner'))
                 .replace(/a large language model/gi, 'my bot')
                 .replace(/Remember:.*$/g, '')
                 .replace(/IMPORTANT:.*$/g, '')

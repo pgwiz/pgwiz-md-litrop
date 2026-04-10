@@ -1,4 +1,4 @@
-const Qasim = require('api-qasim');
+const apiClient = require('api-qasim');
 module.exports = {
   command: 'npmstalk',
   aliases: ['npmstlk'],
@@ -17,7 +17,7 @@ module.exports = {
 
     try {
 
-      let res = await Qasim.npmStalk(args[0]);
+      let res = await apiClient.npmStalk(args[0]);
 
       if (!res || !res.result) {
         throw 'Package not found or API error.';
