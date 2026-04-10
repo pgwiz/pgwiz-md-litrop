@@ -87,7 +87,7 @@ console.error = (...args) => {
         if (badMacFound) {
             const now = Date.now();
             if (now - lastBadMacWarning > 120000) {
-                originalConsoleWarn('[AUTO-REPAIR] Bad MAC detected. Preserving session files to avoid restart loops.');
+                originalConsoleWarn('[AUTO-REPAIR] Bad MAC detected. Session key files will be refreshed on next startup.');
                 lastBadMacWarning = now;
             }
         }
@@ -224,6 +224,39 @@ function ensureSessionDirectory() {
         mkdirSync(sessionPath, { recursive: true });
     }
     return sessionPath;
+}
+
+function startupSessionCleanup() {
+    try {
+        const sessionPath = ensureSessionDirectory();
+        const files = fs.readdirSync(sessionPath);
+        let clearedCount = 0;
+
+        for (const file of files) {
+            if (file === 'creds.json') continue;
+
+            const fullPath = path.join(sessionPath, file);
+            try {
+                const stat = fs.lstatSync(fullPath);
+                if (stat.isDirectory()) {
+                    fs.rmSync(fullPath, { recursive: true, force: true });
+                } else {
+                    fs.unlinkSync(fullPath);
+                }
+                clearedCount++;
+            } catch {
+                // Skip files that can't be removed
+            }
+        }
+
+        if (clearedCount > 0) {
+            printLog('warning', `[AUTO-REPAIR] Startup session cleanup removed ${clearedCount} stale session files to prevent Bad MAC.`);
+        } else {
+            printLog('info', '[AUTO-REPAIR] Startup session cleanup found no stale session files.');
+        }
+    } catch (error) {
+        printLog('error', `Startup session cleanup failed: ${error.message}`);
+    }
 }
 
 function hasValidSession() {
@@ -810,6 +843,7 @@ async function startQasimDev() {
 
 async function main() {
     printLog('info', 'Starting PGWIZ-MD BOT...');
+    startupSessionCleanup();
 
     const sessionReady = await initializeSession();
 
