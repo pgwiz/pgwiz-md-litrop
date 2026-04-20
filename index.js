@@ -8,9 +8,20 @@ let lastBadMacWarning = 0;
 let lastBadMacRecoveryRequest = 0;
 let pendingBadMacRecovery = false;
 let triggerBadMacRecovery = null;
+let badMacRecoveryCount = 0;
+let lastBadMacRecoveryCompletedAt = 0;
 
 function requestBadMacRecovery(reason = 'bad-mac-detected') {
     const now = Date.now();
+
+    const fromConnectionClose = reason === 'connection-close-corrupted-auth';
+    if (!fromConnectionClose && badMacRecoveryCount >= 1) {
+        const cooldownMs = 30 * 60 * 1000;
+        if (now - lastBadMacRecoveryCompletedAt < cooldownMs) {
+            return;
+        }
+    }
+
     if (now - lastBadMacRecoveryRequest < 60000) return;
     lastBadMacRecoveryRequest = now;
 
@@ -74,6 +85,15 @@ const hasBadMacSignal = (args) => {
 
 const handleBadMacSignal = (args) => {
     if (!hasBadMacSignal(args)) return;
+
+    const hasAuthenticatedSocket = !!(activeSocket && activeSocket.user && activeSocket.user.id);
+    const wsState = activeSocket?.ws?.readyState;
+    const socketLooksHealthy = hasAuthenticatedSocket || wsState === 1;
+
+    // Ignore passive bad-mac log noise while the socket is already connected.
+    if (socketLooksHealthy) {
+        return;
+    }
 
     const now = Date.now();
     if (now - lastBadMacWarning > 120000) {
@@ -228,6 +248,7 @@ let activeSocket = null;
 let botStartInProgress = false;
 let authAutoRepairAttempted = false;
 let badMacRecoveryInProgress = false;
+let socketGeneration = 0;
 const botRuntimeIntervals = new Set();
 
 function registerBotInterval(intervalId) {
@@ -552,6 +573,9 @@ async function runBadMacRecovery(reason = 'bad-mac-detected') {
     printLog('warning', `[AUTO-REPAIR] Bad MAC detected. Clearing auth/session and restarting (${reason})...`);
 
     try {
+        // Invalidate existing socket listeners immediately to prevent stale reconnect/open events.
+        socketGeneration += 1;
+
         if (reconnectTimer) {
             clearTimeout(reconnectTimer);
             reconnectTimer = null;
@@ -594,6 +618,8 @@ async function runBadMacRecovery(reason = 'bad-mac-detected') {
     }
 
     scheduleReconnect('bad-mac-immediate-repair', 1000);
+    badMacRecoveryCount += 1;
+    lastBadMacRecoveryCompletedAt = Date.now();
 
     setTimeout(() => {
         badMacRecoveryInProgress = false;
@@ -620,6 +646,12 @@ if (!server.listening) {
 
 async function startBot() {
     if (botStartInProgress) {
+        return activeSocket;
+    }
+
+    const activeReadyState = activeSocket?.ws?.readyState;
+    if (activeReadyState === 0 || activeReadyState === 1) {
+        printLog('connection', `Start skipped: existing socket is active (state=${activeReadyState})`);
         return activeSocket;
     }
 
@@ -694,6 +726,8 @@ async function startBot() {
         // Expose bot instance globally for /ping endpoint
         global.botInstance = botSocket;
         activeSocket = botSocket;
+        const thisSocketGeneration = ++socketGeneration;
+        const isStaleSocket = () => thisSocketGeneration !== socketGeneration || activeSocket !== botSocket;
 
         const originalSendPresenceUpdate = botSocket.sendPresenceUpdate;
         const originalReadMessages = botSocket.readMessages;
@@ -779,58 +813,68 @@ async function startBot() {
         }
 
         botSocket.ev.on('messages.upsert', async (chatUpdate) => {
+            if (isStaleSocket()) return;
+
             try {
                 const statusViewerOnly = statusViewerOnlyMode;
+                const upsertType = chatUpdate?.type;
 
-                // Only process real-time messages, ignore history/append
-                if (chatUpdate.type !== 'notify') return;
+                // Baileys docs: upsert can be notify/append; handle both and process every message item.
+                if (upsertType !== 'notify' && upsertType !== 'append') return;
 
-                const mek = chatUpdate.messages[0];
-                if (!mek.message) return;
-
-                mek.message = (Object.keys(mek.message)[0] === 'ephemeralMessage')
-                    ? mek.message.ephemeralMessage.message
-                    : mek.message;
-
-                if (mek.key && mek.key.remoteJid === 'status@broadcast') {
-                    handleStatus(botSocket, chatUpdate).catch(err => printLog('error', `AutoStatus Error: ${err.message}`));
-                    return;
-                }
-
-                if (statusViewerOnly) {
-                    return;
-                }
-
-                if (!botSocket.public && !mek.key.fromMe && chatUpdate.type === 'notify') {
-                    const isGroup = mek.key?.remoteJid?.endsWith('@g.us');
-                    if (!isGroup) return;
-                }
-
-                if (mek.key.id.startsWith('BAE5') && mek.key.id.length === 16) return;
+                const upsertMessages = Array.isArray(chatUpdate?.messages) ? chatUpdate.messages : [];
+                if (upsertMessages.length === 0) return;
 
                 if (botSocket?.msgRetryCounterCache) {
                     botSocket.msgRetryCounterCache.clear();
                 }
 
-                try {
-                    await handleMessages(botSocket, chatUpdate);
-                } catch (err) {
-                    printLog('error', `Error in handleMessages: ${err.message}`);
-                    if (mek.key && mek.key.remoteJid) {
-                        await botSocket.sendMessage(mek.key.remoteJid, {
-                            text: '❌ An error occurred while processing your message.',
-                            contextInfo: {
-                                forwardingScore: 1,
-                                isForwarded: true,
-                                forwardedNewsletterMessageInfo: {
-                                    newsletterJid: settings.newsletterJid || '120363319098372999@newsletter',
-                                    newsletterName: settings.newsletterName || 'PGWIZ-MD',
-                                    serverMessageId: -1
+                for (const mek of upsertMessages) {
+                    if (isStaleSocket()) return;
+                    if (!mek?.message) continue;
+
+                    mek.message = (Object.keys(mek.message)[0] === 'ephemeralMessage')
+                        ? mek.message.ephemeralMessage.message
+                        : mek.message;
+
+                    if (mek.key && mek.key.remoteJid === 'status@broadcast') {
+                        handleStatus(botSocket, { type: upsertType, messages: [mek] }).catch(err => printLog('error', `AutoStatus Error: ${err.message}`));
+                        continue;
+                    }
+
+                    if (statusViewerOnly) {
+                        continue;
+                    }
+
+                    if (!botSocket.public && !mek.key.fromMe && upsertType === 'notify') {
+                        const isGroup = mek.key?.remoteJid?.endsWith('@g.us');
+                        if (!isGroup) continue;
+                    }
+
+                    const messageId = mek.key?.id || '';
+                    if (mek.key?.fromMe && messageId.startsWith('BAE5') && messageId.length === 16) continue;
+
+                    try {
+                        await handleMessages(botSocket, { type: upsertType, messages: [mek] });
+                    } catch (err) {
+                        printLog('error', `Error in handleMessages: ${err.message}`);
+                        if (mek.key && mek.key.remoteJid) {
+                            await botSocket.sendMessage(mek.key.remoteJid, {
+                                text: '❌ An error occurred while processing your message.',
+                                contextInfo: {
+                                    forwardingScore: 1,
+                                    isForwarded: true,
+                                    forwardedNewsletterMessageInfo: {
+                                        newsletterJid: settings.newsletterJid || '120363319098372999@newsletter',
+                                        newsletterName: settings.newsletterName || 'PGWIZ-MD',
+                                        serverMessageId: -1
+                                    }
                                 }
-                            }
-                        }).catch(console.error);
+                            }).catch(console.error);
+                        }
                     }
                 }
+
             } catch (err) {
                 printLog('error', `Error in messages.upsert: ${err.message}`);
             }
@@ -845,6 +889,8 @@ async function startBot() {
         };
 
         botSocket.ev.on('contacts.update', update => {
+            if (isStaleSocket()) return;
+
             for (let contact of update) {
                 let id = botSocket.decodeJid(contact.id);
                 if (store && store.contacts) store.contacts[id] = { id, name: contact.notify };
@@ -938,6 +984,8 @@ async function startBot() {
         }
 
         botSocket.ev.on('connection.update', async (s) => {
+            if (isStaleSocket()) return;
+
             const { connection, lastDisconnect, qr } = s;
 
             if (qr) {
@@ -1087,18 +1135,22 @@ async function startBot() {
         });
 
         botSocket.ev.on('call', async (calls) => {
+            if (isStaleSocket()) return;
             await handleCall(botSocket, calls);
         });
 
         botSocket.ev.on('group-participants.update', async (update) => {
+            if (isStaleSocket()) return;
             await handleGroupParticipantUpdate(botSocket, update);
         });
 
         botSocket.ev.on('status.update', async (status) => {
+            if (isStaleSocket()) return;
             await handleStatus(botSocket, status);
         });
 
         botSocket.ev.on('messages.reaction', async (reaction) => {
+            if (isStaleSocket()) return;
             await handleStatus(botSocket, reaction);
         });
 
@@ -1108,10 +1160,12 @@ async function startBot() {
         const HEALTH_CHECK_INTERVAL = 5 * 60 * 1000; // 5 minutes
         
         botSocket.ev.on('messages.upsert', () => {
+            if (isStaleSocket()) return;
             lastActivityTime = Date.now();
         });
 
         botSocket.ev.on('messages.update', () => {
+            if (isStaleSocket()) return;
             lastActivityTime = Date.now();
         });
 
