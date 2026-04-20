@@ -147,7 +147,7 @@ const { join } = require('path');
 
 const store = require('./lib/lightweight_store');
 const SaveCreds = require('./lib/session');
-const { useSQLiteAuthState } = require('./lib/sqliteAuthState');
+const { useSQLiteAuthState, resetSQLiteAuthState } = require('./lib/sqliteAuthState');
 const { createDBRouter } = require('./lib/db-router');
 const { app, server, PORT } = require('./lib/server');
 const { printLog } = require('./lib/print');
@@ -165,6 +165,7 @@ let reconnectAttempts = 0;
 let reconnectTimer = null;
 let activeSocket = null;
 let botStartInProgress = false;
+let authAutoRepairAttempted = false;
 const botRuntimeIntervals = new Set();
 
 function registerBotInterval(intervalId) {
@@ -811,6 +812,7 @@ async function startBot() {
 
             if (connection === 'open') {
                 reconnectAttempts = 0;
+                authAutoRepairAttempted = false;
                 botStartInProgress = false;
                 if (reconnectTimer) {
                     clearTimeout(reconnectTimer);
@@ -904,6 +906,7 @@ async function startBot() {
                 const statusCode = lastDisconnect?.error?.output?.statusCode;
                 const errorName = lastDisconnect?.error?.message || 'Unknown Error';
                 const reasonLabel = statusCode || 'unknown';
+                const errorNameLower = String(errorName).toLowerCase();
 
                 activeSocket = null;
                 clearBotIntervals();
@@ -918,6 +921,41 @@ async function startBot() {
                     } catch (error) {
                         printLog('error', `Error deleting session: ${error.message}`);
                     }
+                    return;
+                }
+
+                const corruptedAuthState =
+                    errorNameLower.includes('incorrect private key length') ||
+                    (errorNameLower.includes('instance of object') && errorNameLower.includes('buffer')) ||
+                    errorNameLower.includes('bad mac') ||
+                    errorNameLower.includes('invalid key');
+
+                if (corruptedAuthState && !authAutoRepairAttempted) {
+                    authAutoRepairAttempted = true;
+                    printLog('warning', '[AUTO-REPAIR] Corrupted auth keys detected. Resetting auth state and refreshing session...');
+
+                    try {
+                        if (typeof resetSQLiteAuthState === 'function') {
+                            resetSQLiteAuthState('auto-repair-corrupted-auth');
+                        }
+                    } catch (error) {
+                        printLog('error', `Failed to reset SQLite auth state: ${error.message}`);
+                    }
+
+                    try {
+                        rmSync('./session', { recursive: true, force: true });
+                        ensureSessionDirectory();
+                    } catch (error) {
+                        printLog('error', `Failed to reset session directory: ${error.message}`);
+                    }
+
+                    try {
+                        await initializeSession();
+                    } catch (error) {
+                        printLog('error', `Session refresh after auth reset failed: ${error.message}`);
+                    }
+
+                    scheduleReconnect('auth-auto-repair', 1500);
                     return;
                 }
 
