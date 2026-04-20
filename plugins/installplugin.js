@@ -18,24 +18,35 @@ const CORE_PLUGINS = [
 ];
 
 function ensureOptionalDir() {
-  if (fs.existsSync(OPTIONAL_DIR)) {
-    return OPTIONAL_DIR;
-  }
+  const remoteOptionalDir = path.join(MODEPACK_CACHE_DIR, 'plugins-optional');
 
   try {
+    fs.mkdirSync(path.dirname(MODEPACK_CACHE_DIR), { recursive: true });
+
     if (fs.existsSync(path.join(MODEPACK_CACHE_DIR, '.git'))) {
       execSync('git pull --ff-only', { cwd: MODEPACK_CACHE_DIR, stdio: 'ignore' });
     } else {
-      fs.mkdirSync(path.dirname(MODEPACK_CACHE_DIR), { recursive: true });
-      execSync(`git clone ${MODEPACK_REPO} "${MODEPACK_CACHE_DIR}"`, { stdio: 'ignore' });
+      if (fs.existsSync(MODEPACK_CACHE_DIR)) {
+        fs.rmSync(MODEPACK_CACHE_DIR, { recursive: true, force: true });
+      }
+      execSync(`git clone --depth 1 ${MODEPACK_REPO} "${MODEPACK_CACHE_DIR}"`, { stdio: 'ignore' });
     }
 
-    const remoteOptionalDir = path.join(MODEPACK_CACHE_DIR, 'plugins-optional');
-    return fs.existsSync(remoteOptionalDir) ? remoteOptionalDir : null;
+    if (fs.existsSync(remoteOptionalDir)) {
+      return remoteOptionalDir;
+    }
+
+    console.error(`[ADDPLUGIN] plugins-optional not found in ${MODEPACK_REPO}`);
   } catch (error) {
     console.error(`[ADDPLUGIN] Failed to fetch modepacks from ${MODEPACK_REPO}:`, error.message);
-    return null;
   }
+
+  if (fs.existsSync(OPTIONAL_DIR)) {
+    console.warn('[ADDPLUGIN] Falling back to local plugins-optional directory');
+    return OPTIONAL_DIR;
+  }
+
+  return null;
 }
 
 function extractCategory(source) {

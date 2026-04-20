@@ -80,6 +80,24 @@ This document explains all available environment variables for PGWIZ-MD bot conf
 - **Default**: `"false"`
 - **Example**: `AUTOTYPING="false"`
 
+### `ANTICALL`
+- **Description**: Automatically reject incoming calls and block callers
+- **Values**: `"true"` or `"false"`
+- **Default**: `"false"`
+- **Example**: `ANTICALL="false"`
+
+### `ANTIDELETE`
+- **Description**: Restore deleted messages automatically
+- **Values**: `"true"` or `"false"`
+- **Default**: `"false"`
+- **Example**: `ANTIDELETE="false"`
+
+### `AUTOREACT`
+- **Description**: Automatically react to incoming chat messages
+- **Values**: `"true"` or `"false"`
+- **Default**: `"false"`
+- **Example**: `AUTOREACT="false"`
+
 ### `ALWAYS_ONLINE`
 - **Description**: Keep bot presence online continuously
 - **Values**: `"true"` or `"false"`
@@ -140,6 +158,9 @@ AUTO_STATUS_REACT="true"
 STATUS_EMOJIS="💙,🖤,⭐"
 AUTOREAD="false"
 AUTOTYPING="false"
+ANTICALL="false"
+ANTIDELETE="false"
+AUTOREACT="false"
 ALWAYS_ONLINE="false"
 
 # Session recovery

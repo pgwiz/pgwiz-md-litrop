@@ -10,6 +10,7 @@ baileys_store.db-wal
 baileys_store.db-shm
 
 # Runtime data
+data/modepacks-cache/
 
 # Session files
 session/

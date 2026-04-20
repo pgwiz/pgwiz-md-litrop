@@ -67,6 +67,21 @@
       "required": false,
       "value": "false"
     },
+    "ANTICALL": {
+      "description": "Automatically reject and block incoming calls",
+      "required": false,
+      "value": "false"
+    },
+    "ANTIDELETE": {
+      "description": "Restore deleted messages automatically",
+      "required": false,
+      "value": "false"
+    },
+    "AUTOREACT": {
+      "description": "Automatically react to incoming chat messages",
+      "required": false,
+      "value": "false"
+    },
     "ALWAYS_ONLINE": {
       "description": "Keep bot presence online continuously",
       "required": false,

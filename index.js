@@ -265,6 +265,9 @@ async function bootstrapStoreSchemaAndFallbacks() {
                 STATUS_EMOJIS: '💙,🖤,⭐',
                 AUTOREAD: 'false',
                 AUTOTYPING: 'false',
+                ANTICALL: 'false',
+                ANTIDELETE: 'false',
+                AUTOREACT: 'false',
                 ALWAYS_ONLINE: 'false',
                 FORCE_SESSION_RESET: 'false',
                 SUDO_USERS: ''
@@ -626,6 +629,15 @@ async function startBot() {
 
         botSocket.ev.on('creds.update', saveCreds);
         store.bind(botSocket.ev);
+
+        try {
+            const { initAutoReact } = require('./plugins/areact');
+            if (typeof initAutoReact === 'function') {
+                initAutoReact(botSocket);
+            }
+        } catch (error) {
+            printLog('warning', `Auto-react startup init failed: ${error.message}`);
+        }
 
         botSocket.ev.on('messages.upsert', async (chatUpdate) => {
             try {

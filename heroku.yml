@@ -6,6 +6,9 @@ setup:
     STATUS_EMOJIS: "💙,🖤,⭐"
     AUTOREAD: "false"
     AUTOTYPING: "false"
+    ANTICALL: "false"
+    ANTIDELETE: "false"
+    AUTOREACT: "false"
     ALWAYS_ONLINE: "false"
     FORCE_SESSION_RESET: "true"
 

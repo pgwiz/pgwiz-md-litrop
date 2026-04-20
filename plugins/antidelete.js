@@ -14,6 +14,16 @@ const MYSQL_URL = process.env.MYSQL_URL;
 const SQLITE_URL = process.env.DB_URL;
 const HAS_DB = !!(MONGO_URL || POSTGRES_URL || MYSQL_URL || SQLITE_URL);
 
+function parseEnvBoolean(value, fallback) {
+    if (value === undefined || value === null || String(value).trim() === '') return fallback;
+    return String(value).toLowerCase() === 'true';
+}
+
+async function getDefaultAntideleteEnabled() {
+    const rawValue = await store.getEnvBackedSetting('ANTIDELETE', 'false');
+    return parseEnvBoolean(rawValue, false);
+}
+
 if (!fs.existsSync(TEMP_MEDIA_DIR)) {
     fs.mkdirSync(TEMP_MEDIA_DIR, { recursive: true });
 }
@@ -62,12 +72,28 @@ setInterval(cleanTempFolderIfLarge, 60 * 1000);
 
 async function loadAntideleteConfig() {
     try {
+        const defaultEnabled = await getDefaultAntideleteEnabled();
+
         if (HAS_DB) {
             const config = await store.getSetting('global', 'antidelete');
-            return config || { enabled: false };
+            if (!config || typeof config.enabled !== 'boolean') {
+                const initial = { enabled: defaultEnabled };
+                await store.saveSetting('global', 'antidelete', initial);
+                return initial;
+            }
+            return { enabled: !!config.enabled };
         } else {
-            if (!fs.existsSync(CONFIG_PATH)) return { enabled: false };
-            return JSON.parse(fs.readFileSync(CONFIG_PATH));
+            if (!fs.existsSync(CONFIG_PATH)) {
+                fs.writeFileSync(CONFIG_PATH, JSON.stringify({ enabled: defaultEnabled }, null, 2));
+                return { enabled: defaultEnabled };
+            }
+
+            const config = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
+            if (typeof config.enabled !== 'boolean') {
+                config.enabled = defaultEnabled;
+                fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
+            }
+            return config;
         }
     } catch {
         return { enabled: false };

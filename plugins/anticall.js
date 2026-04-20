@@ -9,15 +9,40 @@ const HAS_DB = !!(MONGO_URL || POSTGRES_URL || MYSQL_URL || SQLITE_URL);
 
 const ANTICALL_PATH = './data/anticall.json';
 
+function parseEnvBoolean(value, fallback) {
+  if (value === undefined || value === null || String(value).trim() === '') return fallback;
+  return String(value).toLowerCase() === 'true';
+}
+
+async function getDefaultAnticallEnabled() {
+  const rawValue = await store.getEnvBackedSetting('ANTICALL', 'false');
+  return parseEnvBoolean(rawValue, false);
+}
+
 async function readState() {
   try {
+    const defaultEnabled = await getDefaultAnticallEnabled();
+
     if (HAS_DB) {
       const settings = await store.getSetting('global', 'anticall');
-      return settings || { enabled: false };
+      if (!settings || typeof settings.enabled !== 'boolean') {
+        const initial = { enabled: defaultEnabled };
+        await store.saveSetting('global', 'anticall', initial);
+        return initial;
+      }
+      return { enabled: !!settings.enabled };
     } else {
-      if (!fs.existsSync(ANTICALL_PATH)) return { enabled: false };
+      if (!fs.existsSync(ANTICALL_PATH)) {
+        if (!fs.existsSync('./data')) fs.mkdirSync('./data', { recursive: true });
+        fs.writeFileSync(ANTICALL_PATH, JSON.stringify({ enabled: defaultEnabled }, null, 2));
+        return { enabled: defaultEnabled };
+      }
       const raw = fs.readFileSync(ANTICALL_PATH, 'utf8');
       const data = JSON.parse(raw || '{}');
+      if (typeof data.enabled !== 'boolean') {
+        data.enabled = defaultEnabled;
+        fs.writeFileSync(ANTICALL_PATH, JSON.stringify({ enabled: data.enabled }, null, 2));
+      }
       return { enabled: !!data.enabled };
     }
   } catch {
