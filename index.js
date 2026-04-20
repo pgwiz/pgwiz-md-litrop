@@ -3,8 +3,23 @@
 const fs = require('fs');
 const path = require('path');
 
-// Prevent restart loops by warning on repeated Bad MAC errors instead of deleting session files.
+// Track Bad MAC events and trigger controlled session recovery.
 let lastBadMacWarning = 0;
+let lastBadMacRecoveryRequest = 0;
+let pendingBadMacRecovery = false;
+let triggerBadMacRecovery = null;
+
+function requestBadMacRecovery(reason = 'bad-mac-detected') {
+    const now = Date.now();
+    if (now - lastBadMacRecoveryRequest < 60000) return;
+    lastBadMacRecoveryRequest = now;
+
+    if (typeof triggerBadMacRecovery === 'function') {
+        triggerBadMacRecovery(reason);
+    } else {
+        pendingBadMacRecovery = true;
+    }
+}
 
 // Stream-level suppression disabled on Koyeb/container platforms to prevent log duplication
 // The console.log/error/warn overrides are sufficient for suppressing encryption logs
@@ -14,6 +29,8 @@ let lastBadMacWarning = 0;
 const originalConsoleLog = console.log;
 const originalConsoleError = console.error;
 const originalConsoleWarn = console.warn;
+const originalConsoleInfo = console.info;
+const originalConsoleDebug = console.debug;
 
 // Keywords that should be completely suppressed (as Set for faster lookup)
 const SUPPRESS_KEYWORDS = new Set([
@@ -25,6 +42,47 @@ const SUPPRESS_KEYWORDS = new Set([
     'prekey', 'signedprekey', 'identity key', 'ratchet', 'rootkey', 'noisekey',
     'signedbundle', 'xmppframing', 'sending presence', 'message counter'
 ]);
+
+const BAD_MAC_SIGNAL_KEYWORDS = [
+    'bad mac',
+    'failed to decrypt',
+    'decrypt error',
+    'messagecountererror',
+    'incorrect private key length',
+    'invalid key'
+];
+
+const hasBadMacSignal = (args) => {
+    for (const arg of args) {
+        if (typeof arg === 'string') {
+            const lower = arg.toLowerCase();
+            if (BAD_MAC_SIGNAL_KEYWORDS.some((keyword) => lower.includes(keyword))) {
+                return true;
+            }
+        }
+
+        if (arg && typeof arg === 'object' && typeof arg.message === 'string') {
+            const lower = arg.message.toLowerCase();
+            if (BAD_MAC_SIGNAL_KEYWORDS.some((keyword) => lower.includes(keyword))) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+};
+
+const handleBadMacSignal = (args) => {
+    if (!hasBadMacSignal(args)) return;
+
+    const now = Date.now();
+    if (now - lastBadMacWarning > 120000) {
+        originalConsoleWarn('[AUTO-REPAIR] Bad MAC/decrypt error detected. Clearing auth state and restarting session recovery...');
+        lastBadMacWarning = now;
+    }
+
+    requestBadMacRecovery('bad-mac-log-detected');
+};
 
 const shouldSuppress = (args) => {
     // First, check if any argument is a SessionEntry-like object or Buffer key
@@ -75,30 +133,33 @@ const shouldSuppress = (args) => {
 };
 
 console.log = (...args) => {
+    handleBadMacSignal(args);
     if (shouldSuppress(args)) return;
     originalConsoleLog.apply(console, args);
 };
 
 console.error = (...args) => {
-    if (shouldSuppress(args)) {
-        const badMacFound = args.some(arg =>
-            typeof arg === 'string' && arg.toLowerCase().includes('bad mac')
-        );
-        if (badMacFound) {
-            const now = Date.now();
-            if (now - lastBadMacWarning > 120000) {
-                originalConsoleWarn('[AUTO-REPAIR] Bad MAC detected. Session key files will be refreshed on next startup.');
-                lastBadMacWarning = now;
-            }
-        }
-        return;
-    }
+    handleBadMacSignal(args);
+    if (shouldSuppress(args)) return;
     originalConsoleError.apply(console, args);
 };
 
 console.warn = (...args) => {
+    handleBadMacSignal(args);
     if (shouldSuppress(args)) return;
     originalConsoleWarn.apply(console, args);
+};
+
+console.info = (...args) => {
+    handleBadMacSignal(args);
+    if (shouldSuppress(args)) return;
+    originalConsoleInfo.apply(console, args);
+};
+
+console.debug = (...args) => {
+    handleBadMacSignal(args);
+    if (shouldSuppress(args)) return;
+    originalConsoleDebug.apply(console, args);
 };
 
 
@@ -166,6 +227,7 @@ let reconnectTimer = null;
 let activeSocket = null;
 let botStartInProgress = false;
 let authAutoRepairAttempted = false;
+let badMacRecoveryInProgress = false;
 const botRuntimeIntervals = new Set();
 
 function registerBotInterval(intervalId) {
@@ -479,6 +541,77 @@ async function initializeSession() {
     }
 }
 
+async function runBadMacRecovery(reason = 'bad-mac-detected') {
+    if (badMacRecoveryInProgress) {
+        printLog('warning', `[AUTO-REPAIR] Bad MAC recovery already in progress (${reason})`);
+        return;
+    }
+
+    badMacRecoveryInProgress = true;
+    authAutoRepairAttempted = true;
+    printLog('warning', `[AUTO-REPAIR] Bad MAC detected. Clearing auth/session and restarting (${reason})...`);
+
+    try {
+        if (reconnectTimer) {
+            clearTimeout(reconnectTimer);
+            reconnectTimer = null;
+        }
+
+        try {
+            if (activeSocket?.ws?.readyState === 1) {
+                activeSocket.ws.close();
+            }
+        } catch {
+            // Ignore socket close errors during recovery.
+        }
+
+        clearBotIntervals();
+        botStartInProgress = false;
+        activeSocket = null;
+    } catch {
+        // Continue recovery even if runtime cleanup throws.
+    }
+
+    try {
+        if (typeof resetSQLiteAuthState === 'function') {
+            resetSQLiteAuthState('bad-mac-immediate-repair');
+        }
+    } catch (error) {
+        printLog('error', `Failed to reset SQLite auth state during Bad MAC recovery: ${error.message}`);
+    }
+
+    try {
+        rmSync('./session', { recursive: true, force: true });
+        ensureSessionDirectory();
+    } catch (error) {
+        printLog('error', `Failed to reset session directory during Bad MAC recovery: ${error.message}`);
+    }
+
+    try {
+        await initializeSession();
+    } catch (error) {
+        printLog('error', `Session refresh during Bad MAC recovery failed: ${error.message}`);
+    }
+
+    scheduleReconnect('bad-mac-immediate-repair', 1000);
+
+    setTimeout(() => {
+        badMacRecoveryInProgress = false;
+    }, 15000);
+}
+
+triggerBadMacRecovery = (reason = 'bad-mac-detected') => {
+    runBadMacRecovery(reason).catch((error) => {
+        printLog('error', `Bad MAC recovery failed: ${error.message}`);
+        badMacRecoveryInProgress = false;
+    });
+};
+
+if (pendingBadMacRecovery) {
+    pendingBadMacRecovery = false;
+    triggerBadMacRecovery('bad-mac-pending-pre-init');
+}
+
 if (!server.listening) {
     server.listen(PORT, () => {
         printLog('success', `Server listening on port ${PORT}`);
@@ -523,6 +656,11 @@ async function startBot() {
         const msgRetryCounterCache = new NodeCache({ stdTTL: 10, checkperiod: 5 });
 
         printLog('info', `Credentials loaded. Registered: ${state.creds?.registered || false}`);
+
+        const statusViewerOnlyMode = String(process.env.STATUS_VIEWER_ONLY || '').toLowerCase() === 'true';
+        if (statusViewerOnlyMode) {
+            printLog('warning', 'STATUS_VIEWER_ONLY=true - normal incoming messages will be ignored. Set it to false for command replies.');
+        }
 
         const ghostMode = await store.getSetting('global', 'stealthMode');
         const isGhostActive = ghostMode && ghostMode.enabled;
@@ -642,7 +780,7 @@ async function startBot() {
 
         botSocket.ev.on('messages.upsert', async (chatUpdate) => {
             try {
-                const statusViewerOnly = String(process.env.STATUS_VIEWER_ONLY || '').toLowerCase() === 'true';
+                const statusViewerOnly = statusViewerOnlyMode;
 
                 // Only process real-time messages, ignore history/append
                 if (chatUpdate.type !== 'notify') return;
@@ -813,6 +951,7 @@ async function startBot() {
             if (connection === 'open') {
                 reconnectAttempts = 0;
                 authAutoRepairAttempted = false;
+                badMacRecoveryInProgress = false;
                 botStartInProgress = false;
                 if (reconnectTimer) {
                     clearTimeout(reconnectTimer);
@@ -931,31 +1070,7 @@ async function startBot() {
                     errorNameLower.includes('invalid key');
 
                 if (corruptedAuthState && !authAutoRepairAttempted) {
-                    authAutoRepairAttempted = true;
-                    printLog('warning', '[AUTO-REPAIR] Corrupted auth keys detected. Resetting auth state and refreshing session...');
-
-                    try {
-                        if (typeof resetSQLiteAuthState === 'function') {
-                            resetSQLiteAuthState('auto-repair-corrupted-auth');
-                        }
-                    } catch (error) {
-                        printLog('error', `Failed to reset SQLite auth state: ${error.message}`);
-                    }
-
-                    try {
-                        rmSync('./session', { recursive: true, force: true });
-                        ensureSessionDirectory();
-                    } catch (error) {
-                        printLog('error', `Failed to reset session directory: ${error.message}`);
-                    }
-
-                    try {
-                        await initializeSession();
-                    } catch (error) {
-                        printLog('error', `Session refresh after auth reset failed: ${error.message}`);
-                    }
-
-                    scheduleReconnect('auth-auto-repair', 1500);
+                    requestBadMacRecovery('connection-close-corrupted-auth');
                     return;
                 }
 
