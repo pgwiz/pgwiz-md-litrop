@@ -11,19 +11,42 @@ const HAS_DB = !!(MONGO_URL || POSTGRES_URL || MYSQL_URL || SQLITE_URL);
 
 const configPath = path.join(__dirname, '..', 'data', 'autoread.json');
 
+function parseEnvBoolean(value, fallback) {
+    if (value === undefined || value === null || String(value).trim() === '') return fallback;
+    return String(value).toLowerCase() === 'true';
+}
+
+async function getDefaultAutoreadEnabled() {
+    const rawValue = await store.getEnvBackedSetting('AUTOREAD', 'false');
+    return parseEnvBoolean(rawValue, false);
+}
+
 async function initConfig() {
+    const defaultEnabled = await getDefaultAutoreadEnabled();
+
     if (HAS_DB) {
         const config = await store.getSetting('global', 'autoread');
-        return config || { enabled: false };
+        if (!config || typeof config.enabled !== 'boolean') {
+            const initial = { enabled: defaultEnabled };
+            await store.saveSetting('global', 'autoread', initial);
+            return initial;
+        }
+        return { enabled: !!config.enabled };
     } else {
         if (!fs.existsSync(configPath)) {
             const dataDir = path.dirname(configPath);
             if (!fs.existsSync(dataDir)) {
                 fs.mkdirSync(dataDir, { recursive: true });
             }
-            fs.writeFileSync(configPath, JSON.stringify({ enabled: false }, null, 2));
+            fs.writeFileSync(configPath, JSON.stringify({ enabled: defaultEnabled }, null, 2));
         }
-        return JSON.parse(fs.readFileSync(configPath));
+
+        const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+        if (typeof config.enabled !== 'boolean') {
+            config.enabled = defaultEnabled;
+            fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+        }
+        return config;
     }
 }
 

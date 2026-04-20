@@ -68,6 +68,24 @@ This document explains all available environment variables for PGWIZ-MD bot conf
 - **Default**: `"💙,🖤,⭐"`
 - **Example**: `STATUS_EMOJIS="💙,🖤,⭐,✨"`
 
+### `AUTOREAD`
+- **Description**: Automatically mark incoming messages as read
+- **Values**: `"true"` or `"false"`
+- **Default**: `"false"`
+- **Example**: `AUTOREAD="false"`
+
+### `AUTOTYPING`
+- **Description**: Automatically show typing indicator while processing messages
+- **Values**: `"true"` or `"false"`
+- **Default**: `"false"`
+- **Example**: `AUTOTYPING="false"`
+
+### `ALWAYS_ONLINE`
+- **Description**: Keep bot presence online continuously
+- **Values**: `"true"` or `"false"`
+- **Default**: `"false"`
+- **Example**: `ALWAYS_ONLINE="true"`
+
 ### `FORCE_SESSION_RESET`
 - **Description**: Force full session reset at startup
 - **Values**: `"true"` or `"false"`
@@ -120,6 +138,9 @@ PORT="5000"
 AUTO_STATUS_VIEW="true"
 AUTO_STATUS_REACT="true"
 STATUS_EMOJIS="💙,🖤,⭐"
+AUTOREAD="false"
+AUTOTYPING="false"
+ALWAYS_ONLINE="false"
 
 # Session recovery
 FORCE_SESSION_RESET="false"

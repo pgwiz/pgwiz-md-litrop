@@ -217,6 +217,34 @@ function csvToList(value) {
         .filter(Boolean);
 }
 
+function parseBoolean(value, fallback = false) {
+    if (value === undefined || value === null || String(value).trim() === '') return fallback;
+    return String(value).toLowerCase() === 'true';
+}
+
+async function getPresenceConfig() {
+    const envValue = await store.getEnvBackedSetting('ALWAYS_ONLINE', 'false');
+    const envDefault = parseBoolean(envValue, false);
+    const existing = await store.getSetting('global', 'presenceConfig');
+
+    if (!existing || typeof existing.alwaysOnline !== 'boolean') {
+        const initial = { alwaysOnline: envDefault };
+        await store.saveSetting('global', 'presenceConfig', initial);
+        return initial;
+    }
+
+    return { alwaysOnline: !!existing.alwaysOnline };
+}
+
+async function isAlwaysOnlineEnabled() {
+    try {
+        const config = await getPresenceConfig();
+        return !!config.alwaysOnline;
+    } catch {
+        return false;
+    }
+}
+
 async function bootstrapStoreSchemaAndFallbacks() {
     try {
         const ownerFromSettings = Array.isArray(settings.ownerNumber)
@@ -235,6 +263,9 @@ async function bootstrapStoreSchemaAndFallbacks() {
                 AUTO_STATUS_VIEW: 'true',
                 AUTO_STATUS_REACT: 'true',
                 STATUS_EMOJIS: '💙,🖤,⭐',
+                AUTOREAD: 'false',
+                AUTOTYPING: 'false',
+                ALWAYS_ONLINE: 'false',
                 FORCE_SESSION_RESET: 'false',
                 SUDO_USERS: ''
             }
@@ -528,11 +559,21 @@ async function startBot() {
         const originalSendReadReceipt = botSocket.sendReadReceipt;
 
         botSocket.sendPresenceUpdate = async function (...args) {
+            const [presenceType, jid] = args;
             const ghostMode = await store.getSetting('global', 'stealthMode');
             if (ghostMode && ghostMode.enabled) {
                 printLog('info', '👻 Blocked presence update (stealth mode)');
                 return;
             }
+
+            const alwaysOnline = await isAlwaysOnlineEnabled();
+            if (alwaysOnline && !jid) {
+                const state = String(presenceType || '').toLowerCase();
+                if (state === 'paused' || state === 'unavailable') {
+                    return;
+                }
+            }
+
             return originalSendPresenceUpdate.apply(this, args);
         };
 
@@ -775,6 +816,31 @@ async function startBot() {
                     printLog('info', '👻 STEALTH MODE ACTIVE - Bot is in stealth mode');
                     console.log(chalk.gray('• No online status'));
                     console.log(chalk.gray('• No typing indicators'));
+                }
+
+                const presenceConfig = await getPresenceConfig();
+                if (presenceConfig.alwaysOnline && !(ghostMode && ghostMode.enabled)) {
+                    try {
+                        await originalSendPresenceUpdate.call(botSocket, 'available');
+                    } catch (error) {
+                        printLog('warning', `Failed to set initial always-online presence: ${error.message}`);
+                    }
+
+                    registerBotInterval(setInterval(async () => {
+                        try {
+                            const currentGhostMode = await store.getSetting('global', 'stealthMode');
+                            if (currentGhostMode && currentGhostMode.enabled) return;
+
+                            const currentPresenceConfig = await getPresenceConfig();
+                            if (!currentPresenceConfig.alwaysOnline) return;
+
+                            await originalSendPresenceUpdate.call(botSocket, 'available');
+                        } catch {
+                            // Silent failure to avoid log spam
+                        }
+                    }, 45 * 1000));
+
+                    printLog('presence', 'Always online presence heartbeat enabled');
                 }
 
                 try {

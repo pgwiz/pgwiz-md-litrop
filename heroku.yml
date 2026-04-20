@@ -4,6 +4,9 @@ setup:
     AUTO_STATUS_VIEW: "true"
     AUTO_STATUS_REACT: "true"
     STATUS_EMOJIS: "💙,🖤,⭐"
+    AUTOREAD: "false"
+    AUTOTYPING: "false"
+    ALWAYS_ONLINE: "false"
     FORCE_SESSION_RESET: "true"
 
 build:

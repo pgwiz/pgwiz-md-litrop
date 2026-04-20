@@ -57,6 +57,21 @@
       "required": false,
       "value": "💙,🖤,⭐"
     },
+    "AUTOREAD": {
+      "description": "Automatically mark incoming messages as read",
+      "required": false,
+      "value": "false"
+    },
+    "AUTOTYPING": {
+      "description": "Automatically show typing indicator while processing",
+      "required": false,
+      "value": "false"
+    },
+    "ALWAYS_ONLINE": {
+      "description": "Keep bot presence online continuously",
+      "required": false,
+      "value": "false"
+    },
     "FORCE_SESSION_RESET": {
       "description": "Force full session reset at startup (one-time recovery toggle)",
       "required": false,
