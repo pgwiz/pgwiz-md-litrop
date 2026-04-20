@@ -10,22 +10,26 @@ const MYSQL_URL = process.env.MYSQL_URL;
 const SQLITE_URL = process.env.DB_URL;
 const HAS_DB = !!(MONGO_URL || POSTGRES_URL || MYSQL_URL || SQLITE_URL);
 
-// Get random emoji from STATUS_EMOJIS env variable (comma-separated) or default to blue heart + black heart + star.
-function getRandomStatusEmoji() {
-    const emojis = (process.env.STATUS_EMOJIS || '💙,🖤,⭐').split(',').map(e => e.trim()).filter(Boolean);
-    return emojis[Math.floor(Math.random() * emojis.length)];
+function parseEnvBoolean(value, defaultValue) {
+    if (value === undefined || value === null || String(value).trim() === '') return defaultValue;
+    return String(value).toLowerCase() === 'true';
 }
 
-function getEnvBoolean(key, defaultValue) {
-    if (process.env[key] === undefined) return defaultValue;
-    return String(process.env[key]).toLowerCase() === 'true';
-}
+async function getStartupAutoStatusPolicy() {
+    const viewValue = await store.getEnvBackedSetting('AUTO_STATUS_VIEW', 'true');
+    const reactValue = await store.getEnvBackedSetting('AUTO_STATUS_REACT', 'true');
 
-function getStartupAutoStatusPolicy() {
     return {
-        enabled: getEnvBoolean('AUTO_STATUS_VIEW', true),
-        reactOn: getEnvBoolean('AUTO_STATUS_REACT', true)
+        enabled: parseEnvBoolean(viewValue, true),
+        reactOn: parseEnvBoolean(reactValue, true)
     };
+}
+
+// Get random emoji from STATUS_EMOJIS env variable (comma-separated) with DB fallback.
+async function getRandomStatusEmoji() {
+    const emojiValue = await store.getEnvBackedSetting('STATUS_EMOJIS', '💙,🖤,⭐');
+    const emojis = String(emojiValue || '💙,🖤,⭐').split(',').map(e => e.trim()).filter(Boolean);
+    return emojis[Math.floor(Math.random() * emojis.length)];
 }
 
 
@@ -55,15 +59,14 @@ const channelInfo = {
 
 async function readConfig() {
     try {
+        const policy = await getStartupAutoStatusPolicy();
+
         if (HAS_DB) {
             const config = await store.getSetting('global', 'autoStatus');
 
             // If no config exists, check environment variables for initial setup
             if (!config) {
-                const envEnabled = getEnvBoolean('AUTO_STATUS_VIEW', true);
-                const envReactOn = getEnvBoolean('AUTO_STATUS_REACT', true);
-
-                const initialConfig = { enabled: envEnabled, reactOn: envReactOn };
+                const initialConfig = { enabled: policy.enabled, reactOn: policy.reactOn };
                 await store.saveSetting('global', 'autoStatus', initialConfig);
                 console.log('[AUTOSTATUS] Initialized from environment variables:', initialConfig);
                 return initialConfig;
@@ -76,11 +79,7 @@ async function readConfig() {
         } else {
             // File system mode
             if (!fs.existsSync(configPath)) {
-                // Check environment variables for initial setup
-                const envEnabled = getEnvBoolean('AUTO_STATUS_VIEW', true);
-                const envReactOn = getEnvBoolean('AUTO_STATUS_REACT', true);
-
-                const initialConfig = { enabled: envEnabled, reactOn: envReactOn };
+                const initialConfig = { enabled: policy.enabled, reactOn: policy.reactOn };
                 fs.writeFileSync(configPath, JSON.stringify(initialConfig, null, 2));
 
                 console.log('[AUTOSTATUS] Initialized from environment variables:', initialConfig);
@@ -161,7 +160,7 @@ async function writeConfig(config) {
 
 async function applyStartupAutoStatusPolicy() {
     try {
-        const policy = getStartupAutoStatusPolicy();
+        const policy = await getStartupAutoStatusPolicy();
 
         if (HAS_DB) {
             await store.saveSetting('global', 'autoStatus', policy);
@@ -176,7 +175,7 @@ async function applyStartupAutoStatusPolicy() {
         return policy;
     } catch (error) {
         console.error('[AUTOSTATUS] Failed to apply startup policy:', error.message);
-        return getStartupAutoStatusPolicy();
+        return { enabled: true, reactOn: true };
     }
 }
 
@@ -197,7 +196,7 @@ async function reactToStatus(sock, statusKey) {
             return;
         }
 
-        const emoji = getRandomStatusEmoji();
+        const emoji = await getRandomStatusEmoji();
 
         await sock.relayMessage(
             'status@broadcast',
@@ -281,7 +280,7 @@ module.exports = {
 
         try {
             let config = await readConfig();
-            const policy = getStartupAutoStatusPolicy();
+            const policy = await getStartupAutoStatusPolicy();
 
             if (!args || args.length === 0) {
                 const viewStatus = config.enabled ? '✅ Enabled' : '❌ Disabled';

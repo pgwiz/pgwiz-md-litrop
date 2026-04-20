@@ -8,7 +8,7 @@ This detailed guide explains how to create, test, and manage plugins for **MEGA-
 All plugins are located in the `plugins/` directory. Each file is a standard **CommonJS module** (`.js`) that exports a configuration object.
 
 ### **Core vs Optional Plugins**
-Core plugins ship in `plugins/`. Optional plugins are kept in `plugins-optional/` and can be installed on-demand:
+Core plugins ship in `plugins/`. Optional modepacks are hosted in the separate `pgwiz/litrop-plugins` repository and fetched on-demand by `.addplugin`:
 ```
 .addplugin pack:<category|all>
 .addplugin pack

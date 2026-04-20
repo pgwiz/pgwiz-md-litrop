@@ -1,9 +1,33 @@
 const fs = require('fs');
 const path = require('path');
+const { execSync } = require('child_process');
 
 const ROOT = __dirname;
 const OPTIONAL_DIR = path.join(ROOT, 'plugins-optional');
+const MODEPACK_CACHE_DIR = path.join(ROOT, 'data', 'modepacks-cache');
+const MODEPACK_REPO = process.env.MODEPACK_REPO || 'https://github.com/pgwiz/litrop-plugins.git';
 const PLUGINS_DIR = path.join(ROOT, 'plugins');
+
+function ensureOptionalDir() {
+  if (fs.existsSync(OPTIONAL_DIR)) {
+    return OPTIONAL_DIR;
+  }
+
+  try {
+    if (fs.existsSync(path.join(MODEPACK_CACHE_DIR, '.git'))) {
+      execSync('git pull --ff-only', { cwd: MODEPACK_CACHE_DIR, stdio: 'ignore' });
+    } else {
+      fs.mkdirSync(path.dirname(MODEPACK_CACHE_DIR), { recursive: true });
+      execSync(`git clone ${MODEPACK_REPO} "${MODEPACK_CACHE_DIR}"`, { stdio: 'ignore' });
+    }
+
+    const remoteOptionalDir = path.join(MODEPACK_CACHE_DIR, 'plugins-optional');
+    return fs.existsSync(remoteOptionalDir) ? remoteOptionalDir : null;
+  } catch (error) {
+    console.error(`Failed to fetch modepacks from ${MODEPACK_REPO}:`, error.message);
+    return null;
+  }
+}
 
 function extractCategory(source) {
   const match = source.match(/category\s*:\s*['"`]([^'"`]+)['"`]/i);
@@ -12,16 +36,17 @@ function extractCategory(source) {
 }
 
 function buildIndex() {
-  if (!fs.existsSync(OPTIONAL_DIR)) {
+  const sourceDir = ensureOptionalDir();
+  if (!sourceDir) {
     return null;
   }
 
-  const files = fs.readdirSync(OPTIONAL_DIR).filter(file => file.endsWith('.js'));
+  const files = fs.readdirSync(sourceDir).filter(file => file.endsWith('.js'));
   const packs = {};
 
   for (const file of files) {
     try {
-      const content = fs.readFileSync(path.join(OPTIONAL_DIR, file), 'utf8');
+      const content = fs.readFileSync(path.join(sourceDir, file), 'utf8');
       const category = extractCategory(content);
       if (!packs[category]) packs[category] = [];
       packs[category].push(file);
@@ -31,15 +56,15 @@ function buildIndex() {
     }
   }
 
-  return { files, packs };
+  return { files, packs, sourceDir };
 }
 
-function installFiles(files) {
+function installFiles(files, sourceDir) {
   let installed = 0;
   let skipped = 0;
 
   for (const file of files) {
-    const src = path.join(OPTIONAL_DIR, file);
+    const src = path.join(sourceDir, file);
     const dest = path.join(PLUGINS_DIR, file);
     if (fs.existsSync(dest)) {
       skipped++;
@@ -74,7 +99,7 @@ function main() {
     process.exit(1);
   }
 
-  const result = installFiles(files);
+  const result = installFiles(files, index.sourceDir);
   console.log(`Installed ${result.installed}/${result.total} plugins (skipped ${result.skipped}).`);
 }
 

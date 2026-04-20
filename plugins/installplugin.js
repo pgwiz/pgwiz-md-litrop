@@ -1,8 +1,11 @@
 const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
+const { execSync } = require('child_process');
 
 const OPTIONAL_DIR = path.join(__dirname, '..', 'plugins-optional');
+const MODEPACK_CACHE_DIR = path.join(__dirname, '..', 'data', 'modepacks-cache');
+const MODEPACK_REPO = process.env.MODEPACK_REPO || 'https://github.com/pgwiz/litrop-plugins.git';
 const PLUGINS_DIR = path.join(__dirname, '..', 'plugins');
 
 // List of core plugins that should not be removed
@@ -13,6 +16,27 @@ const CORE_PLUGINS = [
   'antidelete.js', 'antilink.js', 'antitag.js', 'antibadword.js', 'antiswear.js',
   'anticall.js', 'antifake.js', 'owner.js'
 ];
+
+function ensureOptionalDir() {
+  if (fs.existsSync(OPTIONAL_DIR)) {
+    return OPTIONAL_DIR;
+  }
+
+  try {
+    if (fs.existsSync(path.join(MODEPACK_CACHE_DIR, '.git'))) {
+      execSync('git pull --ff-only', { cwd: MODEPACK_CACHE_DIR, stdio: 'ignore' });
+    } else {
+      fs.mkdirSync(path.dirname(MODEPACK_CACHE_DIR), { recursive: true });
+      execSync(`git clone ${MODEPACK_REPO} "${MODEPACK_CACHE_DIR}"`, { stdio: 'ignore' });
+    }
+
+    const remoteOptionalDir = path.join(MODEPACK_CACHE_DIR, 'plugins-optional');
+    return fs.existsSync(remoteOptionalDir) ? remoteOptionalDir : null;
+  } catch (error) {
+    console.error(`[ADDPLUGIN] Failed to fetch modepacks from ${MODEPACK_REPO}:`, error.message);
+    return null;
+  }
+}
 
 function extractCategory(source) {
   const match = source.match(/category\s*:\s*['"`]([^'"`]+)['"`]/i);
@@ -27,14 +51,15 @@ function extractCommand(source) {
 }
 
 function buildPackIndex() {
-  if (!fs.existsSync(OPTIONAL_DIR)) return null;
-  const files = fs.readdirSync(OPTIONAL_DIR).filter(file => file.endsWith('.js'));
+  const sourceDir = ensureOptionalDir();
+  if (!sourceDir) return null;
+  const files = fs.readdirSync(sourceDir).filter(file => file.endsWith('.js'));
   const packs = {};
   const plugins = {};
 
   for (const file of files) {
     try {
-      const content = fs.readFileSync(path.join(OPTIONAL_DIR, file), 'utf8');
+      const content = fs.readFileSync(path.join(sourceDir, file), 'utf8');
       const category = extractCategory(content);
       const command = extractCommand(content);
       
@@ -50,7 +75,7 @@ function buildPackIndex() {
     }
   }
 
-  return { files, packs, plugins };
+  return { files, packs, plugins, sourceDir };
 }
 
 async function installPack(packName) {
@@ -74,7 +99,7 @@ async function installPack(packName) {
   let skipped = 0;
 
   for (const file of filesToInstall) {
-    const src = path.join(OPTIONAL_DIR, file);
+    const src = path.join(index.sourceDir, file);
     const dest = path.join(PLUGINS_DIR, file);
     if (fs.existsSync(dest)) {
       skipped++;

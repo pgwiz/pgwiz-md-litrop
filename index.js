@@ -147,6 +147,8 @@ const { join } = require('path');
 
 const store = require('./lib/lightweight_store');
 const SaveCreds = require('./lib/session');
+const { useSQLiteAuthState } = require('./lib/sqliteAuthState');
+const { createDBRouter } = require('./lib/db-router');
 const { app, server, PORT } = require('./lib/server');
 const { printLog } = require('./lib/print');
 const {
@@ -158,6 +160,97 @@ const {
 
 const settings = require('./settings');
 const commandHandler = require('./lib/commandHandler');
+
+let reconnectAttempts = 0;
+let reconnectTimer = null;
+let activeSocket = null;
+let botStartInProgress = false;
+const botRuntimeIntervals = new Set();
+
+function registerBotInterval(intervalId) {
+    botRuntimeIntervals.add(intervalId);
+    return intervalId;
+}
+
+function clearBotIntervals() {
+    for (const intervalId of botRuntimeIntervals) {
+        clearInterval(intervalId);
+    }
+    botRuntimeIntervals.clear();
+}
+
+function scheduleReconnect(reason = 'unknown', delayOverrideMs = null) {
+    if (reconnectTimer) {
+        printLog('connection', `Reconnect already scheduled. Latest reason: ${reason}`);
+        return;
+    }
+
+    reconnectAttempts += 1;
+    const baseDelayMs = Math.min(1000 * (2 ** (reconnectAttempts - 1)), 30000);
+    const jitterMs = Math.floor(Math.random() * 500);
+    const waitTime = typeof delayOverrideMs === 'number' ? delayOverrideMs : baseDelayMs + jitterMs;
+
+    printLog('connection', `Reconnecting in ${Math.round(waitTime / 1000)}s (attempt ${reconnectAttempts}) due to ${reason}`);
+
+    reconnectTimer = setTimeout(() => {
+        reconnectTimer = null;
+        startBot().catch((error) => {
+            printLog('error', `Reconnect attempt failed: ${error.message}`);
+        });
+    }, waitTime);
+}
+
+function normalizeToJid(value) {
+    if (!value) return '';
+    const cleaned = String(value).trim();
+    if (!cleaned) return '';
+    if (cleaned.includes('@')) return cleaned;
+    const digits = cleaned.replace(/\D/g, '');
+    return digits ? `${digits}@s.whatsapp.net` : '';
+}
+
+function csvToList(value) {
+    if (!value) return [];
+    return String(value)
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean);
+}
+
+async function bootstrapStoreSchemaAndFallbacks() {
+    try {
+        const ownerFromSettings = Array.isArray(settings.ownerNumber)
+            ? settings.ownerNumber
+            : (settings.ownerNumber ? [settings.ownerNumber] : []);
+        const ownerFromFile = Array.isArray(owner) ? owner : [];
+
+        const ownerJids = [...new Set([...ownerFromSettings, ...ownerFromFile]
+            .map(normalizeToJid)
+            .filter(Boolean))];
+
+        await store.bootstrapInitialSchema({
+            ownerJids,
+            disabledPlugins: csvToList(process.env.DISABLED_PLUGINS || ''),
+            envDefaults: {
+                AUTO_STATUS_VIEW: 'true',
+                AUTO_STATUS_REACT: 'true',
+                STATUS_EMOJIS: '💙,🖤,⭐',
+                FORCE_SESSION_RESET: 'false',
+                SUDO_USERS: ''
+            }
+        });
+
+        const dbOwners = await store.getOwnerJids();
+        if (dbOwners.length > 0) {
+            printLog('store', `Owner JIDs loaded into schema: ${dbOwners.length}`);
+            if (!Array.isArray(owner) || owner.length === 0) {
+                owner = dbOwners;
+            }
+        }
+    } catch (error) {
+        printLog('error', `Schema bootstrap failed: ${error.message}`);
+    }
+}
 
 store.readFromFile();
 setInterval(() => store.writeToFile(), settings.storeWriteInterval || 10000);
@@ -319,9 +412,16 @@ async function initializeSession() {
         return false;
     }
 
-    // Always refresh session from service to prevent staleness
+    const shouldRefreshOnStart = String(process.env.REFRESH_SESSION_ON_START || '').toLowerCase() === 'true';
+
+    if (!shouldRefreshOnStart && hasValidSession()) {
+        printLog('success', 'Using local session credentials (refresh skipped)');
+        return true;
+    }
+
+    // Refresh only when forced or when no valid local session exists.
     try {
-        printLog('info', 'Refreshing session credentials from PGWIZ service...');
+        printLog('info', `Refreshing session credentials from PGWIZ service (${shouldRefreshOnStart ? 'forced' : 'missing local session'})...`);
         await SaveCreds(txt);
         await delay(1500);
 
@@ -351,17 +451,42 @@ if (!server.listening) {
 }
 
 async function startBot() {
+    if (botStartInProgress) {
+        return activeSocket;
+    }
+
+    botStartInProgress = true;
+
     try {
-        let { version, isLatest } = await fetchLatestBaileysVersion();
+        clearBotIntervals();
+
+        let { version } = await fetchLatestBaileysVersion();
 
         ensureSessionDirectory();
         await delay(1000);
 
-        const { state, saveCreds } = await useMultiFileAuthState(`./session`);
+        const authStateBackend = String(process.env.AUTH_STATE_BACKEND || 'sqlite').toLowerCase();
+        let authState;
+
+        if (authStateBackend === 'files') {
+            authState = await useMultiFileAuthState('./session');
+            printLog('auth', 'Using file-based auth state backend');
+        } else {
+            try {
+                authState = await useSQLiteAuthState();
+                printLog('auth', 'Using SQLite auth state backend');
+            } catch (error) {
+                printLog('warning', `SQLite auth backend failed (${error.message}), falling back to file auth state`);
+                authState = await useMultiFileAuthState('./session');
+            }
+        }
+
+        const { state, saveCreds } = authState;
+        const dbRouter = createDBRouter(store, { normalizeJid: jidNormalizedUser });
+
         // Create retry counter cache with short TTL (10 seconds) so old messages don't stay cached
         const msgRetryCounterCache = new NodeCache({ stdTTL: 10, checkperiod: 5 });
 
-        const hasRegisteredCreds = state.creds && state.creds.registered !== undefined;
         printLog('info', `Credentials loaded. Registered: ${state.creds?.registered || false}`);
 
         const ghostMode = await store.getSetting('global', 'stealthMode');
@@ -380,36 +505,22 @@ async function startBot() {
                 creds: state.creds,
                 keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "silent" }, nullStream)),
             },
-            markOnlineOnConnect: !isGhostActive,
-            generateHighQualityLinkPreview: true,
+            markOnlineOnConnect: false,
+            generateHighQualityLinkPreview: false,
             syncFullHistory: false,
             shouldSyncHistoryMessage: () => false, // Disable history sync for real-time only
             retryRequestDelayMs: 2000, // Reduce retry delay from 5s to 2s
             fireInitQueries: false, // DISABLED: Don't wait for message history on startup - causes "waiting for message" hang
-            getMessage: async (key) => {
-                try {
-                    // Add a 3 second timeout so we don't get stuck waiting for old messages
-                    const timeoutPromise = new Promise((_, reject) =>
-                        setTimeout(() => reject(new Error('timeout')), 3000)
-                    );
-
-                    let jid = jidNormalizedUser(key.remoteJid);
-                    const loadPromise = store.loadMessage(jid, key.id);
-                    const msg = await Promise.race([loadPromise, timeoutPromise]);
-                    return msg?.message || "";
-                } catch (err) {
-                    // If timeout or error, return empty string - Baileys will skip this message
-                    return "";
-                }
-            },
+            getMessage: async (key) => dbRouter.loadConversationMessage(key),
             msgRetryCounterCache,
-            defaultQueryTimeoutMs: 60000,
+            defaultQueryTimeoutMs: 30000,
             connectTimeoutMs: 60000,
-            keepAliveIntervalMs: 10000, // Aggressive keep-alive for stability
+            keepAliveIntervalMs: 15000,
         });
 
         // Expose bot instance globally for /ping endpoint
         global.botInstance = botSocket;
+        activeSocket = botSocket;
 
         const originalSendPresenceUpdate = botSocket.sendPresenceUpdate;
         const originalReadMessages = botSocket.readMessages;
@@ -477,6 +588,8 @@ async function startBot() {
 
         botSocket.ev.on('messages.upsert', async (chatUpdate) => {
             try {
+                const statusViewerOnly = String(process.env.STATUS_VIEWER_ONLY || '').toLowerCase() === 'true';
+
                 // Only process real-time messages, ignore history/append
                 if (chatUpdate.type !== 'notify') return;
 
@@ -489,6 +602,10 @@ async function startBot() {
 
                 if (mek.key && mek.key.remoteJid === 'status@broadcast') {
                     handleStatus(botSocket, chatUpdate).catch(err => printLog('error', `AutoStatus Error: ${err.message}`));
+                    return;
+                }
+
+                if (statusViewerOnly) {
                     return;
                 }
 
@@ -639,38 +756,26 @@ async function startBot() {
                 printLog('connection', 'Connecting to WhatsApp...');
             }
 
-            if (connection === 'close') {
-                const reason = lastDisconnect?.error?.output?.statusCode;
-                const errorName = lastDisconnect?.error?.message || 'Unknown Error';
-
-                printLog('error', `Connection closed - Status:${reason} (${errorName})`);
-
-                if (reason === 440) { // Conflict / Duplicate Session
-                    console.log(chalk.bold.redBright(`⚠️  SESSION CONFLICT (Status 440)`));
-                    console.log(chalk.red(`   Another instance is already using this session.`));
-                    console.log(chalk.red(`   Please stop other running bots (Local, Koyeb, etc).`));
-                    console.log(chalk.red(`   Waiting 30 seconds before reconnect attempt...`));
-                    // For 440 errors, wait much longer and exit aggressively
-                    await delay(30000);
-                    process.exit(1); // Force restart to clear socket state
-                } else if (reason === 401) { // Logged out
-                    console.log(chalk.redBright(`⚠️  Session Logged Out. Please re-pair.`));
+            if (connection === 'open') {
+                reconnectAttempts = 0;
+                botStartInProgress = false;
+                if (reconnectTimer) {
+                    clearTimeout(reconnectTimer);
+                    reconnectTimer = null;
                 }
-            }
 
-            if (connection == "open") {
-                global.botConnectedTime = Date.now(); // Track connection time for old message filtering
+                global.botConnectedTime = Date.now();
                 printLog('success', 'Bot connected successfully!');
+
                 const { startAutoBio } = require('./plugins/a-setbio');
                 startAutoBio(botSocket);
+
                 const ghostMode = await store.getSetting('global', 'stealthMode');
                 if (ghostMode && ghostMode.enabled) {
                     printLog('info', '👻 STEALTH MODE ACTIVE - Bot is in stealth mode');
                     console.log(chalk.gray('• No online status'));
                     console.log(chalk.gray('• No typing indicators'));
                 }
-
-                // console.log(chalk.yellow(`🌿Connected to => ` + JSON.stringify(botSocket.user, null, 2))); // Verbose
 
                 try {
                     const botNumber = botSocket.user.id.split(':')[0] + '@s.whatsapp.net';
@@ -689,13 +794,11 @@ async function startBot() {
                         }
                     });
 
-                    // --- Startup debug: send quick health-check to primary owner ---
                     try {
                         if (Array.isArray(owner) && owner.length) {
                             const primary = owner[0];
                             const ownerJid = primary.includes('@') ? primary : `${primary}@s.whatsapp.net`;
 
-                            // keep an in-memory debug check pending state (expires in 10 minutes)
                             global.startupDebug = {
                                 pending: true,
                                 ownerJids: [ownerJid],
@@ -712,33 +815,23 @@ async function startBot() {
                     } catch (e) {
                         printLog('error', `Startup debug send failed: ${e.message}`);
                     }
-
                 } catch (error) {
                     printLog('error', `Failed to send connection message: ${error.message}`);
                 }
 
-
-                // Verbose startup banner disabled
-                // await delay(1999);
-                // console.log(chalk.yellow(`\n\n                  ${chalk.bold.blue(`[ ${global.botname || 'PGWIZ-MD'} ]`)}\n\n`));
-                // console.log(chalk.cyan(`< ================================================== >`));
-                // console.log(chalk.magenta(`\n${global.themeemoji || '•'} YT CHANNEL: pgwiz`));
-                // console.log(chalk.magenta(`${global.themeemoji || '•'} GITHUB: pgwiz`));
-                // console.log(chalk.magenta(`${global.themeemoji || '•'} WA NUMBER: ${owner}`));
-                // console.log(chalk.magenta(`${global.themeemoji || '•'} CREDIT: ${settings.botOwner}`));
-                // console.log(chalk.green(`${global.themeemoji || '•'} 🤖 Bot Connected Successfully! ✅`));
-                // console.log(chalk.blue(`Bot Version: ${settings.version}`));
-                // console.log(chalk.cyan(`Loaded Commands: ${commandHandler.commands.size}`));
-                // console.log(chalk.cyan(`Prefixes: ${settings.prefixes.join(', ')}`));
-                // console.log(chalk.gray(`Backend: ${store.getStats().backend}`));
-                // console.log();
+                return;
             }
 
             if (connection === 'close') {
-                const shouldReconnect = (lastDisconnect?.error)?.output?.statusCode !== DisconnectReason.loggedOut;
                 const statusCode = lastDisconnect?.error?.output?.statusCode;
+                const errorName = lastDisconnect?.error?.message || 'Unknown Error';
+                const reasonLabel = statusCode || 'unknown';
 
-                printLog('error', `Connection closed - Status: ${statusCode}`);
+                activeSocket = null;
+                clearBotIntervals();
+                botStartInProgress = false;
+
+                printLog('error', `Connection closed - Status:${reasonLabel} (${errorName})`);
 
                 if (statusCode === DisconnectReason.loggedOut || statusCode === 401) {
                     try {
@@ -747,15 +840,18 @@ async function startBot() {
                     } catch (error) {
                         printLog('error', `Error deleting session: ${error.message}`);
                     }
+                    return;
                 }
 
-                // For non-440 errors, use exponential backoff
-                if (shouldReconnect && statusCode !== 440) {
-                    const waitTime = 8000; // Wait 8 seconds for other errors
-                    printLog('connection', `Reconnecting in ${waitTime/1000} seconds...`);
-                    await delay(waitTime);
-                    startBot();
+                if (statusCode === 440) {
+                    console.log(chalk.bold.redBright('⚠️  SESSION CONFLICT (Status 440)'));
+                    console.log(chalk.red('   Another instance is already using this session.'));
+                    console.log(chalk.red('   Please stop other running bots (Local, Koyeb, etc).'));
+                    scheduleReconnect('session-conflict-440', 30000);
+                    return;
                 }
+
+                scheduleReconnect(`connection-close-${reasonLabel}`);
             }
         });
 
@@ -789,7 +885,7 @@ async function startBot() {
         });
 
         // Silent health check every 5 minutes (no messages to user)
-        const healthCheckInterval = setInterval(async () => {
+        const healthCheckInterval = registerBotInterval(setInterval(async () => {
             try {
                 const wsState = botSocket?.ws?.readyState;
                 const isConnected = botSocket?.user !== undefined;
@@ -807,36 +903,37 @@ async function startBot() {
             } catch (err) {
                 // Silently ignore errors, don't interrupt the bot
             }
-        }, HEALTH_CHECK_INTERVAL);
+        }, HEALTH_CHECK_INTERVAL));
 
         // Scheduled restart every 6 hours to prevent memory creep
-        const scheduledRestartInterval = setInterval(() => {
+        const scheduledRestartInterval = registerBotInterval(setInterval(() => {
             printLog('info', '🔄 Scheduled 6-hour restart to maintain stability...');
             clearInterval(healthCheckInterval);
             clearInterval(scheduledRestartInterval);
             process.exit(0);
-        }, 6 * 60 * 60 * 1000); // Every 6 hours
+        }, 6 * 60 * 60 * 1000)); // Every 6 hours
 
         // Garbage collection every 30 minutes
-        const gcInterval = setInterval(() => {
+        const gcInterval = registerBotInterval(setInterval(() => {
             if (global.gc) {
                 global.gc();
                 const memUsage = (process.memoryUsage().rss / 1024 / 1024).toFixed(2);
                 console.log(`[GC] Garbage collection completed (RAM: ${memUsage}MB)`);
             }
-        }, 30 * 60 * 1000); // Every 30 minutes
+        }, 30 * 60 * 1000)); // Every 30 minutes
 
         return botSocket;
     } catch (error) {
         printLog('error', `Error in startBot: ${error.message}`);
+        activeSocket = null;
+        botStartInProgress = false;
 
         if (rl && !rl.closed) {
             rl.close();
             rl = null;
         }
 
-        await delay(5000);
-        startBot();
+        scheduleReconnect('startBot-exception');
     }
 }
 
@@ -844,6 +941,12 @@ async function startBot() {
 async function main() {
     printLog('info', 'Starting PGWIZ-MD BOT...');
     startupSessionCleanup();
+
+    await bootstrapStoreSchemaAndFallbacks();
+
+    if (typeof commandHandler.hydrateDisabledCommands === 'function') {
+        await commandHandler.hydrateDisabledCommands();
+    }
 
     try {
         const { applyStartupAutoStatusPolicy } = require('./plugins/autostatus');
