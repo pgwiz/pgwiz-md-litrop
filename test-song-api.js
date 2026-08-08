@@ -1,7 +1,7 @@
 const axios = require('axios');
 const fs = require('fs');
 
-const API_BASE = 'https://api3.wpg.qzz.io';
+const API_BASE = 'https://ytsp-api.pgwiz.cloud';
 const TEST_QUERY = 'Alan Walker Fade';
 
 async function testDownload() {
