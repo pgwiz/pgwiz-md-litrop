@@ -4,7 +4,7 @@ const settings = {
   author: '‎pgwiz',
   timeZone: 'Asia/Karachi',
   botName: "PGWIZ-MD", // your bot name
-  botOwner: 'pgwiz ASP', // set your name
+  botOwner: 'pgwiz', // set your name
   ownerNumber: ['254789462334', '62561080893516', '176416033370294'], // Set your number here without + symbol, just add country code & number without any space
   admins: [], // Admin JIDs (without @s.whatsapp.net or @lid)
   giphyApiKey: 'qnl7ssQChTdPjsKta2Ax2LMaGXz303tq',
