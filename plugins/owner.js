@@ -12,7 +12,7 @@ module.exports = {
 
     try {
       const ownerText = `👑 *BOT OWNER & DEVELOPER INFO*\n\n` +
-                        `👤 *Owner:* ${settings.botOwner || 'Qasim Ali (PGWIZ)'}\n` +
+                        `👤 *Owner:* ${settings.botOwner || 'pgwiz'}\n` +
                         `🌐 *Official Platform:* https://pgwiz.cloud\n` +
                         `📢 *WhatsApp Channel:* https://whatsapp.com/channel/0029Va8cpObHwXbDoZE9VY3K\n\n` +
                         `🚀 Visit *https://pgwiz.cloud* to explore official tools, API services, and bot updates!`;
