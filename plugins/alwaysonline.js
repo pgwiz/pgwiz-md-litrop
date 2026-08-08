@@ -12,11 +12,16 @@ const configPath = path.join(__dirname, '..', 'data', 'presenceConfig.json');
 
 function parseEnvBoolean(value, fallback) {
     if (value === undefined || value === null || String(value).trim() === '') return fallback;
-    return String(value).toLowerCase() === 'true';
+    const s = String(value).toLowerCase().trim();
+    return s === 'true' || s === '1' || s === 'yes' || s === 'on';
 }
 
 async function getDefaultAlwaysOnlineEnabled() {
-    const rawValue = await store.getEnvBackedSetting('ALWAYS_ONLINE', 'false');
+    if (store && typeof store.getEnvBackedSetting === 'function') {
+        const rawValue = await store.getEnvBackedSetting('ALWAYS_ONLINE', 'false');
+        return parseEnvBoolean(rawValue, false);
+    }
+    const rawValue = process.env.ALWAYS_ONLINE;
     return parseEnvBoolean(rawValue, false);
 }
 
@@ -42,13 +47,16 @@ async function initPresenceConfig() {
         return { alwaysOnline: defaultEnabled };
     }
 
-    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-    if (typeof config.alwaysOnline !== 'boolean') {
-        config.alwaysOnline = defaultEnabled;
-        fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+    try {
+        const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+        if (typeof config.alwaysOnline !== 'boolean') {
+            config.alwaysOnline = defaultEnabled;
+            fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+        }
+        return { alwaysOnline: !!config.alwaysOnline };
+    } catch (e) {
+        return { alwaysOnline: defaultEnabled };
     }
-
-    return { alwaysOnline: !!config.alwaysOnline };
 }
 
 async function savePresenceConfig(config) {
@@ -57,6 +65,10 @@ async function savePresenceConfig(config) {
         return;
     }
 
+    const dataDir = path.dirname(configPath);
+    if (!fs.existsSync(dataDir)) {
+        fs.mkdirSync(dataDir, { recursive: true });
+    }
     fs.writeFileSync(configPath, JSON.stringify({ alwaysOnline: !!config.alwaysOnline }, null, 2));
 }
 
@@ -72,10 +84,10 @@ async function isAlwaysOnlineEnabled() {
 
 module.exports = {
     command: 'alwaysonline',
-    aliases: ['alwayson', 'presenceonline'],
+    aliases: ['alwayson', 'presenceonline', 'autoonline', 'online'],
     category: 'owner',
-    description: 'Keep bot presence online continuously',
-    usage: '.alwaysonline <on|off>',
+    description: 'Toggle bot continuous online presence (on/off, true/false)',
+    usage: '.alwaysonline <on|off|true|false>',
     ownerOnly: true,
 
     async handler(sock, message, args, context = {}) {
@@ -84,26 +96,26 @@ module.exports = {
 
         try {
             const config = await initPresenceConfig();
-            const action = args[0]?.toLowerCase();
+            const action = args[0]?.toLowerCase()?.trim();
             const ghostMode = await store.getSetting('global', 'stealthMode');
             const ghostActive = !!(ghostMode && ghostMode.enabled);
 
-            if (!action) {
+            if (!action || action === 'status') {
                 await sock.sendMessage(chatId, {
                     text: `*🟢 ALWAYS ONLINE STATUS*\n\n` +
-                          `*Current Status:* ${config.alwaysOnline ? '✅ Enabled' : '❌ Disabled'}\n` +
-                          `*Stealth Mode:* ${ghostActive ? '👻 Active (overrides online presence)' : '❌ Inactive'}\n` +
+                          `*Current Status:* ${config.alwaysOnline ? '✅ Enabled (Online 24/7)' : '❌ Disabled'}\n` +
+                          `*Stealth Mode:* ${ghostActive ? '👻 Active (overrides presence)' : '❌ Inactive'}\n` +
                           `*Storage:* ${HAS_DB ? 'Database' : 'File System'}\n\n` +
                           `*Commands:*\n` +
-                          `• \`.alwaysonline on\` - Keep bot online\n` +
-                          `• \`.alwaysonline off\` - Disable always-online\n\n` +
-                          `*Note:* When enabled, the bot sends periodic available presence updates.`,
+                          `• \`.alwaysonline on\` / \`.alwaysonline true\` - Keep bot online\n` +
+                          `• \`.alwaysonline off\` / \`.alwaysonline false\` - Disable always-online\n\n` +
+                          `*Note:* When enabled, the bot sends periodic presence updates to appear online 24/7.`,
                     ...channelInfo
                 }, { quoted: message });
                 return;
             }
 
-            if (action === 'on' || action === 'enable') {
+            if (action === 'on' || action === 'enable' || action === 'true' || action === '1') {
                 if (config.alwaysOnline) {
                     await sock.sendMessage(chatId, {
                         text: '⚠️ *Always-online is already enabled*',
@@ -120,13 +132,13 @@ module.exports = {
                 }
 
                 await sock.sendMessage(chatId, {
-                    text: `✅ *Always-online enabled!*${ghostActive ? '\n\n⚠️ *Ghost mode is active* - online presence is currently blocked.' : ''}`,
+                    text: `✅ *Always-online enabled!*${ghostActive ? '\n\n⚠️ *Stealth mode is active* - online presence is currently blocked.' : '\nBot will now stay online 24/7.'}`,
                     ...channelInfo
                 }, { quoted: message });
                 return;
             }
 
-            if (action === 'off' || action === 'disable') {
+            if (action === 'off' || action === 'disable' || action === 'false' || action === '0') {
                 if (!config.alwaysOnline) {
                     await sock.sendMessage(chatId, {
                         text: '⚠️ *Always-online is already disabled*',
@@ -138,6 +150,10 @@ module.exports = {
                 config.alwaysOnline = false;
                 await savePresenceConfig(config);
 
+                if (!ghostActive) {
+                    await sock.sendPresenceUpdate('unavailable').catch(() => {});
+                }
+
                 await sock.sendMessage(chatId, {
                     text: '❌ *Always-online disabled!*',
                     ...channelInfo
@@ -146,7 +162,7 @@ module.exports = {
             }
 
             await sock.sendMessage(chatId, {
-                text: '❌ *Invalid option!*\n\nUse: `.alwaysonline on/off`',
+                text: '❌ *Invalid option!*\n\nUse: `.alwaysonline on` or `.alwaysonline off` (or `true` / `false`)',
                 ...channelInfo
             }, { quoted: message });
         } catch (error) {
