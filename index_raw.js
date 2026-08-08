@@ -748,6 +748,11 @@ async function startBot() {
                 if (state === 'paused' || state === 'unavailable') {
                     return;
                 }
+            } else if (!alwaysOnline && !jid) {
+                const state = String(presenceType || '').toLowerCase();
+                if (state === 'available') {
+                    return originalSendPresenceUpdate.call(this, 'unavailable');
+                }
             }
 
             return originalSendPresenceUpdate.apply(this, args);
@@ -1042,6 +1047,10 @@ async function startBot() {
                     }, 45 * 1000));
 
                     printLog('presence', 'Always online presence heartbeat enabled');
+                } else if (!ghostMode || !ghostMode.enabled) {
+                    try {
+                        await originalSendPresenceUpdate.call(botSocket, 'unavailable');
+                    } catch (error) {}
                 }
 
                 try {
@@ -1180,7 +1189,9 @@ async function startBot() {
                     console.log(`[HEALTH] WebSocket unhealthy - attempting silent reconnect (state: ${wsState})`);
                     // Silently attempt to reconnect by resending presence
                     try {
-                        await botSocket.sendPresenceUpdate('available');
+                        if (await isAlwaysOnlineEnabled()) {
+                            await botSocket.sendPresenceUpdate('available');
+                        }
                     } catch (e) {
                         // Fail silently, Baileys will handle reconnection
                     }
