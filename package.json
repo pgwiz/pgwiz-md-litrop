@@ -23,7 +23,10 @@
     "start:fresh": "npm run reset-session && npm start",
     "install:panel": "npm install --legacy-peer-deps",
     "install:force": "npm install --force",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "node build.js",
+    "build:index": "node build.js index",
+    "build:handler": "node build.js handler"
   },
   "keywords": [
     "termux-whatsapp-bot",
@@ -106,5 +109,8 @@
       "name": "pgwiz",
       "role": "Maintainer"
     }
-  ]
+  ],
+  "devDependencies": {
+    "javascript-obfuscator": "^4.1.1"
+  }
 }
