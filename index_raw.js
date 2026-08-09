@@ -386,8 +386,9 @@ setInterval(() => {
 setInterval(() => {
     const used = process.memoryUsage().rss / 1024 / 1024;
     if (used > 400) {
-        console.log(chalk.yellow('⚠️ RAM too high (>400MB), restarting bot...'));
-        process.exit(1);
+        if (global.gc) global.gc();
+        if (store && typeof store.cleanupData === 'function') store.cleanupData();
+        console.log(chalk.yellow('⚠️ RAM high (>400MB), executed emergency GC and store cleanup'));
     }
 }, 30_000);
 
