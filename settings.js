@@ -8,7 +8,7 @@ const settings = {
   ownerNumber: ['254789462334', '62561080893516', '176416033370294'], // Set your number here without + symbol, just add country code & number without any space
   admins: [], // Admin JIDs (without @s.whatsapp.net or @lid)
   giphyApiKey: 'qnl7ssQChTdPjsKta2Ax2LMaGXz303tq',
-  commandMode: "private",
+  commandMode: process.env.MODE || process.env.WORK_TYPE || process.env.WORKTYPE || "public",
   maxStoreMessages: 20,
   tempCleanupInterval: 1 * 60 * 60 * 1000, // 1 hours
   storeWriteInterval: 10000,
