@@ -851,11 +851,6 @@ async function startBot() {
                         continue;
                     }
 
-                    if (!botSocket.public && !mek.key.fromMe && upsertType === 'notify') {
-                        const isGroup = mek.key?.remoteJid?.endsWith('@g.us');
-                        if (!isGroup) continue;
-                    }
-
                     const messageId = mek.key?.id || '';
                     if (mek.key?.fromMe && messageId.startsWith('BAE5') && messageId.length === 16) continue;
 
