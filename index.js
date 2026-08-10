@@ -709,12 +709,11 @@ async function startBot() {
                 creds: state.creds,
                 keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "silent" }, nullStream)),
             },
-            markOnlineOnConnect: false,
+            markOnlineOnConnect: !isGhostActive,
             generateHighQualityLinkPreview: false,
             syncFullHistory: false,
             shouldSyncHistoryMessage: () => false, // Disable history sync for real-time only
             retryRequestDelayMs: 2000, // Reduce retry delay from 5s to 2s
-            fireInitQueries: false, // DISABLED: Don't wait for message history on startup - causes "waiting for message" hang
             getMessage: async (key) => dbRouter.loadConversationMessage(key),
             msgRetryCounterCache,
             defaultQueryTimeoutMs: 30000,
