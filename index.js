@@ -714,7 +714,7 @@ async function startBot() {
             syncFullHistory: false,
             shouldSyncHistoryMessage: () => false, // Disable history sync for real-time only
             retryRequestDelayMs: 2000, // Reduce retry delay from 5s to 2s
-            fireInitQueries: true,
+            fireInitQueries: false,
             getMessage: async (key) => dbRouter.loadConversationMessage(key),
             msgRetryCounterCache,
             defaultQueryTimeoutMs: 30000,
