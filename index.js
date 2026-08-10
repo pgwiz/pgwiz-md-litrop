@@ -1,1 +1,1413 @@
-const _0x4a533d=_0x2ee0;(function(_0x2f4aa8,_0x5ab3a9){const _0xa8c2f4=_0x2ee0,_0x22bd93=_0x2f4aa8();while(!![]){try{const _0x2249cd=-parseInt(_0xa8c2f4(0x23f))/0x1+parseInt(_0xa8c2f4(0x20a))/0x2*(parseInt(_0xa8c2f4(0x144))/0x3)+-parseInt(_0xa8c2f4(0x1fb))/0x4+parseInt(_0xa8c2f4(0x22a))/0x5*(parseInt(_0xa8c2f4(0x237))/0x6)+-parseInt(_0xa8c2f4(0x170))/0x7+parseInt(_0xa8c2f4(0x13a))/0x8*(parseInt(_0xa8c2f4(0x1f9))/0x9)+parseInt(_0xa8c2f4(0x1ec))/0xa*(parseInt(_0xa8c2f4(0x227))/0xb);if(_0x2249cd===_0x5ab3a9)break;else _0x22bd93['push'](_0x22bd93['shift']());}catch(_0x1e92e3){_0x22bd93['push'](_0x22bd93['shift']());}}}(_0x3ab9,0xa55b4));const fs=require('fs'),path=require(_0x4a533d(0x1a6));let lastBadMacWarning=0x0,lastBadMacRecoveryRequest=0x0,pendingBadMacRecovery=![],triggerBadMacRecovery=null,badMacRecoveryCount=0x0,lastBadMacRecoveryCompletedAt=0x0;function requestBadMacRecovery(_0x26d392=_0x4a533d(0x143)){const _0x52ce64=_0x4a533d,_0x5592b6=Date['now'](),_0x4da871=_0x26d392===_0x52ce64(0x1e5);if(!_0x4da871&&badMacRecoveryCount>=0x1){const _0x1f5d99=0x1e*0x3c*0x3e8;if(_0x5592b6-lastBadMacRecoveryCompletedAt<_0x1f5d99)return;}if(_0x5592b6-lastBadMacRecoveryRequest<0xea60)return;lastBadMacRecoveryRequest=_0x5592b6,typeof triggerBadMacRecovery===_0x52ce64(0x1cc)?triggerBadMacRecovery(_0x26d392):pendingBadMacRecovery=!![];}const originalConsoleLog=console[_0x4a533d(0x1c3)],originalConsoleError=console[_0x4a533d(0xfa)],originalConsoleWarn=console['warn'],originalConsoleInfo=console['info'],originalConsoleDebug=console[_0x4a533d(0x202)],SUPPRESS_KEYWORDS=new Set([_0x4a533d(0x207),_0x4a533d(0x1ad),_0x4a533d(0x16e),_0x4a533d(0x219),_0x4a533d(0x1cf),_0x4a533d(0x17e),_0x4a533d(0x176),_0x4a533d(0x116),_0x4a533d(0x118),'basekey',_0x4a533d(0x1fe),_0x4a533d(0x1d6),_0x4a533d(0x186),_0x4a533d(0x226),_0x4a533d(0x172),_0x4a533d(0x1b2),_0x4a533d(0x188),'session\x20error',_0x4a533d(0x156),_0x4a533d(0x160),_0x4a533d(0x158),_0x4a533d(0x22c),'prekey',_0x4a533d(0x181),_0x4a533d(0x134),'ratchet',_0x4a533d(0x109),'noisekey',_0x4a533d(0x1b5),_0x4a533d(0x192),'sending\x20presence','message\x20counter']),BAD_MAC_SIGNAL_KEYWORDS=[_0x4a533d(0x188),_0x4a533d(0x1b2),_0x4a533d(0x172),'messagecountererror','incorrect\x20private\x20key\x20length',_0x4a533d(0x198)],hasBadMacSignal=_0x1e7226=>{const _0x37aad5=_0x4a533d;for(const _0x160bc2 of _0x1e7226){if(typeof _0x160bc2===_0x37aad5(0xf8)){const _0x1df71b=_0x160bc2[_0x37aad5(0x117)]();if(BAD_MAC_SIGNAL_KEYWORDS['some'](_0x471e2b=>_0x1df71b[_0x37aad5(0x11a)](_0x471e2b)))return!![];}if(_0x160bc2&&typeof _0x160bc2==='object'&&typeof _0x160bc2[_0x37aad5(0x23e)]==='string'){const _0x1da992=_0x160bc2[_0x37aad5(0x23e)][_0x37aad5(0x117)]();if(BAD_MAC_SIGNAL_KEYWORDS[_0x37aad5(0x18a)](_0x26752e=>_0x1da992[_0x37aad5(0x11a)](_0x26752e)))return!![];}}return![];},handleBadMacSignal=_0x46095b=>{const _0x1c8cb2=_0x4a533d;if(!hasBadMacSignal(_0x46095b))return;const _0x33dd1f=!!(activeSocket&&activeSocket[_0x1c8cb2(0x1c5)]&&activeSocket[_0x1c8cb2(0x1c5)]['id']),_0x1b145f=activeSocket?.['ws']?.[_0x1c8cb2(0x12a)],_0x514aea=_0x33dd1f||_0x1b145f===0x1;if(_0x514aea)return;const _0x5305b0=Date['now']();_0x5305b0-lastBadMacWarning>0x1d4c0&&(originalConsoleWarn(_0x1c8cb2(0x127)),lastBadMacWarning=_0x5305b0),requestBadMacRecovery(_0x1c8cb2(0x154));},shouldSuppress=_0x5631ca=>{const _0xed0d05=_0x4a533d;for(const _0x3f1a35 of _0x5631ca){if(!_0x3f1a35)continue;if(typeof _0x3f1a35===_0xed0d05(0x150)){const _0x20367a=_0x3f1a35[_0xed0d05(0x233)]?.['name']||'';if(_0x20367a['includes'](_0xed0d05(0x1f8))||_0x20367a[_0xed0d05(0x11a)]('Session')||_0x20367a[_0xed0d05(0x11a)](_0xed0d05(0x1d8))||_0x20367a[_0xed0d05(0x11a)](_0xed0d05(0x1ef)))return!![];if(_0x3f1a35[_0xed0d05(0x16e)]||_0x3f1a35['currentRatchet']||_0x3f1a35['registrationId']||_0x3f1a35[_0xed0d05(0x1df)]||_0x3f1a35['ephemeralKeyPair']||_0x3f1a35[_0xed0d05(0x1cd)]||_0x3f1a35[_0xed0d05(0x145)]||_0x3f1a35['keyPair']||_0x3f1a35['noiseKey']||_0x3f1a35[_0xed0d05(0x183)]||_0x3f1a35[_0xed0d05(0x21b)])return!![];if(Buffer[_0xed0d05(0x15b)](_0x3f1a35)&&_0x3f1a35[_0xed0d05(0x1a5)]>0x14)return!![];}}for(const _0x34ee5b of _0x5631ca){if(typeof _0x34ee5b!==_0xed0d05(0xf8))continue;const _0x25d353=_0x34ee5b[_0xed0d05(0x117)]();for(const _0x2c843c of SUPPRESS_KEYWORDS){if(_0x25d353[_0xed0d05(0x11a)](_0x2c843c))return!![];}if(_0x25d353[_0xed0d05(0x11a)](_0xed0d05(0x14d))||_0x25d353['includes'](_0xed0d05(0x1c6))||_0x25d353[_0xed0d05(0x11a)](_0xed0d05(0x19b)))return!![];}return![];};console[_0x4a533d(0x1c3)]=(..._0x497c9c)=>{handleBadMacSignal(_0x497c9c);if(shouldSuppress(_0x497c9c))return;originalConsoleLog['apply'](console,_0x497c9c);},console[_0x4a533d(0xfa)]=(..._0x4746b4)=>{const _0x542ec0=_0x4a533d;handleBadMacSignal(_0x4746b4);if(shouldSuppress(_0x4746b4))return;originalConsoleError[_0x542ec0(0x166)](console,_0x4746b4);},console[_0x4a533d(0xf1)]=(..._0x15b25d)=>{const _0x3caa8f=_0x4a533d;handleBadMacSignal(_0x15b25d);if(shouldSuppress(_0x15b25d))return;originalConsoleWarn[_0x3caa8f(0x166)](console,_0x15b25d);},console[_0x4a533d(0x1b1)]=(..._0x54cec)=>{const _0x37df6e=_0x4a533d;handleBadMacSignal(_0x54cec);if(shouldSuppress(_0x54cec))return;originalConsoleInfo[_0x37df6e(0x166)](console,_0x54cec);},console[_0x4a533d(0x202)]=(..._0x4ed55b)=>{handleBadMacSignal(_0x4ed55b);if(shouldSuppress(_0x4ed55b))return;originalConsoleDebug['apply'](console,_0x4ed55b);},require(_0x4a533d(0x1f1)),require('./settings');const {Writable}=require(_0x4a533d(0x1a4)),nullStream=new Writable({'write'(){}}),{Boom}=require(_0x4a533d(0x15e)),chalk=require(_0x4a533d(0x204)),FileType=require(_0x4a533d(0x223)),syntaxerror=require(_0x4a533d(0x12e)),axios=require(_0x4a533d(0x195)),PhoneNumber=require(_0x4a533d(0x208)),{imageToWebp,videoToWebp,writeExifImg,writeExifVid}=require(_0x4a533d(0x1ac)),{smsg,isUrl,generateMessageTag,getBuffer,getSizeMedia,fetch,await,sleep,reSize}=require(_0x4a533d(0x14f)),{default:makeWASocket,useMultiFileAuthState,DisconnectReason,fetchLatestBaileysVersion,generateForwardMessageContent,prepareWAMessageMedia,generateWAMessageFromContent,generateMessageID,downloadContentFromMessage,Browsers,jidDecode,proto,jidNormalizedUser,makeCacheableSignalKeyStore,delay}=require('@whiskeysockets/baileys'),NodeCache=require(_0x4a533d(0x230)),pino=require(_0x4a533d(0x215)),readline=require('readline'),{parsePhoneNumber}=require(_0x4a533d(0x18e)),{PHONENUMBER_MCC}=require('@whiskeysockets/baileys/lib/Utils/generics'),{rmSync,existsSync,mkdirSync}=require('fs'),{join}=require(_0x4a533d(0x1a6)),store=require(_0x4a533d(0x152)),SaveCreds=require(_0x4a533d(0x131)),{useSQLiteAuthState,resetSQLiteAuthState}=require(_0x4a533d(0x129)),{createDBRouter}=require('./lib/db-router'),{app,server,PORT}=require('./lib/server'),{printLog}=require('./lib/print'),{handleMessages,handleGroupParticipantUpdate,handleStatus,handleCall}=require(_0x4a533d(0x12b)),settings=require(_0x4a533d(0x1dd)),commandHandler=require('./lib/commandHandler');let reconnectAttempts=0x0,reconnectTimer=null,activeSocket=null,botStartInProgress=![],authAutoRepairAttempted=![],badMacRecoveryInProgress=![],socketGeneration=0x0;function _0x3ab9(){const _0xee3061=['connecting','black','greenBright','string','memoryUsage','error','false','sqlite','Existing\x20session\x20found.\x20Using\x20saved\x20credentials','[HEALTH]\x20WebSocket\x20unhealthy\x20-\x20attempting\x20silent\x20reconnect\x20(state:\x20','923051391005','stdout','silent','ephemeralMessage','counts','👻\x20STEALTH\x20MODE\x20IS\x20ACTIVE\x20-\x20Starting\x20in\x20stealth\x20mode','public','cpus','No\x20existing\x20session\x20found.\x20Pairing\x20code\x20will\x20be\x20required','[AUTO-REPAIR]\x20Bad\x20MAC\x20detected.\x20Clearing\x20auth/session\x20and\x20restarting\x20(','rootkey','readFromFile','./lib','Failed\x20to\x20reset\x20SQLite\x20auth\x20state\x20during\x20Bad\x20MAC\x20recovery:\x20','session-conflict-440','keys','cwd','connection.update','close','PGWIZ-MD','SQLite\x20auth\x20backend\x20failed\x20(','parse','creds.json\x20exists\x20but\x20is\x20empty','ephemeralkeypair','toLowerCase','lastremoteephemeralkey','session','includes','sendReadReceipt','Session\x20file\x20not\x20valid\x20after\x20refresh','participant','stealthMode','self','map','--pairing-code','Chrome','enabled','key','loadConversationMessage','isDirectory','[AUTO-REPAIR]\x20Bad\x20MAC/decrypt\x20error\x20detected.\x20Clearing\x20auth\x20state\x20and\x20restarting\x20session\x20recovery...','readdirSync','./lib/sqliteAuthState','readyState','./lib/messageHandler','unavailable','No\x20SESSION_ID\x20found\x20in\x20environment\x20variables','syntax-error','server','cleanupData','./lib/session','statusCode','decodeJid','identity\x20key','warning','call','Startup\x20debug\x20message\x20sent\x20to\x20','cpuMonitor','presence','936iBhoXL','Error\x20in\x20messages.upsert:\x20','ownerNumber','bgGreen','receipt','Valid\x20session\x20credentials\x20found','🤖\x20Startup\x20check\x20—\x20reply\x20to\x20this\x20message\x20to\x20confirm\x20bot\x20status.\x0a\x0aReply\x20with\x20`.menu`\x20to\x20verify\x20the\x20bot\x20is\x20responding.','Bad\x20MAC\x20recovery\x20failed:\x20','unlink','bad-mac-detected','1315893POmuoC','rootKey','output','Your\x20Pairing\x20Code\x20:\x20','connection','missing\x20local\x20session','Invalid\x20phone\x20number\x20format','SESSION_ID','--mobile','<buffer','%\x20average\x20-\x20Bot\x20may\x20be\x20CPU-throttled\x20on\x20this\x20server','./lib/myfunc','object','Using\x20file-based\x20auth\x20state\x20backend','./lib/lightweight_store','auth','bad-mac-log-detected','Using\x20default\x20phone\x20number:\x20','messagecountererror','Unhandled\x20Rejection:\x20','curve25519','Connection\x20closed\x20-\x20Status:','watchFile','isBuffer','script','type','@hapi/boom','read','decrypted\x20message','rss','replace','Failed\x20to\x20reset\x20session\x20directory\x20during\x20Bad\x20MAC\x20recovery:\x20','startBot-exception','Error\x20in\x20handleMessages:\x20','apply','exit','creds.json\x20is\x20missing\x20required\x20fields','s\x20(attempt\x20','inbox','requestPairingCode','times','❌\x20An\x20error\x20occurred\x20while\x20processing\x20your\x20message.','_chains','files','7822941SqmxGB','%\x20-\x20Server\x20may\x20be\x20throttling\x20performance','decrypt\x20error','PAIRING_NUMBER','split','mkdirSync','indexinfo',')\x20-\x20attempting\x20connection...','Starting\x20PGWIZ-MD\x20BOT...','contacts','createInterface','global','temp','Fatal\x20error:\x20','currentratchet','💙,🖤,⭐','Failed\x20to\x20get\x20pairing\x20code:\x20','signedprekey','cache','signedPreKey','round','withoutContact','messagekeys','groups','bad\x20mac','🔥\x20SUSTAINED\x20HIGH\x20CPU:\x20','some','getBotMode','Bot\x20connected\x20successfully!','success','libphonenumber-js','min','Session\x20not\x20registered\x20and\x20no\x20me.id\x20-\x20will\x20need\x20pairing','forced','xmppframing','Schema\x20bootstrap\x20failed:\x20','⚠️\x20Cannot\x20read\x20file\x20','axios','No\x20session\x20found.\x20Pairing\x20code\x20required','\x20\x20\x20Another\x20instance\x20is\x20already\x20using\x20this\x20session.','invalid\x20key','storeWriteInterval','ubuntu','privkey','gray','Auto-react\x20startup\x20init\x20failed:\x20','bad-mac-pending-pre-init','available','unlinkSync','forEach','creds','join','stream','length','path','•\x20No\x20typing\x20indicators','messages.update','clear','Cannot\x20use\x20pairing\x20code\x20with\x20mobile\x20api','Start\x20skipped:\x20existing\x20socket\x20is\x20active\x20(state=','./lib/exif','sessionentry','./plugins/autostatus','filter','getSetting','info','failed\x20to\x20decrypt','mtimeMs','Server\x20error:\x20','signedbundle','utf8','Please\x20type\x20your\x20WhatsApp\x20number\x20😍\x0aFormat:\x206281376552730\x20(without\x20+\x20or\x20spaces)\x20:\x20','tag','@s.whatsapp.net','isTTY','toLocaleString','Using\x20SQLite\x20auth\x20state\x20backend','bgBlack','BAE5','question','lstatSync','boolean','readdir','log','[AUTO-REPAIR]\x20Startup\x20session\x20cleanup\x20removed\x20','user','pubkey','readFileSync','Using\x20local\x20session\x20credentials\x20(refresh\x20skipped)','bold','number','AutoStatus\x20Error:\x20','function','lastRemoteEphemeralKey','now','pendingprekey','writeToFile','alwaysOnline','newsletterName','existsSync','random','stack','chaintype','startupDebug','Ratchet','isGhostMode','trim','attrs','Always\x20online\x20presence\x20heartbeat\x20enabled','./settings','yellow','pendingPreKey','creds.json','🤖\x20Bot\x20Connected\x20Successfully!\x0a\x0a⏰\x20Time:\x20','incorrect\x20private\x20key\x20length','name','\x0a👻\x20Stealth\x20Mode:\x20ACTIVE','connection-close-corrupted-auth','group-participants.update','unknown','open','push','red','bad-mac-immediate-repair','8290fsVBjC','sendReceipt','utf-8','Signal','catch','./config','code','stat','endsWith',')...','@g.us','presenceConfig','SessionEntry','59409bWPsaF','Auto\x20status\x20startup\x20policy\x20failed:\x20','767928ZrOjOh','shift','registered','chainkey','notify','instance\x20of\x20object','groupMetadata','debug','Failed\x20to\x20send\x20connection\x20message:\x20','chalk','true','./lib/isOwner','closing\x20session','awesome-phonenumber','messages.upsert','4aPEzPD','Error\x20refreshing\x20session:\x20','fromMe','isArray','./plugins/areact','\x20in\x20use','[GC]\x20Garbage\x20collection\x20completed\x20(RAM:\x20','msgRetryCounterCache','⚠️\x20\x20SESSION\x20CONFLICT\x20(Status\x20440)','./session','120363179639202475@newsletter','pino','loggedOut','status@broadcast','query','registrationid','resolve','signedIdentityKey','⚠️\x20\x20HIGH\x20CPU\x20USAGE:\x20','hydrateDisabledCommands','Session\x20initialization\x20incomplete.\x20Will\x20attempt\x20pairing...','Uncaught\x20Exception:\x20','Using\x20existing\x20session\x20(refresh\x20failed)','WhatsApp','buffer','file-type','subject','Refreshing\x20session\x20credentials\x20from\x20PGWIZ\x20service\x20(','signal\x20key','8162LlmSFR','noiseKey','0@s.whatsapp.net','6885MuswSL','getOwnerJids','hkdf-sha256','listen','argv','test','node-cache','store','idle','constructor','getNumber','Address\x20localhost:','remoteJid','4506bNjPpn','\x20(registered:\x20','[AUTO-REPAIR]\x20Startup\x20session\x20cleanup\x20found\x20no\x20stale\x20session\x20files.','international','isValid','bind','loadCommands','message','1311979UXaOWc','Owner\x20JIDs\x20loaded\x20into\x20schema:\x20','Startup\x20session\x20cleanup\x20failed:\x20','closed','newsletterJid','Reconnect\x20attempt\x20failed:\x20','append','sendPresenceUpdate','index.js\x20updated,\x20reloading...','Session\x20logged\x20out.\x20Please\x20re-authenticate','Credentials\x20loaded.\x20Registered:\x20','warn','startsWith','Session\x20found\x20for\x20','bootstrapInitialSchema'];_0x3ab9=function(){return _0xee3061;};return _0x3ab9();}const botRuntimeIntervals=new Set();function registerBotInterval(_0x336aa6){return botRuntimeIntervals['add'](_0x336aa6),_0x336aa6;}function clearBotIntervals(){const _0x3db26a=_0x4a533d;for(const _0x1e0847 of botRuntimeIntervals){clearInterval(_0x1e0847);}botRuntimeIntervals[_0x3db26a(0x1a9)]();}function scheduleReconnect(_0x5dcfa8=_0x4a533d(0x1e7),_0x4639eb=null){const _0x3daedf=_0x4a533d;if(reconnectTimer){printLog('connection','Reconnect\x20already\x20scheduled.\x20Latest\x20reason:\x20'+_0x5dcfa8);return;}reconnectAttempts+=0x1;const _0x22ed84=Math[_0x3daedf(0x18f)](0x3e8*0x2**(reconnectAttempts-0x1),0x7530),_0x346a30=Math['floor'](Math[_0x3daedf(0x1d4)]()*0x1f4),_0xe772d6=typeof _0x4639eb===_0x3daedf(0x1ca)?_0x4639eb:_0x22ed84+_0x346a30;printLog('connection','Reconnecting\x20in\x20'+Math[_0x3daedf(0x184)](_0xe772d6/0x3e8)+_0x3daedf(0x169)+reconnectAttempts+')\x20due\x20to\x20'+_0x5dcfa8),reconnectTimer=setTimeout(()=>{const _0x5b7975=_0x3daedf;reconnectTimer=null,startBot()[_0x5b7975(0x1f0)](_0x1add61=>{const _0x304b7d=_0x5b7975;printLog('error',_0x304b7d(0xeb)+_0x1add61[_0x304b7d(0x23e)]);});},_0xe772d6);}function normalizeToJid(_0x28d945){const _0x113bdf=_0x4a533d;if(!_0x28d945)return'';const _0x2a5cce=String(_0x28d945)[_0x113bdf(0x1da)]();if(!_0x2a5cce)return'';if(_0x2a5cce[_0x113bdf(0x11a)]('@'))return _0x2a5cce;const _0x567da0=_0x2a5cce['replace'](/\D/g,'');return _0x567da0?_0x567da0+'@s.whatsapp.net':'';}function csvToList(_0x87ad9){const _0x24ba93=_0x4a533d;if(!_0x87ad9)return[];return String(_0x87ad9)['split'](',')[_0x24ba93(0x120)](_0x2d202a=>_0x2d202a[_0x24ba93(0x1da)]())[_0x24ba93(0x1af)](Boolean);}function parseBoolean(_0x290f70,_0x59fcfd=![]){const _0x4b7e5f=_0x4a533d;if(_0x290f70===undefined||_0x290f70===null||String(_0x290f70)[_0x4b7e5f(0x1da)]()==='')return _0x59fcfd;return String(_0x290f70)[_0x4b7e5f(0x117)]()===_0x4b7e5f(0x205);}async function getPresenceConfig(){const _0xe0adcc=_0x4a533d,_0x59d0b7=process.env.ALWAYS_ONLINE||process.env.ALWAYS_ONLINE_PRESENCE;if(_0x59d0b7!==undefined&&String(_0x59d0b7)[_0xe0adcc(0x1da)]()!=='')return{'alwaysOnline':String(_0x59d0b7)[_0xe0adcc(0x117)]()==='true'};const _0x381a67=await store[_0xe0adcc(0x1b0)](_0xe0adcc(0x17b),_0xe0adcc(0x1f7));if(_0x381a67&&typeof _0x381a67[_0xe0adcc(0x1d1)]===_0xe0adcc(0x1c1))return{'alwaysOnline':_0x381a67['alwaysOnline']};return{'alwaysOnline':![]};}async function isAlwaysOnlineEnabled(){const _0x17142e=_0x4a533d;try{const _0x29622c=await getPresenceConfig();return!!_0x29622c[_0x17142e(0x1d1)];}catch{return![];}}async function bootstrapStoreSchemaAndFallbacks(){const _0x4bfeac=_0x4a533d;try{const _0x228bc8=Array[_0x4bfeac(0x20d)](settings[_0x4bfeac(0x13c)])?settings[_0x4bfeac(0x13c)]:settings[_0x4bfeac(0x13c)]?[settings[_0x4bfeac(0x13c)]]:[],_0x4de85c=Array[_0x4bfeac(0x20d)](owner)?owner:[],_0x4346fe=[...new Set([..._0x228bc8,..._0x4de85c][_0x4bfeac(0x120)](normalizeToJid)[_0x4bfeac(0x1af)](Boolean))];await store[_0x4bfeac(0xf4)]({'ownerJids':_0x4346fe,'disabledPlugins':csvToList(process.env.DISABLED_PLUGINS||''),'envDefaults':{'AUTO_STATUS_VIEW':_0x4bfeac(0x205),'AUTO_STATUS_REACT':_0x4bfeac(0x205),'STATUS_EMOJIS':_0x4bfeac(0x17f),'AUTOREAD':_0x4bfeac(0xfb),'AUTOTYPING':_0x4bfeac(0xfb),'ANTICALL':_0x4bfeac(0xfb),'ANTIDELETE':_0x4bfeac(0xfb),'AUTOREACT':_0x4bfeac(0xfb),'ALWAYS_ONLINE':_0x4bfeac(0xfb),'FORCE_SESSION_RESET':_0x4bfeac(0xfb),'SUDO_USERS':''}});const _0x5ab893=await store[_0x4bfeac(0x22b)]();_0x5ab893[_0x4bfeac(0x1a5)]>0x0&&(printLog(_0x4bfeac(0x231),_0x4bfeac(0xe7)+_0x5ab893[_0x4bfeac(0x1a5)]),(!Array['isArray'](owner)||owner[_0x4bfeac(0x1a5)]===0x0)&&(owner=_0x5ab893));}catch(_0xeaf7d){printLog(_0x4bfeac(0xfa),_0x4bfeac(0x193)+_0xeaf7d[_0x4bfeac(0x23e)]);}}store[_0x4a533d(0x10a)](),setInterval(()=>store[_0x4a533d(0x1d0)](),settings[_0x4a533d(0x199)]||0x2710),commandHandler[_0x4a533d(0x23d)](),setInterval(()=>{const _0x218010=_0x4a533d;global['gc']&&(global['gc'](),console[_0x218010(0x1c3)]('🧹\x20Garbage\x20collection\x20completed'));},0xea60),setInterval(()=>{const _0x4c1c3c=_0x4a533d,_0x491edd=process[_0x4c1c3c(0xf9)]()[_0x4c1c3c(0x161)]/0x400/0x400;if(_0x491edd>0x190){if(global['gc'])global['gc']();if(store&&typeof store[_0x4c1c3c(0x130)]===_0x4c1c3c(0x1cc))store[_0x4c1c3c(0x130)]();console[_0x4c1c3c(0x1c3)](chalk['yellow']('⚠️\x20RAM\x20high\x20(>400MB),\x20executed\x20emergency\x20GC\x20and\x20store\x20cleanup'));}},0x7530);let phoneNumber=global[_0x4a533d(0x173)]||process.env.PAIRING_NUMBER||_0x4a533d(0xff),owner=JSON['parse'](fs[_0x4a533d(0x1c7)]('./data/owner.json'));global['botname']=process.env.BOT_NAME||'PGWIZ-MD',global['themeemoji']='•';const pairingCode=!!phoneNumber||process[_0x4a533d(0x22e)][_0x4a533d(0x11a)](_0x4a533d(0x121)),useMobile=process[_0x4a533d(0x22e)][_0x4a533d(0x11a)](_0x4a533d(0x14c));let rl=null;process['stdin'][_0x4a533d(0x1ba)]&&!process.env.PAIRING_NUMBER&&(rl=readline[_0x4a533d(0x17a)]({'input':process['stdin'],'output':process[_0x4a533d(0x100)]}));const question=_0x2dbbbd=>{const _0x3fa172=_0x4a533d;return rl&&!rl[_0x3fa172(0xe9)]?new Promise(_0xa08dc4=>rl[_0x3fa172(0x1bf)](_0x2dbbbd,_0xa08dc4)):Promise['resolve'](settings[_0x3fa172(0x13c)]||phoneNumber);};process['on'](_0x4a533d(0x167),()=>{const _0x4cd8dd=_0x4a533d;rl&&!rl[_0x4cd8dd(0xe9)]&&rl['close']();}),process['on']('SIGINT',()=>{const _0x2ff6ae=_0x4a533d;rl&&!rl[_0x2ff6ae(0xe9)]&&rl[_0x2ff6ae(0x111)](),process[_0x2ff6ae(0x167)](0x0);});function ensureSessionDirectory(){const _0x30b7b7=_0x4a533d,_0x243979=path['join'](__dirname,_0x30b7b7(0x119));return!existsSync(_0x243979)&&mkdirSync(_0x243979,{'recursive':!![]}),_0x243979;}function startupSessionCleanup(){const _0x286a3d=_0x4a533d;try{const _0x58040b=ensureSessionDirectory(),_0x4aa271=fs[_0x286a3d(0x128)](_0x58040b);let _0x4b9397=0x0;for(const _0x2c352a of _0x4aa271){if(_0x2c352a===_0x286a3d(0x1e0))continue;const _0x84e69d=path[_0x286a3d(0x1a3)](_0x58040b,_0x2c352a);try{const _0x3afb7f=fs[_0x286a3d(0x1c0)](_0x84e69d);_0x3afb7f[_0x286a3d(0x126)]()?fs['rmSync'](_0x84e69d,{'recursive':!![],'force':!![]}):fs[_0x286a3d(0x1a0)](_0x84e69d),_0x4b9397++;}catch{}}_0x4b9397>0x0?printLog(_0x286a3d(0x135),_0x286a3d(0x1c4)+_0x4b9397+'\x20stale\x20session\x20files\x20to\x20prevent\x20Bad\x20MAC.'):printLog(_0x286a3d(0x1b1),_0x286a3d(0x239));}catch(_0x506531){printLog(_0x286a3d(0xfa),_0x286a3d(0xe8)+_0x506531[_0x286a3d(0x23e)]);}}function hasValidSession(){const _0x412e01=_0x4a533d;try{const _0x15a20d=path[_0x412e01(0x1a3)](__dirname,_0x412e01(0x119),_0x412e01(0x1e0));if(!existsSync(_0x15a20d))return![];const _0x1940be=fs['readFileSync'](_0x15a20d,_0x412e01(0x1b6));if(!_0x1940be||_0x1940be[_0x412e01(0x1da)]()['length']===0x0)return printLog(_0x412e01(0x135),_0x412e01(0x115)),![];try{const _0x235c09=JSON[_0x412e01(0x114)](_0x1940be);if(!_0x235c09[_0x412e01(0x228)]||!_0x235c09['signedIdentityKey']||!_0x235c09[_0x412e01(0x183)])return printLog('warning',_0x412e01(0x168)),![];if(_0x235c09['me']&&_0x235c09['me']['id'])return printLog(_0x412e01(0x18d),_0x412e01(0xf3)+_0x235c09['me']['id']+_0x412e01(0x238)+_0x235c09[_0x412e01(0x1fd)]+')'),!![];if(_0x235c09['registered']===![])return printLog('warning',_0x412e01(0x190)),![];return printLog(_0x412e01(0x18d),_0x412e01(0x13f)),!![];}catch(_0x1008e0){return printLog(_0x412e01(0x135),'creds.json\x20contains\x20invalid\x20JSON'),![];}}catch(_0x52876f){return printLog(_0x412e01(0xfa),'Error\x20checking\x20session\x20validity:\x20'+_0x52876f['message']),![];}}async function initializeSession(){const _0x82a868=_0x4a533d;ensureSessionDirectory();const _0x13fbfa=global[_0x82a868(0x14b)]||process.env.SESSION_ID;if(!_0x13fbfa){printLog('warning',_0x82a868(0x12d));if(hasValidSession())return printLog(_0x82a868(0x18d),_0x82a868(0xfd)),!![];return printLog('warning',_0x82a868(0x107)),![];}const _0x201f4f=String(process.env.REFRESH_SESSION_ON_START||'')['toLowerCase']()===_0x82a868(0x205);if(!_0x201f4f&&hasValidSession())return printLog(_0x82a868(0x18d),_0x82a868(0x1c8)),!![];try{return printLog(_0x82a868(0x1b1),_0x82a868(0x225)+(_0x201f4f?_0x82a868(0x191):_0x82a868(0x149))+_0x82a868(0x1f5)),await SaveCreds(_0x13fbfa),await delay(0x5dc),hasValidSession()?(printLog(_0x82a868(0x18d),'Session\x20refreshed\x20and\x20verified'),await delay(0x1f4),!![]):(printLog(_0x82a868(0xfa),_0x82a868(0x11c)),![]);}catch(_0x73e80f){printLog('error',_0x82a868(0x20b)+_0x73e80f[_0x82a868(0x23e)]);if(hasValidSession())return printLog('warning',_0x82a868(0x220)),!![];return![];}}async function runBadMacRecovery(_0x4f90f5='bad-mac-detected'){const _0x2670bd=_0x4a533d;if(badMacRecoveryInProgress){printLog(_0x2670bd(0x135),'[AUTO-REPAIR]\x20Bad\x20MAC\x20recovery\x20already\x20in\x20progress\x20('+_0x4f90f5+')');return;}badMacRecoveryInProgress=!![],authAutoRepairAttempted=!![],printLog(_0x2670bd(0x135),_0x2670bd(0x108)+_0x4f90f5+')...');try{socketGeneration+=0x1;reconnectTimer&&(clearTimeout(reconnectTimer),reconnectTimer=null);try{activeSocket?.['ws']?.[_0x2670bd(0x12a)]===0x1&&activeSocket['ws'][_0x2670bd(0x111)]();}catch{}clearBotIntervals(),botStartInProgress=![],activeSocket=null;}catch{}try{typeof resetSQLiteAuthState==='function'&&resetSQLiteAuthState(_0x2670bd(0x1eb));}catch(_0x59ef95){printLog(_0x2670bd(0xfa),_0x2670bd(0x10c)+_0x59ef95[_0x2670bd(0x23e)]);}try{rmSync(_0x2670bd(0x213),{'recursive':!![],'force':!![]}),ensureSessionDirectory();}catch(_0x17d247){printLog('error',_0x2670bd(0x163)+_0x17d247[_0x2670bd(0x23e)]);}try{await initializeSession();}catch(_0x322716){printLog('error','Session\x20refresh\x20during\x20Bad\x20MAC\x20recovery\x20failed:\x20'+_0x322716[_0x2670bd(0x23e)]);}scheduleReconnect(_0x2670bd(0x1eb),0x3e8),badMacRecoveryCount+=0x1,lastBadMacRecoveryCompletedAt=Date[_0x2670bd(0x1ce)](),setTimeout(()=>{badMacRecoveryInProgress=![];},0x3a98);}triggerBadMacRecovery=(_0x3cc4d9=_0x4a533d(0x143))=>{runBadMacRecovery(_0x3cc4d9)['catch'](_0x565b95=>{const _0x335a34=_0x2ee0;printLog('error',_0x335a34(0x141)+_0x565b95[_0x335a34(0x23e)]),badMacRecoveryInProgress=![];});};pendingBadMacRecovery&&(pendingBadMacRecovery=![],triggerBadMacRecovery(_0x4a533d(0x19e)));!server['listening']&&server[_0x4a533d(0x22d)](PORT,()=>{const _0x3a56bd=_0x4a533d;printLog(_0x3a56bd(0x18d),'Server\x20listening\x20on\x20port\x20'+PORT);});async function startBot(){const _0xa98f13=_0x4a533d;if(botStartInProgress)return activeSocket;const _0x361323=activeSocket?.['ws']?.[_0xa98f13(0x12a)];if(_0x361323===0x0||_0x361323===0x1)return printLog('connection',_0xa98f13(0x1ab)+_0x361323+')'),activeSocket;botStartInProgress=!![];try{clearBotIntervals();let {version:_0x2b3cf3}=await fetchLatestBaileysVersion();ensureSessionDirectory(),await delay(0x3e8);const _0x556608=String(process.env.AUTH_STATE_BACKEND||_0xa98f13(0xfc))[_0xa98f13(0x117)]();let _0x4fcb8b;if(_0x556608===_0xa98f13(0x16f))_0x4fcb8b=await useMultiFileAuthState(_0xa98f13(0x213)),printLog(_0xa98f13(0x153),_0xa98f13(0x151));else try{_0x4fcb8b=await useSQLiteAuthState(),printLog(_0xa98f13(0x153),_0xa98f13(0x1bc));}catch(_0x15c9a4){printLog(_0xa98f13(0x135),_0xa98f13(0x113)+_0x15c9a4['message']+'),\x20falling\x20back\x20to\x20file\x20auth\x20state'),_0x4fcb8b=await useMultiFileAuthState(_0xa98f13(0x213));}const {state:_0xe446c8,saveCreds:_0x26bde4}=_0x4fcb8b,_0x41fb10=createDBRouter(store,{'normalizeJid':jidNormalizedUser}),_0x12e138=new NodeCache({'stdTTL':0xa,'checkperiod':0x5});printLog(_0xa98f13(0x1b1),_0xa98f13(0xf0)+(_0xe446c8[_0xa98f13(0x1a2)]?.[_0xa98f13(0x1fd)]||![]));const _0x30a852=String(process.env.STATUS_VIEWER_ONLY||'')[_0xa98f13(0x117)]()===_0xa98f13(0x205);_0x30a852&&printLog(_0xa98f13(0x135),'STATUS_VIEWER_ONLY=true\x20-\x20normal\x20incoming\x20messages\x20will\x20be\x20ignored.\x20Set\x20it\x20to\x20false\x20for\x20command\x20replies.');const _0xdac80f=await store[_0xa98f13(0x1b0)]('global',_0xa98f13(0x11e)),_0x5a2b9c=_0xdac80f&&_0xdac80f[_0xa98f13(0x123)];_0x5a2b9c&&printLog(_0xa98f13(0x1b1),_0xa98f13(0x104));const _0x46af80=makeWASocket({'version':_0x2b3cf3,'logger':pino({'level':_0xa98f13(0x101)},nullStream),'printQRInTerminal':!pairingCode,'browser':Browsers[_0xa98f13(0x19a)](_0xa98f13(0x122)),'auth':{'creds':_0xe446c8[_0xa98f13(0x1a2)],'keys':makeCacheableSignalKeyStore(_0xe446c8[_0xa98f13(0x10e)],pino({'level':'silent'},nullStream))},'markOnlineOnConnect':![],'generateHighQualityLinkPreview':![],'syncFullHistory':![],'shouldSyncHistoryMessage':()=>![],'retryRequestDelayMs':0x7d0,'fireInitQueries':![],'getMessage':async _0x2297ad=>_0x41fb10[_0xa98f13(0x125)](_0x2297ad),'msgRetryCounterCache':_0x12e138,'defaultQueryTimeoutMs':0x7530,'connectTimeoutMs':0xea60,'keepAliveIntervalMs':0x3a98});global['botInstance']=_0x46af80,activeSocket=_0x46af80;const _0x2050c2=++socketGeneration,_0x134100=()=>_0x2050c2!==socketGeneration||activeSocket!==_0x46af80,_0x286dbf=_0x46af80[_0xa98f13(0xed)],_0x352ed7=_0x46af80['readMessages'],_0x3e37fc=_0x46af80['sendReceipt'],_0x65ec15=_0x46af80[_0xa98f13(0x11b)];_0x46af80['sendPresenceUpdate']=async function(..._0xa2524e){const _0x73a8c8=_0xa98f13,[_0x470282,_0x52fd58]=_0xa2524e,_0xe7086b=await store[_0x73a8c8(0x1b0)](_0x73a8c8(0x17b),_0x73a8c8(0x11e));if(_0xe7086b&&_0xe7086b[_0x73a8c8(0x123)]){printLog(_0x73a8c8(0x1b1),'👻\x20Blocked\x20presence\x20update\x20(stealth\x20mode)');return;}const _0xc1b2b9=await isAlwaysOnlineEnabled();if(_0xc1b2b9&&!_0x52fd58){const _0x581702=String(_0x470282||'')[_0x73a8c8(0x117)]();if(_0x581702==='paused'||_0x581702===_0x73a8c8(0x12c))return;}else{if(!_0xc1b2b9&&!_0x52fd58){const _0x371c10=String(_0x470282||'')[_0x73a8c8(0x117)]();if(_0x371c10===_0x73a8c8(0x19f))return _0x286dbf[_0x73a8c8(0x136)](this,_0x73a8c8(0x12c));}}return _0x286dbf[_0x73a8c8(0x166)](this,_0xa2524e);},_0x46af80['readMessages']=async function(..._0x3c2955){const _0x48a834=_0xa98f13,_0x4bf46e=await store[_0x48a834(0x1b0)](_0x48a834(0x17b),_0x48a834(0x11e));if(_0x4bf46e&&_0x4bf46e[_0x48a834(0x123)])return;return _0x352ed7[_0x48a834(0x166)](this,_0x3c2955);};_0x3e37fc&&(_0x46af80[_0xa98f13(0x1ed)]=async function(..._0x207062){const _0x59ecf6=_0xa98f13,_0x2bfbae=await store[_0x59ecf6(0x1b0)](_0x59ecf6(0x17b),_0x59ecf6(0x11e));if(_0x2bfbae&&_0x2bfbae['enabled'])return;return _0x3e37fc[_0x59ecf6(0x166)](this,_0x207062);});_0x65ec15&&(_0x46af80['sendReadReceipt']=async function(..._0x62ca0){const _0x46bf7f=_0xa98f13,_0x4f91c4=await store[_0x46bf7f(0x1b0)](_0x46bf7f(0x17b),'stealthMode');if(_0x4f91c4&&_0x4f91c4['enabled'])return;return _0x65ec15[_0x46bf7f(0x166)](this,_0x62ca0);});const _0x5ce1d1=_0x46af80['query'];_0x46af80[_0xa98f13(0x218)]=async function(_0x210ffe,..._0x3aab6d){const _0x25e56c=_0xa98f13,_0xa61c2=await store[_0x25e56c(0x1b0)](_0x25e56c(0x17b),_0x25e56c(0x11e));if(_0xa61c2&&_0xa61c2['enabled']){if(_0x210ffe&&_0x210ffe[_0x25e56c(0x1b8)]===_0x25e56c(0x13e))return;if(_0x210ffe&&_0x210ffe[_0x25e56c(0x1db)]&&(_0x210ffe[_0x25e56c(0x1db)][_0x25e56c(0x15d)]===_0x25e56c(0x15f)||_0x210ffe[_0x25e56c(0x1db)]['type']==='read-self'))return;}return _0x5ce1d1[_0x25e56c(0x166)](this,[_0x210ffe,..._0x3aab6d]);},_0x46af80[_0xa98f13(0x1d9)]=async()=>{const _0xca3cc7=_0xa98f13,_0xffba0d=await store[_0xca3cc7(0x1b0)](_0xca3cc7(0x17b),_0xca3cc7(0x11e));return _0xffba0d&&_0xffba0d[_0xca3cc7(0x123)];},_0x46af80['ev']['on']('creds.update',_0x26bde4),store[_0xa98f13(0x23c)](_0x46af80['ev']);try{const {initAutoReact:_0x4c6092}=require(_0xa98f13(0x20e));typeof _0x4c6092===_0xa98f13(0x1cc)&&_0x4c6092(_0x46af80);}catch(_0x4e0b9c){printLog(_0xa98f13(0x135),_0xa98f13(0x19d)+_0x4e0b9c[_0xa98f13(0x23e)]);}_0x46af80['ev']['on'](_0xa98f13(0x209),async _0x53a814=>{const _0x3b8eae=_0xa98f13;if(_0x134100())return;try{const _0x238843=_0x30a852,_0xdea207=_0x53a814?.[_0x3b8eae(0x15d)];if(_0xdea207!==_0x3b8eae(0x1ff)&&_0xdea207!==_0x3b8eae(0xec))return;const _0x38025c=Array['isArray'](_0x53a814?.['messages'])?_0x53a814['messages']:[];if(_0x38025c['length']===0x0)return;_0x46af80?.['msgRetryCounterCache']&&_0x46af80[_0x3b8eae(0x211)][_0x3b8eae(0x1a9)]();for(const _0x5c4d81 of _0x38025c){if(_0x134100())return;if(!_0x5c4d81?.[_0x3b8eae(0x23e)])continue;_0x5c4d81[_0x3b8eae(0x23e)]=Object['keys'](_0x5c4d81[_0x3b8eae(0x23e)])[0x0]==='ephemeralMessage'?_0x5c4d81['message'][_0x3b8eae(0x102)][_0x3b8eae(0x23e)]:_0x5c4d81[_0x3b8eae(0x23e)];if(_0x5c4d81[_0x3b8eae(0x124)]&&_0x5c4d81[_0x3b8eae(0x124)][_0x3b8eae(0x236)]===_0x3b8eae(0x217)){handleStatus(_0x46af80,{'type':_0xdea207,'messages':[_0x5c4d81]})['catch'](_0x4887b4=>printLog(_0x3b8eae(0xfa),_0x3b8eae(0x1cb)+_0x4887b4[_0x3b8eae(0x23e)]));continue;}if(_0x238843)continue;const _0x190fd3=_0x5c4d81['key']?.['id']||'';if(_0x5c4d81[_0x3b8eae(0x124)]?.[_0x3b8eae(0x20c)]&&_0x190fd3[_0x3b8eae(0xf2)](_0x3b8eae(0x1be))&&_0x190fd3[_0x3b8eae(0x1a5)]===0x10)continue;const _0x581bc3=await store[_0x3b8eae(0x18b)](),_0x4b9b9a=_0x5c4d81['key']?.[_0x3b8eae(0x236)]?.[_0x3b8eae(0x1f4)](_0x3b8eae(0x1f6)),_0x7dc925=_0x5c4d81[_0x3b8eae(0x124)]?.[_0x3b8eae(0x11d)]||_0x5c4d81[_0x3b8eae(0x124)]?.[_0x3b8eae(0x236)],_0x4736de=require(_0x3b8eae(0x206)),_0x396cd2=_0x5c4d81[_0x3b8eae(0x124)]?.[_0x3b8eae(0x20c)]||typeof _0x4736de===_0x3b8eae(0x1cc)&&await _0x4736de(_0x7dc925,_0x46af80,_0x5c4d81[_0x3b8eae(0x124)]?.[_0x3b8eae(0x236)]);if(!_0x396cd2){if(_0x581bc3==='private'||_0x581bc3===_0x3b8eae(0x11f))continue;if(_0x581bc3===_0x3b8eae(0x187)&&!_0x4b9b9a)continue;if(_0x581bc3===_0x3b8eae(0x16a)&&_0x4b9b9a)continue;}try{await handleMessages(_0x46af80,{'type':_0xdea207,'messages':[_0x5c4d81]});}catch(_0x3dfdb6){printLog(_0x3b8eae(0xfa),_0x3b8eae(0x165)+_0x3dfdb6[_0x3b8eae(0x23e)]),_0x5c4d81[_0x3b8eae(0x124)]&&_0x5c4d81['key'][_0x3b8eae(0x236)]&&await _0x46af80['sendMessage'](_0x5c4d81[_0x3b8eae(0x124)][_0x3b8eae(0x236)],{'text':_0x3b8eae(0x16d),'contextInfo':{'forwardingScore':0x1,'isForwarded':!![],'forwardedNewsletterMessageInfo':{'newsletterJid':settings[_0x3b8eae(0xea)]||_0x3b8eae(0x214),'newsletterName':settings[_0x3b8eae(0x1d2)]||_0x3b8eae(0x112),'serverMessageId':-0x1}}})[_0x3b8eae(0x1f0)](console[_0x3b8eae(0xfa)]);}}}catch(_0x3a0d7b){printLog(_0x3b8eae(0xfa),_0x3b8eae(0x13b)+_0x3a0d7b[_0x3b8eae(0x23e)]);}}),_0x46af80[_0xa98f13(0x133)]=_0x16ca21=>{const _0x2d923f=_0xa98f13;if(!_0x16ca21)return _0x16ca21;if(/:\d+@/gi[_0x2d923f(0x22f)](_0x16ca21)){let _0x226bf1=jidDecode(_0x16ca21)||{};return _0x226bf1[_0x2d923f(0x1c5)]&&_0x226bf1[_0x2d923f(0x12f)]&&_0x226bf1['user']+'@'+_0x226bf1['server']||_0x16ca21;}else return _0x16ca21;},_0x46af80['ev']['on']('contacts.update',_0x3e0328=>{const _0x8dda45=_0xa98f13;if(_0x134100())return;for(let _0x1b4b41 of _0x3e0328){let _0x392cd3=_0x46af80[_0x8dda45(0x133)](_0x1b4b41['id']);if(store&&store[_0x8dda45(0x179)])store[_0x8dda45(0x179)][_0x392cd3]={'id':_0x392cd3,'name':_0x1b4b41['notify']};}}),_0x46af80['getName']=(_0x3fa7a8,_0x4d7eef=![])=>{const _0x13ac7d=_0xa98f13;id=_0x46af80[_0x13ac7d(0x133)](_0x3fa7a8),_0x4d7eef=_0x46af80[_0x13ac7d(0x185)]||_0x4d7eef;let _0x20ec7d;if(id[_0x13ac7d(0x1f4)](_0x13ac7d(0x1f6)))return new Promise(async _0x2dd60f=>{const _0x17e02a=_0x13ac7d;_0x20ec7d=store[_0x17e02a(0x179)][id]||{};if(!(_0x20ec7d[_0x17e02a(0x1e3)]||_0x20ec7d[_0x17e02a(0x224)]))_0x20ec7d=_0x46af80[_0x17e02a(0x201)](id)||{};_0x2dd60f(_0x20ec7d[_0x17e02a(0x1e3)]||_0x20ec7d[_0x17e02a(0x224)]||PhoneNumber('+'+id['replace'](_0x17e02a(0x1b9),''))[_0x17e02a(0x234)](_0x17e02a(0x23a)));});else _0x20ec7d=id===_0x13ac7d(0x229)?{'id':id,'name':_0x13ac7d(0x221)}:id===_0x46af80[_0x13ac7d(0x133)](_0x46af80[_0x13ac7d(0x1c5)]['id'])?_0x46af80['user']:store['contacts'][id]||{};return(_0x4d7eef?'':_0x20ec7d[_0x13ac7d(0x1e3)])||_0x20ec7d['subject']||_0x20ec7d['verifiedName']||PhoneNumber('+'+_0x3fa7a8[_0x13ac7d(0x162)](_0x13ac7d(0x1b9),''))['getNumber'](_0x13ac7d(0x23a));},_0x46af80[_0xa98f13(0x105)]=!![],_0x46af80['serializeM']=_0x219d40=>smsg(_0x46af80,_0x219d40,store);const _0x39ab97=_0xe446c8[_0xa98f13(0x1a2)]?.[_0xa98f13(0x1fd)]===!![],_0x14e403=_0xe446c8[_0xa98f13(0x1a2)]?.['me']?.['id']?!![]:![];if(_0x14e403)printLog(_0xa98f13(0x1b1),'Session\x20has\x20me.id:\x20'+_0xe446c8[_0xa98f13(0x1a2)]['me']['id']+_0xa98f13(0x238)+_0x39ab97+_0xa98f13(0x177)),rl&&!rl[_0xa98f13(0xe9)]&&(rl[_0xa98f13(0x111)](),rl=null);else{if(pairingCode){if(useMobile)throw new Error(_0xa98f13(0x1aa));printLog(_0xa98f13(0x135),_0xa98f13(0x196));let _0xfbeee4;if(!!global['phoneNumber'])_0xfbeee4=global['phoneNumber'];else{if(process.env.PAIRING_NUMBER)_0xfbeee4=process.env.PAIRING_NUMBER,printLog(_0xa98f13(0x1b1),'Using\x20phone\x20number\x20from\x20environment:\x20'+_0xfbeee4);else rl&&!rl[_0xa98f13(0xe9)]?_0xfbeee4=await question(chalk[_0xa98f13(0x1bd)](chalk[_0xa98f13(0xf7)](_0xa98f13(0x1b7)))):(_0xfbeee4=phoneNumber,printLog(_0xa98f13(0x1b1),_0xa98f13(0x155)+_0xfbeee4));}_0xfbeee4=_0xfbeee4['replace'](/[^0-9]/g,'');const _0xad0a38=require(_0xa98f13(0x208));!_0xad0a38('+'+_0xfbeee4)[_0xa98f13(0x23b)]()&&(printLog(_0xa98f13(0xfa),_0xa98f13(0x14a)),rl&&!rl['closed']&&rl['close'](),process[_0xa98f13(0x167)](0x1)),setTimeout(async()=>{const _0x5d6aef=_0xa98f13;try{let _0x528199=await _0x46af80[_0x5d6aef(0x16b)](_0xfbeee4);_0x528199=_0x528199?.['match'](/.{1,4}/g)?.[_0x5d6aef(0x1a3)]('-')||_0x528199,console['log'](chalk[_0x5d6aef(0xf6)](chalk[_0x5d6aef(0x13d)](_0x5d6aef(0x147))),chalk[_0x5d6aef(0xf6)](chalk['white'](_0x528199))),printLog(_0x5d6aef(0x18d),'Pairing\x20code\x20generated:\x20'+_0x528199),rl&&!rl[_0x5d6aef(0xe9)]&&(rl[_0x5d6aef(0x111)](),rl=null);}catch(_0x1cd95d){printLog(_0x5d6aef(0xfa),_0x5d6aef(0x180)+_0x1cd95d['message']);}},0xbb8);}else printLog('warning','Waiting\x20for\x20connection\x20to\x20establish...'),rl&&!rl['closed']&&(rl[_0xa98f13(0x111)](),rl=null);}_0x46af80['ev']['on'](_0xa98f13(0x110),async _0x437a4d=>{const _0x6117e0=_0xa98f13;if(_0x134100())return;const {connection:_0x24051b,lastDisconnect:_0x8e0267,qr:_0x4505be}=_0x437a4d;_0x4505be&&printLog(_0x6117e0(0x1b1),'QR\x20Code\x20generated.\x20Please\x20scan\x20with\x20WhatsApp');_0x24051b===_0x6117e0(0xf5)&&printLog(_0x6117e0(0x148),'Connecting\x20to\x20WhatsApp...');if(_0x24051b===_0x6117e0(0x1e8)){reconnectAttempts=0x0,authAutoRepairAttempted=![],badMacRecoveryInProgress=![],botStartInProgress=![];reconnectTimer&&(clearTimeout(reconnectTimer),reconnectTimer=null);global['botConnectedTime']=Date['now'](),printLog('success',_0x6117e0(0x18c));const {startAutoBio:_0x4b7e21}=require('./plugins/a-setbio');_0x4b7e21(_0x46af80);const _0xa12088=await store[_0x6117e0(0x1b0)](_0x6117e0(0x17b),_0x6117e0(0x11e));_0xa12088&&_0xa12088[_0x6117e0(0x123)]&&(printLog(_0x6117e0(0x1b1),'👻\x20STEALTH\x20MODE\x20ACTIVE\x20-\x20Bot\x20is\x20in\x20stealth\x20mode'),console[_0x6117e0(0x1c3)](chalk[_0x6117e0(0x19c)]('•\x20No\x20online\x20status')),console['log'](chalk[_0x6117e0(0x19c)](_0x6117e0(0x1a7))));const _0x3f0801=await getPresenceConfig();if(_0x3f0801[_0x6117e0(0x1d1)]&&!(_0xa12088&&_0xa12088[_0x6117e0(0x123)])){try{await _0x286dbf[_0x6117e0(0x136)](_0x46af80,_0x6117e0(0x19f));}catch(_0x447844){printLog(_0x6117e0(0x135),'Failed\x20to\x20set\x20initial\x20always-online\x20presence:\x20'+_0x447844['message']);}registerBotInterval(setInterval(async()=>{const _0x1dd7d5=_0x6117e0;try{const _0x2344bd=await store[_0x1dd7d5(0x1b0)](_0x1dd7d5(0x17b),_0x1dd7d5(0x11e));if(_0x2344bd&&_0x2344bd[_0x1dd7d5(0x123)])return;const _0x337ad0=await getPresenceConfig();if(!_0x337ad0[_0x1dd7d5(0x1d1)])return;await _0x286dbf[_0x1dd7d5(0x136)](_0x46af80,_0x1dd7d5(0x19f));}catch{}},0x2d*0x3e8)),printLog(_0x6117e0(0x139),_0x6117e0(0x1dc));}else{if(!_0xa12088||!_0xa12088[_0x6117e0(0x123)])try{await _0x286dbf[_0x6117e0(0x136)](_0x46af80,_0x6117e0(0x12c));}catch(_0x384954){}}try{const _0x559492=_0x46af80[_0x6117e0(0x1c5)]['id'][_0x6117e0(0x174)](':')[0x0]+_0x6117e0(0x1b9),_0x2e3efa=_0xa12088&&_0xa12088[_0x6117e0(0x123)]?_0x6117e0(0x1e4):'';await _0x46af80['sendMessage'](_0x559492,{'text':_0x6117e0(0x1e1)+new Date()[_0x6117e0(0x1bb)]()+'\x0a✅\x20Status:\x20Online\x20and\x20Ready!'+_0x2e3efa+'\x0a\x0a✅Make\x20sure\x20to\x20join\x20below\x20channel','contextInfo':{'forwardingScore':0x1,'isForwarded':!![],'forwardedNewsletterMessageInfo':{'newsletterJid':_0x6117e0(0x214),'newsletterName':_0x6117e0(0x112),'serverMessageId':-0x1}}});try{if(Array[_0x6117e0(0x20d)](owner)&&owner[_0x6117e0(0x1a5)]){const _0x3460b5=owner[0x0],_0x2c18a6=_0x3460b5['includes']('@')?_0x3460b5:_0x3460b5+_0x6117e0(0x1b9);global[_0x6117e0(0x1d7)]={'pending':!![],'ownerJids':[_0x2c18a6],'startedAt':Date[_0x6117e0(0x1ce)](),'expiresAt':Date['now']()+0xa*0x3c*0x3e8},await _0x46af80['sendMessage'](_0x2c18a6,{'text':_0x6117e0(0x140)}),printLog('info',_0x6117e0(0x137)+_0x2c18a6[_0x6117e0(0x174)]('@')[0x0]);}}catch(_0x2129c4){printLog('error','Startup\x20debug\x20send\x20failed:\x20'+_0x2129c4[_0x6117e0(0x23e)]);}}catch(_0x45eb89){printLog('error',_0x6117e0(0x203)+_0x45eb89[_0x6117e0(0x23e)]);}return;}if(_0x24051b===_0x6117e0(0x111)){const _0x299ed6=_0x8e0267?.['error']?.[_0x6117e0(0x146)]?.[_0x6117e0(0x132)],_0x2b5d7e=_0x8e0267?.['error']?.['message']||'Unknown\x20Error',_0x416379=_0x299ed6||_0x6117e0(0x1e7),_0x4309a5=String(_0x2b5d7e)['toLowerCase']();activeSocket=null,clearBotIntervals(),botStartInProgress=![],printLog(_0x6117e0(0xfa),_0x6117e0(0x159)+_0x416379+'\x20('+_0x2b5d7e+')');if(_0x299ed6===DisconnectReason[_0x6117e0(0x216)]||_0x299ed6===0x191){try{rmSync('./session',{'recursive':!![],'force':!![]}),printLog('warning',_0x6117e0(0xef));}catch(_0x1efc55){printLog(_0x6117e0(0xfa),'Error\x20deleting\x20session:\x20'+_0x1efc55['message']);}return;}const _0x46cd8e=_0x4309a5[_0x6117e0(0x11a)](_0x6117e0(0x1e2))||_0x4309a5['includes'](_0x6117e0(0x200))&&_0x4309a5[_0x6117e0(0x11a)](_0x6117e0(0x222))||_0x4309a5[_0x6117e0(0x11a)]('bad\x20mac')||_0x4309a5[_0x6117e0(0x11a)]('invalid\x20key');if(_0x46cd8e&&!authAutoRepairAttempted){requestBadMacRecovery(_0x6117e0(0x1e5));return;}if(_0x299ed6===0x1b8){console[_0x6117e0(0x1c3)](chalk[_0x6117e0(0x1c9)]['redBright'](_0x6117e0(0x212))),console[_0x6117e0(0x1c3)](chalk[_0x6117e0(0x1ea)](_0x6117e0(0x197))),console[_0x6117e0(0x1c3)](chalk['red']('\x20\x20\x20Please\x20stop\x20other\x20running\x20bots\x20(Local,\x20Koyeb,\x20etc).')),scheduleReconnect(_0x6117e0(0x10d),0x7530);return;}scheduleReconnect('connection-close-'+_0x416379);}}),_0x46af80['ev']['on'](_0xa98f13(0x136),async _0x1a9c10=>{if(_0x134100())return;await handleCall(_0x46af80,_0x1a9c10);}),_0x46af80['ev']['on'](_0xa98f13(0x1e6),async _0x818967=>{if(_0x134100())return;await handleGroupParticipantUpdate(_0x46af80,_0x818967);}),_0x46af80['ev']['on']('status.update',async _0x27367b=>{if(_0x134100())return;await handleStatus(_0x46af80,_0x27367b);}),_0x46af80['ev']['on']('messages.reaction',async _0x29200a=>{if(_0x134100())return;await handleStatus(_0x46af80,_0x29200a);});let _0x5e5bb1=Date[_0xa98f13(0x1ce)]();const _0x1d723a=0x5*0x3c*0x3e8;_0x46af80['ev']['on'](_0xa98f13(0x209),()=>{const _0x478ae9=_0xa98f13;if(_0x134100())return;_0x5e5bb1=Date[_0x478ae9(0x1ce)]();}),_0x46af80['ev']['on'](_0xa98f13(0x1a8),()=>{if(_0x134100())return;_0x5e5bb1=Date['now']();});const _0x258e58=registerBotInterval(setInterval(async()=>{const _0x50adf8=_0xa98f13;try{const _0xd50d4f=_0x46af80?.['ws']?.[_0x50adf8(0x12a)],_0x23563f=_0x46af80?.[_0x50adf8(0x1c5)]!==undefined;if(!_0x23563f||_0xd50d4f!==0x1){console[_0x50adf8(0x1c3)](_0x50adf8(0xfe)+_0xd50d4f+')');try{await isAlwaysOnlineEnabled()&&await _0x46af80['sendPresenceUpdate'](_0x50adf8(0x19f));}catch(_0x60f0e){}}}catch(_0x8c635d){}},_0x1d723a)),_0x31b6fc=registerBotInterval(setInterval(()=>{const _0x317f5b=_0xa98f13;printLog(_0x317f5b(0x1b1),'🔄\x20Scheduled\x206-hour\x20restart\x20to\x20maintain\x20stability...'),clearInterval(_0x258e58),clearInterval(_0x31b6fc),process['exit'](0x0);},0x6*0x3c*0x3c*0x3e8)),_0x35b92e=registerBotInterval(setInterval(()=>{const _0x531424=_0xa98f13;if(global['gc']){global['gc']();const _0x17d17c=(process[_0x531424(0xf9)]()['rss']/0x400/0x400)['toFixed'](0x2);console['log'](_0x531424(0x210)+_0x17d17c+'MB)');}},0x1e*0x3c*0x3e8));return _0x46af80;}catch(_0x3aeb56){printLog(_0xa98f13(0xfa),'Error\x20in\x20startBot:\x20'+_0x3aeb56[_0xa98f13(0x23e)]),activeSocket=null,botStartInProgress=![],rl&&!rl['closed']&&(rl[_0xa98f13(0x111)](),rl=null),scheduleReconnect(_0xa98f13(0x164));}}async function main(){const _0x37d674=_0x4a533d;printLog(_0x37d674(0x1b1),_0x37d674(0x178)),startupSessionCleanup(),await bootstrapStoreSchemaAndFallbacks();typeof commandHandler[_0x37d674(0x21d)]===_0x37d674(0x1cc)&&await commandHandler[_0x37d674(0x21d)]();try{const {applyStartupAutoStatusPolicy:_0x114c07}=require(_0x37d674(0x1ae));await _0x114c07();}catch(_0x1403c2){printLog(_0x37d674(0xfa),_0x37d674(0x1fa)+_0x1403c2[_0x37d674(0x23e)]);}const _0x1ac6fc=await initializeSession();_0x1ac6fc?printLog('success','Session\x20initialization\x20complete.\x20Starting\x20bot...'):printLog(_0x37d674(0x135),_0x37d674(0x21e)),await delay(0xbb8),startBot()[_0x37d674(0x1f0)](_0x1b89b7=>{const _0x25433e=_0x37d674;printLog(_0x25433e(0xfa),_0x25433e(0x17d)+_0x1b89b7[_0x25433e(0x23e)]),rl&&!rl['closed']&&rl['close'](),process[_0x25433e(0x167)](0x1);});}main();const customTemp=path[_0x4a533d(0x1a3)](process[_0x4a533d(0x10f)](),_0x4a533d(0x17c));if(!fs[_0x4a533d(0x1d3)](customTemp))fs[_0x4a533d(0x175)](customTemp,{'recursive':!![]});process.env.TMPDIR=customTemp,process.env.TEMP=customTemp,process.env.TMP=customTemp,setInterval(()=>{const _0x140936=_0x4a533d;fs[_0x140936(0x1c2)](customTemp,(_0x2626d1,_0x18f641)=>{const _0x2efdd8=_0x140936;if(_0x2626d1)return;for(const _0x420d2d of _0x18f641){const _0x43071a=path[_0x2efdd8(0x1a3)](customTemp,_0x420d2d);fs[_0x2efdd8(0x1f3)](_0x43071a,(_0x5b36db,_0x5f20c9)=>{const _0x567718=_0x2efdd8;!_0x5b36db&&Date[_0x567718(0x1ce)]()-_0x5f20c9[_0x567718(0x1b3)]>0x3*0x3c*0x3c*0x3e8&&fs[_0x567718(0x142)](_0x43071a,()=>{});});}});},0x1*0x3c*0x3c*0x3e8),setInterval(()=>{const _0x58fef6=_0x4a533d;try{const _0xb28416=require('os'),_0x50d7de=_0xb28416[_0x58fef6(0x106)]();if(!_0x50d7de||_0x50d7de[_0x58fef6(0x1a5)]===0x0)return;let _0xcc34b8=0x0,_0x2973a9=0x0;for(const _0x508967 of _0x50d7de){for(const _0x41fcdd in _0x508967[_0x58fef6(0x16c)]){_0x2973a9+=_0x508967[_0x58fef6(0x16c)][_0x41fcdd];}_0xcc34b8+=_0x508967[_0x58fef6(0x16c)][_0x58fef6(0x232)];}const _0x46c1e3=0x64-~~(0x64*_0xcc34b8/_0x2973a9);_0x46c1e3>0x55&&console[_0x58fef6(0xf1)](chalk[_0x58fef6(0x1de)](_0x58fef6(0x21c)+_0x46c1e3+_0x58fef6(0x171)));if(!global[_0x58fef6(0x138)])global['cpuMonitor']={'counts':[]};global[_0x58fef6(0x138)][_0x58fef6(0x103)][_0x58fef6(0x1e9)](_0x46c1e3);if(global['cpuMonitor'][_0x58fef6(0x103)]['length']>0xa)global[_0x58fef6(0x138)]['counts'][_0x58fef6(0x1fc)]();const _0x4e1a09=global[_0x58fef6(0x138)][_0x58fef6(0x103)]['reduce']((_0x530a65,_0x5d9a35)=>_0x530a65+_0x5d9a35,0x0)/global[_0x58fef6(0x138)][_0x58fef6(0x103)][_0x58fef6(0x1a5)];_0x4e1a09>0x50&&global[_0x58fef6(0x138)][_0x58fef6(0x103)][_0x58fef6(0x1a5)]===0xa&&console[_0x58fef6(0xf1)](chalk[_0x58fef6(0x1ea)](_0x58fef6(0x189)+_0x4e1a09['toFixed'](0x1)+_0x58fef6(0x14e)));}catch(_0x4fd757){}},0x2*0x3c*0x3e8);const folders=[path[_0x4a533d(0x1a3)](__dirname,_0x4a533d(0x10b)),path[_0x4a533d(0x1a3)](__dirname,'./plugins')];let totalFiles=0x0,okFiles=0x0,errorFiles=0x0;folders[_0x4a533d(0x1a1)](_0x2e0bf9=>{const _0x299c15=_0x4a533d;if(!fs[_0x299c15(0x1d3)](_0x2e0bf9))return;fs[_0x299c15(0x128)](_0x2e0bf9)[_0x299c15(0x1af)](_0x119bac=>_0x119bac[_0x299c15(0x1f4)]('.js'))[_0x299c15(0x1a1)](_0x3b9345=>{const _0x2da0e4=_0x299c15;totalFiles++;const _0x4c98ff=path['join'](_0x2e0bf9,_0x3b9345);try{const _0xaf5f68=fs[_0x2da0e4(0x1c7)](_0x4c98ff,_0x2da0e4(0x1ee)),_0x4d36ba=syntaxerror(_0xaf5f68,_0x3b9345,{'sourceType':_0x2da0e4(0x15c),'allowAwaitOutsideFunction':!![]});_0x4d36ba?(console[_0x2da0e4(0xfa)](chalk['red']('❌\x20Syntax\x20error\x20in\x20'+_0x4c98ff+':\x0a'+_0x4d36ba)),errorFiles++):okFiles++;}catch(_0x24749e){console[_0x2da0e4(0xfa)](chalk[_0x2da0e4(0x1de)](_0x2da0e4(0x194)+_0x4c98ff+':\x0a'+_0x24749e)),errorFiles++;}});}),process['on']('uncaughtException',_0x2b95fa=>{const _0x2dfc5b=_0x4a533d;printLog(_0x2dfc5b(0xfa),_0x2dfc5b(0x21f)+_0x2b95fa[_0x2dfc5b(0x23e)]),console[_0x2dfc5b(0xfa)](_0x2b95fa[_0x2dfc5b(0x1d5)]);}),process['on']('unhandledRejection',_0x2c69c5=>{const _0x393366=_0x4a533d;printLog(_0x393366(0xfa),_0x393366(0x157)+_0x2c69c5[_0x393366(0x23e)]),console[_0x393366(0xfa)](_0x2c69c5[_0x393366(0x1d5)]);}),server['on']('error',_0x1dbc37=>{const _0x4c3569=_0x4a533d;_0x1dbc37[_0x4c3569(0x1f2)]==='EADDRINUSE'?(printLog(_0x4c3569(0xfa),_0x4c3569(0x235)+PORT+_0x4c3569(0x20f)),server[_0x4c3569(0x111)]()):printLog(_0x4c3569(0xfa),_0x4c3569(0x1b4)+_0x1dbc37[_0x4c3569(0x23e)]);});let file=require[_0x4a533d(0x21a)](__filename);function _0x2ee0(_0xcc6b63,_0x59bc0e){_0xcc6b63=_0xcc6b63-0xe7;const _0x3ab9fd=_0x3ab9();let _0x2ee0de=_0x3ab9fd[_0xcc6b63];return _0x2ee0de;}fs[_0x4a533d(0x15a)](file,()=>{const _0xb1d454=_0x4a533d;fs['unwatchFile'](file),printLog(_0xb1d454(0x1b1),_0xb1d454(0xee)),delete require[_0xb1d454(0x182)][file],require(file);});
+/* process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'; */
+
+const fs = require('fs');
+const path = require('path');
+
+// Track Bad MAC events and trigger controlled session recovery.
+let lastBadMacWarning = 0;
+let lastBadMacRecoveryRequest = 0;
+let pendingBadMacRecovery = false;
+let triggerBadMacRecovery = null;
+let badMacRecoveryCount = 0;
+let lastBadMacRecoveryCompletedAt = 0;
+
+function requestBadMacRecovery(reason = 'bad-mac-detected') {
+    const now = Date.now();
+
+    const fromConnectionClose = reason === 'connection-close-corrupted-auth';
+    if (!fromConnectionClose && badMacRecoveryCount >= 1) {
+        const cooldownMs = 30 * 60 * 1000;
+        if (now - lastBadMacRecoveryCompletedAt < cooldownMs) {
+            return;
+        }
+    }
+
+    if (now - lastBadMacRecoveryRequest < 60000) return;
+    lastBadMacRecoveryRequest = now;
+
+    if (typeof triggerBadMacRecovery === 'function') {
+        triggerBadMacRecovery(reason);
+    } else {
+        pendingBadMacRecovery = true;
+    }
+}
+
+// Stream-level suppression disabled on Koyeb/container platforms to prevent log duplication
+// The console.log/error/warn overrides are sufficient for suppressing encryption logs
+// On Koyeb, stream-level overrides cause output duplication in the custom logging layer
+
+// Suppress Baileys internal session/prekey/BadMAC logs - AGGRESSIVE suppression
+const originalConsoleLog = console.log;
+const originalConsoleError = console.error;
+const originalConsoleWarn = console.warn;
+const originalConsoleInfo = console.info;
+const originalConsoleDebug = console.debug;
+
+// Keywords that should be completely suppressed (as Set for faster lookup)
+const SUPPRESS_KEYWORDS = new Set([
+    'closing session', 'sessionentry', '_chains', 'registrationid', 'pendingprekey',
+    'currentratchet', 'indexinfo', 'ephemeralkeypair', 'lastremoteephemeralkey',
+    'basekey', 'chainkey', 'chaintype', 'messagekeys', 'signal key',
+    'decrypt error', 'failed to decrypt', 'bad mac', 'session error',
+    'messagecountererror', 'decrypted message', 'curve25519', 'hkdf-sha256',
+    'prekey', 'signedprekey', 'identity key', 'ratchet', 'rootkey', 'noisekey',
+    'signedbundle', 'xmppframing', 'sending presence', 'message counter'
+]);
+
+const BAD_MAC_SIGNAL_KEYWORDS = [
+    'bad mac',
+    'failed to decrypt',
+    'decrypt error',
+    'messagecountererror',
+    'incorrect private key length',
+    'invalid key'
+];
+
+const hasBadMacSignal = (args) => {
+    for (const arg of args) {
+        if (typeof arg === 'string') {
+            const lower = arg.toLowerCase();
+            if (BAD_MAC_SIGNAL_KEYWORDS.some((keyword) => lower.includes(keyword))) {
+                return true;
+            }
+        }
+
+        if (arg && typeof arg === 'object' && typeof arg.message === 'string') {
+            const lower = arg.message.toLowerCase();
+            if (BAD_MAC_SIGNAL_KEYWORDS.some((keyword) => lower.includes(keyword))) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+};
+
+const handleBadMacSignal = (args) => {
+    if (!hasBadMacSignal(args)) return;
+
+    const hasAuthenticatedSocket = !!(activeSocket && activeSocket.user && activeSocket.user.id);
+    const wsState = activeSocket?.ws?.readyState;
+    const socketLooksHealthy = hasAuthenticatedSocket || wsState === 1;
+
+    // Ignore passive bad-mac log noise while the socket is already connected.
+    if (socketLooksHealthy) {
+        return;
+    }
+
+    const now = Date.now();
+    if (now - lastBadMacWarning > 120000) {
+        originalConsoleWarn('[AUTO-REPAIR] Bad MAC/decrypt error detected. Clearing auth state and restarting session recovery...');
+        lastBadMacWarning = now;
+    }
+
+    requestBadMacRecovery('bad-mac-log-detected');
+};
+
+const shouldSuppress = (args) => {
+    // First, check if any argument is a SessionEntry-like object or Buffer key
+    for (const arg of args) {
+        if (!arg) continue;
+
+        if (typeof arg === 'object') {
+            const name = arg.constructor?.name || '';
+
+            // Direct object type checks
+            if (name.includes('SessionEntry') || name.includes('Session') ||
+                name.includes('Ratchet') || name.includes('Signal')) {
+                return true;
+            }
+
+            // Check for session-related properties
+            if (arg._chains || arg.currentRatchet || arg.registrationId || arg.pendingPreKey ||
+                arg.ephemeralKeyPair || arg.lastRemoteEphemeralKey || arg.rootKey || arg.keyPair ||
+                arg.noiseKey || arg.signedPreKey || arg.signedIdentityKey) {
+                return true;
+            }
+
+            // Suppress large Buffers (likely encryption keys, > 20 bytes)
+            if (Buffer.isBuffer(arg) && arg.length > 20) {
+                return true;
+            }
+        }
+    }
+
+    // Check string arguments for suppression keywords
+    for (const arg of args) {
+        if (typeof arg !== 'string') continue;
+
+        const lower = arg.toLowerCase();
+
+        // Check for any suppression keyword
+        for (const keyword of SUPPRESS_KEYWORDS) {
+            if (lower.includes(keyword)) return true;
+        }
+
+        // Suppress things that look like object stringifications
+        if (lower.includes('<buffer') || lower.includes('pubkey') || lower.includes('privkey')) {
+            return true;
+        }
+    }
+
+    return false;
+};
+
+console.log = (...args) => {
+    handleBadMacSignal(args);
+    if (shouldSuppress(args)) return;
+    originalConsoleLog.apply(console, args);
+};
+
+console.error = (...args) => {
+    handleBadMacSignal(args);
+    if (shouldSuppress(args)) return;
+    originalConsoleError.apply(console, args);
+};
+
+console.warn = (...args) => {
+    handleBadMacSignal(args);
+    if (shouldSuppress(args)) return;
+    originalConsoleWarn.apply(console, args);
+};
+
+console.info = (...args) => {
+    handleBadMacSignal(args);
+    if (shouldSuppress(args)) return;
+    originalConsoleInfo.apply(console, args);
+};
+
+console.debug = (...args) => {
+    handleBadMacSignal(args);
+    if (shouldSuppress(args)) return;
+    originalConsoleDebug.apply(console, args);
+};
+
+
+require('./config');
+require('./settings');
+
+const { Writable } = require('stream');
+
+// Create a null stream that discards all output for Pino
+const nullStream = new Writable({
+    write() {} // Do nothing - discard all output
+});
+
+const { Boom } = require('@hapi/boom');
+const chalk = require('chalk');
+const FileType = require('file-type');
+const syntaxerror = require('syntax-error');
+const axios = require('axios');
+const PhoneNumber = require('awesome-phonenumber');
+const { imageToWebp, videoToWebp, writeExifImg, writeExifVid } = require('./lib/exif');
+const { smsg, isUrl, generateMessageTag, getBuffer, getSizeMedia, fetch, await, sleep, reSize } = require('./lib/myfunc');
+const {
+    default: makeWASocket,
+    useMultiFileAuthState,
+    DisconnectReason,
+    fetchLatestBaileysVersion,
+    generateForwardMessageContent,
+    prepareWAMessageMedia,
+    generateWAMessageFromContent,
+    generateMessageID,
+    downloadContentFromMessage,
+    Browsers,
+    jidDecode,
+    proto,
+    jidNormalizedUser,
+    makeCacheableSignalKeyStore,
+    delay
+} = require("@whiskeysockets/baileys");
+const NodeCache = require("node-cache");
+const pino = require("pino");
+const readline = require("readline");
+const { parsePhoneNumber } = require("libphonenumber-js");
+const { PHONENUMBER_MCC } = require('@whiskeysockets/baileys/lib/Utils/generics');
+const { rmSync, existsSync, mkdirSync } = require('fs');
+const { join } = require('path');
+
+const store = require('./lib/lightweight_store');
+const SaveCreds = require('./lib/session');
+const { useSQLiteAuthState, resetSQLiteAuthState } = require('./lib/sqliteAuthState');
+const { createDBRouter } = require('./lib/db-router');
+const { app, server, PORT } = require('./lib/server');
+const { printLog } = require('./lib/print');
+const {
+    handleMessages,
+    handleGroupParticipantUpdate,
+    handleStatus,
+    handleCall
+} = require('./lib/messageHandler');
+
+const settings = require('./settings');
+const commandHandler = require('./lib/commandHandler');
+
+let reconnectAttempts = 0;
+let reconnectTimer = null;
+let activeSocket = null;
+let botStartInProgress = false;
+let authAutoRepairAttempted = false;
+let badMacRecoveryInProgress = false;
+let socketGeneration = 0;
+const botRuntimeIntervals = new Set();
+
+function registerBotInterval(intervalId) {
+    botRuntimeIntervals.add(intervalId);
+    return intervalId;
+}
+
+function clearBotIntervals() {
+    for (const intervalId of botRuntimeIntervals) {
+        clearInterval(intervalId);
+    }
+    botRuntimeIntervals.clear();
+}
+
+function scheduleReconnect(reason = 'unknown', delayOverrideMs = null) {
+    if (reconnectTimer) {
+        printLog('connection', `Reconnect already scheduled. Latest reason: ${reason}`);
+        return;
+    }
+
+    reconnectAttempts += 1;
+    const baseDelayMs = Math.min(1000 * (2 ** (reconnectAttempts - 1)), 30000);
+    const jitterMs = Math.floor(Math.random() * 500);
+    const waitTime = typeof delayOverrideMs === 'number' ? delayOverrideMs : baseDelayMs + jitterMs;
+
+    printLog('connection', `Reconnecting in ${Math.round(waitTime / 1000)}s (attempt ${reconnectAttempts}) due to ${reason}`);
+
+    reconnectTimer = setTimeout(() => {
+        reconnectTimer = null;
+        startBot().catch((error) => {
+            printLog('error', `Reconnect attempt failed: ${error.message}`);
+        });
+    }, waitTime);
+}
+
+function normalizeToJid(value) {
+    if (!value) return '';
+    const cleaned = String(value).trim();
+    if (!cleaned) return '';
+    if (cleaned.includes('@')) return cleaned;
+    const digits = cleaned.replace(/\D/g, '');
+    return digits ? `${digits}@s.whatsapp.net` : '';
+}
+
+function csvToList(value) {
+    if (!value) return [];
+    return String(value)
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean);
+}
+
+function parseBoolean(value, fallback = false) {
+    if (value === undefined || value === null || String(value).trim() === '') return fallback;
+    return String(value).toLowerCase() === 'true';
+}
+
+async function getPresenceConfig() {
+    const envVal = process.env.ALWAYS_ONLINE || process.env.ALWAYS_ONLINE_PRESENCE;
+    if (envVal !== undefined && String(envVal).trim() !== '') {
+        return { alwaysOnline: String(envVal).toLowerCase() === 'true' };
+    }
+    const existing = await store.getSetting('global', 'presenceConfig');
+    if (existing && typeof existing.alwaysOnline === 'boolean') {
+        return { alwaysOnline: existing.alwaysOnline };
+    }
+    return { alwaysOnline: false };
+}
+
+async function isAlwaysOnlineEnabled() {
+    try {
+        const config = await getPresenceConfig();
+        return !!config.alwaysOnline;
+    } catch {
+        return false;
+    }
+}
+
+async function bootstrapStoreSchemaAndFallbacks() {
+    try {
+        const ownerFromSettings = Array.isArray(settings.ownerNumber)
+            ? settings.ownerNumber
+            : (settings.ownerNumber ? [settings.ownerNumber] : []);
+        const ownerFromFile = Array.isArray(owner) ? owner : [];
+
+        const ownerJids = [...new Set([...ownerFromSettings, ...ownerFromFile]
+            .map(normalizeToJid)
+            .filter(Boolean))];
+
+        await store.bootstrapInitialSchema({
+            ownerJids,
+            disabledPlugins: csvToList(process.env.DISABLED_PLUGINS || ''),
+            envDefaults: {
+                AUTO_STATUS_VIEW: 'true',
+                AUTO_STATUS_REACT: 'true',
+                STATUS_EMOJIS: '💙,🖤,⭐',
+                AUTOREAD: 'false',
+                AUTOTYPING: 'false',
+                ANTICALL: 'false',
+                ANTIDELETE: 'false',
+                AUTOREACT: 'false',
+                ALWAYS_ONLINE: 'false',
+                FORCE_SESSION_RESET: 'false',
+                SUDO_USERS: ''
+            }
+        });
+
+        const dbOwners = await store.getOwnerJids();
+        if (dbOwners.length > 0) {
+            printLog('store', `Owner JIDs loaded into schema: ${dbOwners.length}`);
+            if (!Array.isArray(owner) || owner.length === 0) {
+                owner = dbOwners;
+            }
+        }
+    } catch (error) {
+        printLog('error', `Schema bootstrap failed: ${error.message}`);
+    }
+}
+
+store.readFromFile();
+setInterval(() => store.writeToFile(), settings.storeWriteInterval || 10000);
+
+commandHandler.loadCommands();
+// console.log(chalk.greenBright(`✅ Loaded ${commandHandler.commands.size} Plugins`));
+
+setInterval(() => {
+    if (global.gc) {
+        global.gc();
+        console.log('🧹 Garbage collection completed');
+    }
+}, 60_000);
+
+setInterval(() => {
+    const used = process.memoryUsage().rss / 1024 / 1024;
+    if (used > 400) {
+        if (global.gc) global.gc();
+        if (store && typeof store.cleanupData === 'function') store.cleanupData();
+        console.log(chalk.yellow('⚠️ RAM high (>400MB), executed emergency GC and store cleanup'));
+    }
+}, 30_000);
+
+let phoneNumber = global.PAIRING_NUMBER || process.env.PAIRING_NUMBER || "923051391005";
+let owner = JSON.parse(fs.readFileSync('./data/owner.json'));
+
+global.botname = process.env.BOT_NAME || "PGWIZ-MD";
+global.themeemoji = "•";
+
+const pairingCode = !!phoneNumber || process.argv.includes("--pairing-code");
+const useMobile = process.argv.includes("--mobile");
+
+let rl = null;
+if (process.stdin.isTTY && !process.env.PAIRING_NUMBER) {
+    rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout
+    });
+}
+
+const question = (text) => {
+    if (rl && !rl.closed) {
+        return new Promise((resolve) => rl.question(text, resolve));
+    } else {
+        return Promise.resolve(settings.ownerNumber || phoneNumber);
+    }
+};
+
+process.on('exit', () => {
+    if (rl && !rl.closed) {
+        rl.close();
+    }
+});
+
+process.on('SIGINT', () => {
+    if (rl && !rl.closed) {
+        rl.close();
+    }
+    process.exit(0);
+});
+
+function ensureSessionDirectory() {
+    const sessionPath = path.join(__dirname, 'session');
+    if (!existsSync(sessionPath)) {
+        mkdirSync(sessionPath, { recursive: true });
+    }
+    return sessionPath;
+}
+
+function startupSessionCleanup() {
+    try {
+        const sessionPath = ensureSessionDirectory();
+        const files = fs.readdirSync(sessionPath);
+        let clearedCount = 0;
+
+        for (const file of files) {
+            if (file === 'creds.json') continue;
+
+            const fullPath = path.join(sessionPath, file);
+            try {
+                const stat = fs.lstatSync(fullPath);
+                if (stat.isDirectory()) {
+                    fs.rmSync(fullPath, { recursive: true, force: true });
+                } else {
+                    fs.unlinkSync(fullPath);
+                }
+                clearedCount++;
+            } catch {
+                // Skip files that can't be removed
+            }
+        }
+
+        if (clearedCount > 0) {
+            printLog('warning', `[AUTO-REPAIR] Startup session cleanup removed ${clearedCount} stale session files to prevent Bad MAC.`);
+        } else {
+            printLog('info', '[AUTO-REPAIR] Startup session cleanup found no stale session files.');
+        }
+    } catch (error) {
+        printLog('error', `Startup session cleanup failed: ${error.message}`);
+    }
+}
+
+function hasValidSession() {
+    try {
+        const credsPath = path.join(__dirname, 'session', 'creds.json');
+
+        if (!existsSync(credsPath)) {
+            return false;
+        }
+
+        const fileContent = fs.readFileSync(credsPath, 'utf8');
+        if (!fileContent || fileContent.trim().length === 0) {
+            printLog('warning', 'creds.json exists but is empty');
+            return false;
+        }
+
+        try {
+            const creds = JSON.parse(fileContent);
+            if (!creds.noiseKey || !creds.signedIdentityKey || !creds.signedPreKey) {
+                printLog('warning', 'creds.json is missing required fields');
+                return false;
+            }
+
+            // If we have valid keys and a me.id, accept the session
+            // Baileys will handle registration during connection
+            if (creds.me && creds.me.id) {
+                printLog('success', `Session found for ${creds.me.id} (registered: ${creds.registered})`);
+                return true;
+            }
+
+            if (creds.registered === false) {
+                printLog('warning', 'Session not registered and no me.id - will need pairing');
+                return false;
+            }
+
+            printLog('success', 'Valid session credentials found');
+            return true;
+        } catch (parseError) {
+            printLog('warning', 'creds.json contains invalid JSON');
+            return false;
+        }
+    } catch (error) {
+        printLog('error', `Error checking session validity: ${error.message}`);
+        return false;
+    }
+}
+
+async function initializeSession() {
+    ensureSessionDirectory();
+
+    const txt = global.SESSION_ID || process.env.SESSION_ID;
+
+    if (!txt) {
+        printLog('warning', 'No SESSION_ID found in environment variables');
+        if (hasValidSession()) {
+            printLog('success', 'Existing session found. Using saved credentials');
+            return true;
+        }
+        printLog('warning', 'No existing session found. Pairing code will be required');
+        return false;
+    }
+
+    const shouldRefreshOnStart = String(process.env.REFRESH_SESSION_ON_START || '').toLowerCase() === 'true';
+
+    if (!shouldRefreshOnStart && hasValidSession()) {
+        printLog('success', 'Using local session credentials (refresh skipped)');
+        return true;
+    }
+
+    // Refresh only when forced or when no valid local session exists.
+    try {
+        printLog('info', `Refreshing session credentials from PGWIZ service (${shouldRefreshOnStart ? 'forced' : 'missing local session'})...`);
+        await SaveCreds(txt);
+        await delay(1500);
+
+        if (hasValidSession()) {
+            printLog('success', 'Session refreshed and verified');
+            await delay(500);
+            return true;
+        } else {
+            printLog('error', 'Session file not valid after refresh');
+            return false;
+        }
+    } catch (error) {
+        printLog('error', `Error refreshing session: ${error.message}`);
+        // Fall back to existing session if available
+        if (hasValidSession()) {
+            printLog('warning', 'Using existing session (refresh failed)');
+            return true;
+        }
+        return false;
+    }
+}
+
+async function runBadMacRecovery(reason = 'bad-mac-detected') {
+    if (badMacRecoveryInProgress) {
+        printLog('warning', `[AUTO-REPAIR] Bad MAC recovery already in progress (${reason})`);
+        return;
+    }
+
+    badMacRecoveryInProgress = true;
+    authAutoRepairAttempted = true;
+    printLog('warning', `[AUTO-REPAIR] Bad MAC detected. Clearing auth/session and restarting (${reason})...`);
+
+    try {
+        // Invalidate existing socket listeners immediately to prevent stale reconnect/open events.
+        socketGeneration += 1;
+
+        if (reconnectTimer) {
+            clearTimeout(reconnectTimer);
+            reconnectTimer = null;
+        }
+
+        try {
+            if (activeSocket?.ws?.readyState === 1) {
+                activeSocket.ws.close();
+            }
+        } catch {
+            // Ignore socket close errors during recovery.
+        }
+
+        clearBotIntervals();
+        botStartInProgress = false;
+        activeSocket = null;
+    } catch {
+        // Continue recovery even if runtime cleanup throws.
+    }
+
+    try {
+        if (typeof resetSQLiteAuthState === 'function') {
+            resetSQLiteAuthState('bad-mac-immediate-repair');
+        }
+    } catch (error) {
+        printLog('error', `Failed to reset SQLite auth state during Bad MAC recovery: ${error.message}`);
+    }
+
+    try {
+        rmSync('./session', { recursive: true, force: true });
+        ensureSessionDirectory();
+    } catch (error) {
+        printLog('error', `Failed to reset session directory during Bad MAC recovery: ${error.message}`);
+    }
+
+    try {
+        await initializeSession();
+    } catch (error) {
+        printLog('error', `Session refresh during Bad MAC recovery failed: ${error.message}`);
+    }
+
+    scheduleReconnect('bad-mac-immediate-repair', 1000);
+    badMacRecoveryCount += 1;
+    lastBadMacRecoveryCompletedAt = Date.now();
+
+    setTimeout(() => {
+        badMacRecoveryInProgress = false;
+    }, 15000);
+}
+
+triggerBadMacRecovery = (reason = 'bad-mac-detected') => {
+    runBadMacRecovery(reason).catch((error) => {
+        printLog('error', `Bad MAC recovery failed: ${error.message}`);
+        badMacRecoveryInProgress = false;
+    });
+};
+
+if (pendingBadMacRecovery) {
+    pendingBadMacRecovery = false;
+    triggerBadMacRecovery('bad-mac-pending-pre-init');
+}
+
+if (!server.listening) {
+    server.listen(PORT, () => {
+        printLog('success', `Server listening on port ${PORT}`);
+    });
+}
+
+async function startBot() {
+    if (botStartInProgress) {
+        return activeSocket;
+    }
+
+    const activeReadyState = activeSocket?.ws?.readyState;
+    if (activeReadyState === 0 || activeReadyState === 1) {
+        printLog('connection', `Start skipped: existing socket is active (state=${activeReadyState})`);
+        return activeSocket;
+    }
+
+    botStartInProgress = true;
+
+    try {
+        clearBotIntervals();
+
+        let { version } = await fetchLatestBaileysVersion();
+
+        ensureSessionDirectory();
+        await delay(1000);
+
+        const authStateBackend = String(process.env.AUTH_STATE_BACKEND || 'sqlite').toLowerCase();
+        let authState;
+
+        if (authStateBackend === 'files') {
+            authState = await useMultiFileAuthState('./session');
+            printLog('auth', 'Using file-based auth state backend');
+        } else {
+            try {
+                authState = await useSQLiteAuthState();
+                printLog('auth', 'Using SQLite auth state backend');
+            } catch (error) {
+                printLog('warning', `SQLite auth backend failed (${error.message}), falling back to file auth state`);
+                authState = await useMultiFileAuthState('./session');
+            }
+        }
+
+        const { state, saveCreds } = authState;
+        const dbRouter = createDBRouter(store, { normalizeJid: jidNormalizedUser });
+
+        // Create retry counter cache with short TTL (10 seconds) so old messages don't stay cached
+        const msgRetryCounterCache = new NodeCache({ stdTTL: 10, checkperiod: 5 });
+
+        printLog('info', `Credentials loaded. Registered: ${state.creds?.registered || false}`);
+
+        const statusViewerOnlyMode = String(process.env.STATUS_VIEWER_ONLY || '').toLowerCase() === 'true';
+        if (statusViewerOnlyMode) {
+            printLog('warning', 'STATUS_VIEWER_ONLY=true - normal incoming messages will be ignored. Set it to false for command replies.');
+        }
+
+        const ghostMode = await store.getSetting('global', 'stealthMode');
+        const isGhostActive = ghostMode && ghostMode.enabled;
+
+        if (isGhostActive) {
+            printLog('info', '👻 STEALTH MODE IS ACTIVE - Starting in stealth mode');
+        }
+
+        const botSocket = makeWASocket({
+            version,
+            logger: pino({ level: 'silent' }, nullStream), // Silent logger with null stream
+            printQRInTerminal: !pairingCode,
+            browser: Browsers.ubuntu('Chrome'), // Better for Linux/PM2 servers
+            auth: {
+                creds: state.creds,
+                keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "silent" }, nullStream)),
+            },
+            markOnlineOnConnect: false,
+            generateHighQualityLinkPreview: false,
+            syncFullHistory: false,
+            shouldSyncHistoryMessage: () => false, // Disable history sync for real-time only
+            retryRequestDelayMs: 2000, // Reduce retry delay from 5s to 2s
+            fireInitQueries: false, // DISABLED: Don't wait for message history on startup - causes "waiting for message" hang
+            getMessage: async (key) => dbRouter.loadConversationMessage(key),
+            msgRetryCounterCache,
+            defaultQueryTimeoutMs: 30000,
+            connectTimeoutMs: 60000,
+            keepAliveIntervalMs: 15000,
+        });
+
+        // Expose bot instance globally for /ping endpoint
+        global.botInstance = botSocket;
+        activeSocket = botSocket;
+        const thisSocketGeneration = ++socketGeneration;
+        const isStaleSocket = () => thisSocketGeneration !== socketGeneration || activeSocket !== botSocket;
+
+        const originalSendPresenceUpdate = botSocket.sendPresenceUpdate;
+        const originalReadMessages = botSocket.readMessages;
+        const originalSendReceipt = botSocket.sendReceipt;
+        const originalSendReadReceipt = botSocket.sendReadReceipt;
+
+        botSocket.sendPresenceUpdate = async function (...args) {
+            const [presenceType, jid] = args;
+            const ghostMode = await store.getSetting('global', 'stealthMode');
+            if (ghostMode && ghostMode.enabled) {
+                printLog('info', '👻 Blocked presence update (stealth mode)');
+                return;
+            }
+
+            const alwaysOnline = await isAlwaysOnlineEnabled();
+            if (alwaysOnline && !jid) {
+                const state = String(presenceType || '').toLowerCase();
+                if (state === 'paused' || state === 'unavailable') {
+                    return;
+                }
+            } else if (!alwaysOnline && !jid) {
+                const state = String(presenceType || '').toLowerCase();
+                if (state === 'available') {
+                    return originalSendPresenceUpdate.call(this, 'unavailable');
+                }
+            }
+
+            return originalSendPresenceUpdate.apply(this, args);
+        };
+
+        botSocket.readMessages = async function (...args) {
+            const ghostMode = await store.getSetting('global', 'stealthMode');
+            if (ghostMode && ghostMode.enabled) {
+                return;
+            }
+            return originalReadMessages.apply(this, args);
+        };
+
+        if (originalSendReceipt) {
+            botSocket.sendReceipt = async function (...args) {
+                const ghostMode = await store.getSetting('global', 'stealthMode');
+                if (ghostMode && ghostMode.enabled) {
+                    return;
+                }
+                return originalSendReceipt.apply(this, args);
+            };
+        }
+
+        if (originalSendReadReceipt) {
+            botSocket.sendReadReceipt = async function (...args) {
+                const ghostMode = await store.getSetting('global', 'stealthMode');
+                if (ghostMode && ghostMode.enabled) {
+                    return;
+                }
+                return originalSendReadReceipt.apply(this, args);
+            };
+        }
+
+        const originalQuery = botSocket.query;
+        botSocket.query = async function (node, ...args) {
+            const ghostMode = await store.getSetting('global', 'stealthMode');
+            if (ghostMode && ghostMode.enabled) {
+                if (node && node.tag === 'receipt') {
+                    return;
+                }
+                if (node && node.attrs && (node.attrs.type === 'read' || node.attrs.type === 'read-self')) {
+                    return;
+                }
+            }
+            return originalQuery.apply(this, [node, ...args]);
+        };
+
+        botSocket.isGhostMode = async () => {
+            const ghostMode = await store.getSetting('global', 'stealthMode');
+            return ghostMode && ghostMode.enabled;
+        };
+
+        botSocket.ev.on('creds.update', saveCreds);
+        store.bind(botSocket.ev);
+
+        try {
+            const { initAutoReact } = require('./plugins/areact');
+            if (typeof initAutoReact === 'function') {
+                initAutoReact(botSocket);
+            }
+        } catch (error) {
+            printLog('warning', `Auto-react startup init failed: ${error.message}`);
+        }
+
+        botSocket.ev.on('messages.upsert', async (chatUpdate) => {
+            if (isStaleSocket()) return;
+
+            try {
+                const statusViewerOnly = statusViewerOnlyMode;
+                const upsertType = chatUpdate?.type;
+
+                // Baileys docs: upsert can be notify/append; handle both and process every message item.
+                if (upsertType !== 'notify' && upsertType !== 'append') return;
+
+                const upsertMessages = Array.isArray(chatUpdate?.messages) ? chatUpdate.messages : [];
+                if (upsertMessages.length === 0) return;
+
+                if (botSocket?.msgRetryCounterCache) {
+                    botSocket.msgRetryCounterCache.clear();
+                }
+
+                for (const mek of upsertMessages) {
+                    if (isStaleSocket()) return;
+                    if (!mek?.message) continue;
+
+                    mek.message = (Object.keys(mek.message)[0] === 'ephemeralMessage')
+                        ? mek.message.ephemeralMessage.message
+                        : mek.message;
+
+                    if (mek.key && mek.key.remoteJid === 'status@broadcast') {
+                        handleStatus(botSocket, { type: upsertType, messages: [mek] }).catch(err => printLog('error', `AutoStatus Error: ${err.message}`));
+                        continue;
+                    }
+
+                    if (statusViewerOnly) {
+                        continue;
+                    }
+
+                    const messageId = mek.key?.id || '';
+                    if (mek.key?.fromMe && messageId.startsWith('BAE5') && messageId.length === 16) continue;
+
+                    const botMode = await store.getBotMode();
+                    const isGroup = mek.key?.remoteJid?.endsWith('@g.us');
+                    const senderId = mek.key?.participant || mek.key?.remoteJid;
+                    const isOwnerOrSudo = require('./lib/isOwner');
+                    const isOwnerMsg = mek.key?.fromMe || (typeof isOwnerOrSudo === 'function' && await isOwnerOrSudo(senderId, botSocket, mek.key?.remoteJid));
+
+                    if (!isOwnerMsg) {
+                        if (botMode === 'private' || botMode === 'self') continue;
+                        if (botMode === 'groups' && !isGroup) continue;
+                        if (botMode === 'inbox' && isGroup) continue;
+                    }
+
+                    try {
+                        await handleMessages(botSocket, { type: upsertType, messages: [mek] });
+                    } catch (err) {
+                        printLog('error', `Error in handleMessages: ${err.message}`);
+                        if (mek.key && mek.key.remoteJid) {
+                            await botSocket.sendMessage(mek.key.remoteJid, {
+                                text: '❌ An error occurred while processing your message.',
+                                contextInfo: {
+                                    forwardingScore: 1,
+                                    isForwarded: true,
+                                    forwardedNewsletterMessageInfo: {
+                                        newsletterJid: settings.newsletterJid || '120363179639202475@newsletter',
+                                        newsletterName: settings.newsletterName || 'PGWIZ-MD',
+                                        serverMessageId: -1
+                                    }
+                                }
+                            }).catch(console.error);
+                        }
+                    }
+                }
+
+            } catch (err) {
+                printLog('error', `Error in messages.upsert: ${err.message}`);
+            }
+        });
+
+        botSocket.decodeJid = (jid) => {
+            if (!jid) return jid;
+            if (/:\d+@/gi.test(jid)) {
+                let decode = jidDecode(jid) || {};
+                return decode.user && decode.server && decode.user + '@' + decode.server || jid;
+            } else return jid;
+        };
+
+        botSocket.ev.on('contacts.update', update => {
+            if (isStaleSocket()) return;
+
+            for (let contact of update) {
+                let id = botSocket.decodeJid(contact.id);
+                if (store && store.contacts) store.contacts[id] = { id, name: contact.notify };
+            }
+        });
+
+        botSocket.getName = (jid, withoutContact = false) => {
+            id = botSocket.decodeJid(jid);
+            withoutContact = botSocket.withoutContact || withoutContact;
+            let v;
+            if (id.endsWith("@g.us")) return new Promise(async (resolve) => {
+                v = store.contacts[id] || {};
+                if (!(v.name || v.subject)) v = botSocket.groupMetadata(id) || {};
+                resolve(v.name || v.subject || PhoneNumber('+' + id.replace('@s.whatsapp.net', '')).getNumber('international'));
+            });
+            else v = id === '0@s.whatsapp.net' ? {
+                id,
+                name: 'WhatsApp'
+            } : id === botSocket.decodeJid(botSocket.user.id) ?
+                botSocket.user :
+                (store.contacts[id] || {});
+            return (withoutContact ? '' : v.name) || v.subject || v.verifiedName || PhoneNumber('+' + jid.replace('@s.whatsapp.net', '')).getNumber('international');
+        };
+
+        botSocket.public = true;
+        botSocket.serializeM = (m) => smsg(botSocket, m, store);
+
+        const isRegistered = state.creds?.registered === true;
+        const hasValidMe = state.creds?.me?.id ? true : false;
+
+        // If we have me.id (from session service), trust it and attempt connection
+        // No need for manual pairing - Baileys will handle registration during connection
+        if (hasValidMe) {
+            printLog('info', `Session has me.id: ${state.creds.me.id} (registered: ${isRegistered}) - attempting connection...`);
+            if (rl && !rl.closed) {
+                rl.close();
+                rl = null;
+            }
+        } else if (pairingCode) {
+            // Only prompt for pairing if we have NO me.id at all (fresh start)
+            if (useMobile) throw new Error('Cannot use pairing code with mobile api');
+
+            printLog('warning', 'No session found. Pairing code required');
+
+            let phoneNumberInput;
+            if (!!global.phoneNumber) {
+                phoneNumberInput = global.phoneNumber;
+            } else if (process.env.PAIRING_NUMBER) {
+                phoneNumberInput = process.env.PAIRING_NUMBER;
+                printLog('info', `Using phone number from environment: ${phoneNumberInput}`);
+            } else if (rl && !rl.closed) {
+                phoneNumberInput = await question(chalk.bgBlack(chalk.greenBright(`Please type your WhatsApp number 😍\nFormat: 6281376552730 (without + or spaces) : `)));
+            } else {
+                phoneNumberInput = phoneNumber;
+                printLog('info', `Using default phone number: ${phoneNumberInput}`);
+            }
+
+            phoneNumberInput = phoneNumberInput.replace(/[^0-9]/g, '');
+
+            const pn = require('awesome-phonenumber');
+            if (!pn('+' + phoneNumberInput).isValid()) {
+                printLog('error', 'Invalid phone number format');
+
+                if (rl && !rl.closed) {
+                    rl.close();
+                }
+                process.exit(1);
+            }
+
+            setTimeout(async () => {
+                try {
+                    let code = await botSocket.requestPairingCode(phoneNumberInput);
+                    code = code?.match(/.{1,4}/g)?.join("-") || code;
+                    console.log(chalk.black(chalk.bgGreen(`Your Pairing Code : `)), chalk.black(chalk.white(code)));
+                    printLog('success', `Pairing code generated: ${code}`);
+
+                    if (rl && !rl.closed) {
+                        rl.close();
+                        rl = null;
+                    }
+                } catch (error) {
+                    printLog('error', `Failed to get pairing code: ${error.message}`);
+                }
+            }, 3000);
+        } else {
+            printLog('warning', 'Waiting for connection to establish...');
+            if (rl && !rl.closed) {
+                rl.close();
+                rl = null;
+            }
+        }
+
+        botSocket.ev.on('connection.update', async (s) => {
+            if (isStaleSocket()) return;
+
+            const { connection, lastDisconnect, qr } = s;
+
+            if (qr) {
+                printLog('info', 'QR Code generated. Please scan with WhatsApp');
+            }
+
+            if (connection === 'connecting') {
+                printLog('connection', 'Connecting to WhatsApp...');
+            }
+
+            if (connection === 'open') {
+                reconnectAttempts = 0;
+                authAutoRepairAttempted = false;
+                badMacRecoveryInProgress = false;
+                botStartInProgress = false;
+                if (reconnectTimer) {
+                    clearTimeout(reconnectTimer);
+                    reconnectTimer = null;
+                }
+
+                global.botConnectedTime = Date.now();
+                printLog('success', 'Bot connected successfully!');
+
+                const { startAutoBio } = require('./plugins/a-setbio');
+                startAutoBio(botSocket);
+
+                const ghostMode = await store.getSetting('global', 'stealthMode');
+                if (ghostMode && ghostMode.enabled) {
+                    printLog('info', '👻 STEALTH MODE ACTIVE - Bot is in stealth mode');
+                    console.log(chalk.gray('• No online status'));
+                    console.log(chalk.gray('• No typing indicators'));
+                }
+
+                const presenceConfig = await getPresenceConfig();
+                if (presenceConfig.alwaysOnline && !(ghostMode && ghostMode.enabled)) {
+                    try {
+                        await originalSendPresenceUpdate.call(botSocket, 'available');
+                    } catch (error) {
+                        printLog('warning', `Failed to set initial always-online presence: ${error.message}`);
+                    }
+
+                    registerBotInterval(setInterval(async () => {
+                        try {
+                            const currentGhostMode = await store.getSetting('global', 'stealthMode');
+                            if (currentGhostMode && currentGhostMode.enabled) return;
+
+                            const currentPresenceConfig = await getPresenceConfig();
+                            if (!currentPresenceConfig.alwaysOnline) return;
+
+                            await originalSendPresenceUpdate.call(botSocket, 'available');
+                        } catch {
+                            // Silent failure to avoid log spam
+                        }
+                    }, 45 * 1000));
+
+                    printLog('presence', 'Always online presence heartbeat enabled');
+                } else if (!ghostMode || !ghostMode.enabled) {
+                    try {
+                        await originalSendPresenceUpdate.call(botSocket, 'unavailable');
+                    } catch (error) {}
+                }
+
+                try {
+                    const botNumber = botSocket.user.id.split(':')[0] + '@s.whatsapp.net';
+                    const ghostStatus = (ghostMode && ghostMode.enabled) ? '\n👻 Stealth Mode: ACTIVE' : '';
+
+                    await botSocket.sendMessage(botNumber, {
+                        text: `🤖 Bot Connected Successfully!\n\n⏰ Time: ${new Date().toLocaleString()}\n✅ Status: Online and Ready!${ghostStatus}\n\n✅Make sure to join below channel`,
+                        contextInfo: {
+                            forwardingScore: 1,
+                            isForwarded: true,
+                            forwardedNewsletterMessageInfo: {
+                                newsletterJid: '120363179639202475@newsletter',
+                                newsletterName: 'PGWIZ-MD',
+                                serverMessageId: -1
+                            }
+                        }
+                    });
+
+                    try {
+                        if (Array.isArray(owner) && owner.length) {
+                            const primary = owner[0];
+                            const ownerJid = primary.includes('@') ? primary : `${primary}@s.whatsapp.net`;
+
+                            global.startupDebug = {
+                                pending: true,
+                                ownerJids: [ownerJid],
+                                startedAt: Date.now(),
+                                expiresAt: Date.now() + 10 * 60 * 1000
+                            };
+
+                            await botSocket.sendMessage(ownerJid, {
+                                text: '🤖 Startup check — reply to this message to confirm bot status.\n\nReply with `.menu` to verify the bot is responding.',
+                            });
+
+                            printLog('info', `Startup debug message sent to ${ownerJid.split('@')[0]}`);
+                        }
+                    } catch (e) {
+                        printLog('error', `Startup debug send failed: ${e.message}`);
+                    }
+                } catch (error) {
+                    printLog('error', `Failed to send connection message: ${error.message}`);
+                }
+
+                return;
+            }
+
+            if (connection === 'close') {
+                const statusCode = lastDisconnect?.error?.output?.statusCode;
+                const errorName = lastDisconnect?.error?.message || 'Unknown Error';
+                const reasonLabel = statusCode || 'unknown';
+                const errorNameLower = String(errorName).toLowerCase();
+
+                activeSocket = null;
+                clearBotIntervals();
+                botStartInProgress = false;
+
+                printLog('error', `Connection closed - Status:${reasonLabel} (${errorName})`);
+
+                if (statusCode === DisconnectReason.loggedOut || statusCode === 401) {
+                    try {
+                        rmSync('./session', { recursive: true, force: true });
+                        printLog('warning', 'Session logged out. Please re-authenticate');
+                    } catch (error) {
+                        printLog('error', `Error deleting session: ${error.message}`);
+                    }
+                    return;
+                }
+
+                const corruptedAuthState =
+                    errorNameLower.includes('incorrect private key length') ||
+                    (errorNameLower.includes('instance of object') && errorNameLower.includes('buffer')) ||
+                    errorNameLower.includes('bad mac') ||
+                    errorNameLower.includes('invalid key');
+
+                if (corruptedAuthState && !authAutoRepairAttempted) {
+                    requestBadMacRecovery('connection-close-corrupted-auth');
+                    return;
+                }
+
+                if (statusCode === 440) {
+                    console.log(chalk.bold.redBright('⚠️  SESSION CONFLICT (Status 440)'));
+                    console.log(chalk.red('   Another instance is already using this session.'));
+                    console.log(chalk.red('   Please stop other running bots (Local, Koyeb, etc).'));
+                    scheduleReconnect('session-conflict-440', 30000);
+                    return;
+                }
+
+                scheduleReconnect(`connection-close-${reasonLabel}`);
+            }
+        });
+
+        botSocket.ev.on('call', async (calls) => {
+            if (isStaleSocket()) return;
+            await handleCall(botSocket, calls);
+        });
+
+        botSocket.ev.on('group-participants.update', async (update) => {
+            if (isStaleSocket()) return;
+            await handleGroupParticipantUpdate(botSocket, update);
+        });
+
+        botSocket.ev.on('status.update', async (status) => {
+            if (isStaleSocket()) return;
+            await handleStatus(botSocket, status);
+        });
+
+        botSocket.ev.on('messages.reaction', async (reaction) => {
+            if (isStaleSocket()) return;
+            await handleStatus(botSocket, reaction);
+        });
+
+        // ===== PERFORMANCE & HEALTH MONITORING =====
+        // Silent WebSocket health check - reconnects without sending messages
+        let lastActivityTime = Date.now();
+        const HEALTH_CHECK_INTERVAL = 5 * 60 * 1000; // 5 minutes
+        
+        botSocket.ev.on('messages.upsert', () => {
+            if (isStaleSocket()) return;
+            lastActivityTime = Date.now();
+        });
+
+        botSocket.ev.on('messages.update', () => {
+            if (isStaleSocket()) return;
+            lastActivityTime = Date.now();
+        });
+
+        // Silent health check every 5 minutes (no messages to user)
+        const healthCheckInterval = registerBotInterval(setInterval(async () => {
+            try {
+                const wsState = botSocket?.ws?.readyState;
+                const isConnected = botSocket?.user !== undefined;
+                
+                // Only log in debug, don't message user
+                if (!isConnected || wsState !== 1) {
+                    console.log(`[HEALTH] WebSocket unhealthy - attempting silent reconnect (state: ${wsState})`);
+                    // Silently attempt to reconnect by resending presence
+                    try {
+                        if (await isAlwaysOnlineEnabled()) {
+                            await botSocket.sendPresenceUpdate('available');
+                        }
+                    } catch (e) {
+                        // Fail silently, Baileys will handle reconnection
+                    }
+                }
+            } catch (err) {
+                // Silently ignore errors, don't interrupt the bot
+            }
+        }, HEALTH_CHECK_INTERVAL));
+
+        // Scheduled restart every 6 hours to prevent memory creep
+        const scheduledRestartInterval = registerBotInterval(setInterval(() => {
+            printLog('info', '🔄 Scheduled 6-hour restart to maintain stability...');
+            clearInterval(healthCheckInterval);
+            clearInterval(scheduledRestartInterval);
+            process.exit(0);
+        }, 6 * 60 * 60 * 1000)); // Every 6 hours
+
+        // Garbage collection every 30 minutes
+        const gcInterval = registerBotInterval(setInterval(() => {
+            if (global.gc) {
+                global.gc();
+                const memUsage = (process.memoryUsage().rss / 1024 / 1024).toFixed(2);
+                console.log(`[GC] Garbage collection completed (RAM: ${memUsage}MB)`);
+            }
+        }, 30 * 60 * 1000)); // Every 30 minutes
+
+        return botSocket;
+    } catch (error) {
+        printLog('error', `Error in startBot: ${error.message}`);
+        activeSocket = null;
+        botStartInProgress = false;
+
+        if (rl && !rl.closed) {
+            rl.close();
+            rl = null;
+        }
+
+        scheduleReconnect('startBot-exception');
+    }
+}
+
+
+async function main() {
+    printLog('info', 'Starting PGWIZ-MD BOT...');
+    startupSessionCleanup();
+
+    await bootstrapStoreSchemaAndFallbacks();
+
+    if (typeof commandHandler.hydrateDisabledCommands === 'function') {
+        await commandHandler.hydrateDisabledCommands();
+    }
+
+    try {
+        const { applyStartupAutoStatusPolicy } = require('./plugins/autostatus');
+        await applyStartupAutoStatusPolicy();
+    } catch (error) {
+        printLog('error', `Auto status startup policy failed: ${error.message}`);
+    }
+
+    const sessionReady = await initializeSession();
+
+    if (sessionReady) {
+        printLog('success', 'Session initialization complete. Starting bot...');
+    } else {
+        printLog('warning', 'Session initialization incomplete. Will attempt pairing...');
+    }
+
+    await delay(3000);
+
+    startBot().catch(error => {
+        printLog('error', `Fatal error: ${error.message}`);
+
+        if (rl && !rl.closed) {
+            rl.close();
+        }
+
+        process.exit(1);
+    });
+}
+
+main();
+
+
+const customTemp = path.join(process.cwd(), 'temp');
+if (!fs.existsSync(customTemp)) fs.mkdirSync(customTemp, { recursive: true });
+process.env.TMPDIR = customTemp;
+process.env.TEMP = customTemp;
+process.env.TMP = customTemp;
+
+setInterval(() => {
+    fs.readdir(customTemp, (err, files) => {
+        if (err) return;
+        for (const file of files) {
+            const filePath = path.join(customTemp, file);
+            fs.stat(filePath, (err, stats) => {
+                if (!err && Date.now() - stats.mtimeMs > 3 * 60 * 60 * 1000) {
+                    fs.unlink(filePath, () => { });
+                }
+            });
+        }
+    });
+    //  console.log('🧹 Temp folder auto-cleaned');
+}, 1 * 60 * 60 * 1000);
+
+// CPU throttling detection and monitoring
+setInterval(() => {
+    try {
+        const os = require('os');
+        const cpus = os.cpus();
+        if (!cpus || cpus.length === 0) return;
+
+        let totalIdle = 0;
+        let totalTick = 0;
+
+        for (const cpu of cpus) {
+            for (const type in cpu.times) {
+                totalTick += cpu.times[type];
+            }
+            totalIdle += cpu.times.idle;
+        }
+
+        const cpuUsage = 100 - ~~(100 * totalIdle / totalTick);
+
+        // Log if CPU is above 85% (significant throttling risk)
+        if (cpuUsage > 85) {
+            console.warn(chalk.yellow(`⚠️  HIGH CPU USAGE: ${cpuUsage}% - Server may be throttling performance`));
+        }
+
+        // Check for system slowness indicators every 2 minutes
+        if (!global.cpuMonitor) global.cpuMonitor = { counts: [] };
+        global.cpuMonitor.counts.push(cpuUsage);
+        if (global.cpuMonitor.counts.length > 10) global.cpuMonitor.counts.shift();
+
+        const avgCpu = global.cpuMonitor.counts.reduce((a, b) => a + b, 0) / global.cpuMonitor.counts.length;
+        if (avgCpu > 80 && global.cpuMonitor.counts.length === 10) {
+            console.warn(chalk.red(`🔥 SUSTAINED HIGH CPU: ${avgCpu.toFixed(1)}% average - Bot may be CPU-throttled on this server`));
+        }
+    } catch (err) {
+        // Silently ignore CPU monitoring errors
+    }
+}, 2 * 60 * 1000); // Every 2 minutes
+
+const folders = [
+    path.join(__dirname, './lib'),
+    path.join(__dirname, './plugins')
+];
+
+let totalFiles = 0;
+let okFiles = 0;
+let errorFiles = 0;
+
+folders.forEach(folder => {
+    if (!fs.existsSync(folder)) return;
+
+    fs.readdirSync(folder)
+        .filter(file => file.endsWith('.js'))
+        .forEach(file => {
+            totalFiles++;
+            const filePath = path.join(folder, file);
+
+            try {
+                const code = fs.readFileSync(filePath, 'utf-8');
+                const err = syntaxerror(code, file, {
+                    sourceType: 'script',
+                    allowAwaitOutsideFunction: true
+                });
+
+                if (err) {
+                    console.error(chalk.red(`❌ Syntax error in ${filePath}:\n${err}`));
+                    errorFiles++;
+                } else {
+                    okFiles++;
+                }
+            } catch (e) {
+                console.error(chalk.yellow(`⚠️ Cannot read file ${filePath}:\n${e}`));
+                errorFiles++;
+            }
+        });
+});
+
+/**
+* console.log(chalk.greenBright(`✅ OK files: ${okFiles}`));
+* console.log(chalk.redBright(`❌Files with errors: ${errorFiles}\n`));
+*/
+
+process.on('uncaughtException', (err) => {
+    printLog('error', `Uncaught Exception: ${err.message}`);
+    console.error(err.stack);
+});
+
+process.on('unhandledRejection', (err) => {
+    printLog('error', `Unhandled Rejection: ${err.message}`);
+    console.error(err.stack);
+});
+
+server.on('error', (error) => {
+    if (error.code === 'EADDRINUSE') {
+        printLog('error', `Address localhost:${PORT} in use`);
+        server.close();
+    } else {
+        printLog('error', `Server error: ${error.message}`);
+    }
+});
+
+let file = require.resolve(__filename);
+fs.watchFile(file, () => {
+    fs.unwatchFile(file);
+    printLog('info', 'index.js updated, reloading...');
+    delete require.cache[file];
+    require(file);
+});
+
+
