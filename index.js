@@ -1140,8 +1140,8 @@ async function startBot() {
 
                 if (statusCode === 440) {
                     console.log(chalk.bold.redBright('⚠️  SESSION CONFLICT (Status 440)'));
-                    console.log(chalk.red('   Another instance is already using this session.'));
-                    console.log(chalk.red('   Please stop other running bots (Local, Koyeb, etc).'));
+                    console.log(chalk.red('   Another bot instance is currently connected with this SESSION_ID.'));
+                    console.log(chalk.red('   Please ensure other running terminals or cloud instances are stopped.'));
                     scheduleReconnect('session-conflict-440', 30000);
                     return;
                 }
