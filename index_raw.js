@@ -853,6 +853,18 @@ async function startBot() {
                     const messageId = mek.key?.id || '';
                     if (mek.key?.fromMe && messageId.startsWith('BAE5') && messageId.length === 16) continue;
 
+                    const botMode = await store.getBotMode();
+                    const isGroup = mek.key?.remoteJid?.endsWith('@g.us');
+                    const senderId = mek.key?.participant || mek.key?.remoteJid;
+                    const isOwnerOrSudo = require('./lib/isOwner');
+                    const isOwnerMsg = mek.key?.fromMe || (typeof isOwnerOrSudo === 'function' && await isOwnerOrSudo(senderId, botSocket, mek.key?.remoteJid));
+
+                    if (!isOwnerMsg) {
+                        if (botMode === 'private' || botMode === 'self') continue;
+                        if (botMode === 'groups' && !isGroup) continue;
+                        if (botMode === 'inbox' && isGroup) continue;
+                    }
+
                     try {
                         await handleMessages(botSocket, { type: upsertType, messages: [mek] });
                     } catch (err) {
