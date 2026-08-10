@@ -1132,7 +1132,8 @@ async function startBot() {
                     errorNameLower.includes('bad mac') ||
                     errorNameLower.includes('invalid key');
 
-                if (corruptedAuthState && !authAutoRepairAttempted) {
+                if (corruptedAuthState) {
+                    authAutoRepairAttempted = true;
                     requestBadMacRecovery('connection-close-corrupted-auth');
                     return;
                 }
