@@ -9,7 +9,7 @@
     "plugins": "plugins"
   },
   "scripts": {
-    "start": "pm2 start . --name $(basename $PWD) --update-env --attach --time",
+    "start": "node index.js",
     "stop": "pm2 stop $(basename $PWD)",
     "restart": "pm2 restart $(basename $PWD)",
     "logs": "pm2 logs $(basename $PWD)",

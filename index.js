@@ -856,7 +856,7 @@ async function startBot() {
                     const botMode = await store.getBotMode();
                     const isGroup = mek.key?.remoteJid?.endsWith('@g.us');
                     const senderJid = mek.key?.participant || mek.key?.remoteJid;
-                    const { isOwnerOrSudo: checkOwnerOrSudo } = require('./lib/isOwner');
+                    const checkOwnerOrSudo = require('./lib/isOwner');
                     const isOwnerMsg = mek.key?.fromMe || (senderJid && await checkOwnerOrSudo(senderJid, botSocket, mek.key?.remoteJid).catch(() => false));
 
                     if (!isOwnerMsg) {
