@@ -822,6 +822,16 @@ async function startBot() {
             try {
                 const statusViewerOnly = statusViewerOnlyMode;
                 const upsertType = chatUpdate?.type;
+                const msgs = Array.isArray(chatUpdate?.messages) ? chatUpdate.messages : [];
+
+                console.log(chalk.cyan(`\n📩 [RAW UPSERT] Type: ${upsertType} | Messages Count: ${msgs.length}`));
+                for (const mek of msgs) {
+                    const sender = mek.key?.participant || mek.key?.remoteJid;
+                    const fromMe = mek.key?.fromMe;
+                    const isGroup = mek.key?.remoteJid?.endsWith('@g.us');
+                    const hasMsg = !!mek.message;
+                    console.log(chalk.yellow(`   ➜ From: ${sender} (fromMe: ${fromMe}, isGroup: ${isGroup}, hasMsg: ${hasMsg})`));
+                }
 
                 // Baileys docs: upsert can be notify/append; handle both and process every message item.
                 if (upsertType !== 'notify' && upsertType !== 'append') return;
