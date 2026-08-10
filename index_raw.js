@@ -307,17 +307,15 @@ function parseBoolean(value, fallback = false) {
 }
 
 async function getPresenceConfig() {
-    const envValue = await store.getEnvBackedSetting('ALWAYS_ONLINE', 'false');
-    const envDefault = parseBoolean(envValue, false);
-    const existing = await store.getSetting('global', 'presenceConfig');
-
-    if (!existing || typeof existing.alwaysOnline !== 'boolean') {
-        const initial = { alwaysOnline: envDefault };
-        await store.saveSetting('global', 'presenceConfig', initial);
-        return initial;
+    const envVal = process.env.ALWAYS_ONLINE || process.env.ALWAYS_ONLINE_PRESENCE;
+    if (envVal !== undefined && String(envVal).trim() !== '') {
+        return { alwaysOnline: String(envVal).toLowerCase() === 'true' };
     }
-
-    return { alwaysOnline: !!existing.alwaysOnline };
+    const existing = await store.getSetting('global', 'presenceConfig');
+    if (existing && typeof existing.alwaysOnline === 'boolean') {
+        return { alwaysOnline: existing.alwaysOnline };
+    }
+    return { alwaysOnline: false };
 }
 
 async function isAlwaysOnlineEnabled() {
