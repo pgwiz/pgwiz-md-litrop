@@ -638,8 +638,8 @@ if (pendingBadMacRecovery) {
 }
 
 if (!server.listening) {
-    server.listen(PORT, () => {
-        printLog('success', `Server listening on port ${PORT}`);
+    server.listen(PORT, '0.0.0.0', () => {
+        printLog('success', `Server listening on 0.0.0.0:${PORT}`);
     });
 }
 
