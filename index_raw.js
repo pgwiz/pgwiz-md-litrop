@@ -834,6 +834,15 @@ async function startBot() {
             printLog('warning', `Auto-react startup init failed: ${error.message}`);
         }
 
+        try {
+            const { initAutoClear } = require('./plugins/autoclear');
+            if (typeof initAutoClear === 'function') {
+                initAutoClear(botSocket);
+            }
+        } catch (error) {
+            printLog('warning', `Auto-clear startup init failed: ${error.message}`);
+        }
+
         botSocket.ev.on('messages.upsert', async (chatUpdate) => {
             if (isStaleSocket()) return;
 
