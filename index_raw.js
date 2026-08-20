@@ -245,6 +245,7 @@ const { useSQLiteAuthState, resetSQLiteAuthState } = require('./lib/sqliteAuthSt
 const { createDBRouter } = require('./lib/db-router');
 const { app, server, PORT } = require('./lib/server');
 const { printLog } = require('./lib/print');
+const isOwnerOrSudo = require('./lib/isOwner');
 const {
     handleMessages,
     handleGroupParticipantUpdate,
