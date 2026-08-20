@@ -1225,13 +1225,12 @@ async function startBot() {
         // Silent health check every 5 minutes (no messages to user)
         const healthCheckInterval = registerBotInterval(setInterval(async () => {
             try {
-                const wsState = botSocket?.ws?.readyState;
+                const ws = botSocket?.ws;
+                const isSocketOpen = ws?.isOpen || (ws?.socket?.readyState === 1) || (ws?.readyState === 1) || (botSocket?.user && ws?.isClosed === false);
                 const isConnected = botSocket?.user !== undefined;
                 
-                // Only log in debug, don't message user
-                if (!isConnected || wsState !== 1) {
-                    console.log(`[HEALTH] WebSocket unhealthy - attempting silent reconnect (state: ${wsState})`);
-                    // Silently attempt to reconnect by resending presence
+                if (!isConnected || !isSocketOpen) {
+                    console.log(`[HEALTH] WebSocket unhealthy - attempting silent reconnect`);
                     try {
                         if (await isAlwaysOnlineEnabled()) {
                             await botSocket.sendPresenceUpdate('available');
