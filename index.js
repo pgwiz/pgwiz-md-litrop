@@ -183,6 +183,19 @@ console.debug = (...args) => {
 };
 
 
+// Auto self-healing dependency installer for panels (Wispbyte, Pterodactyl, Replit, Koyeb, etc.)
+try {
+    require.resolve('@hapi/boom');
+} catch (e) {
+    console.log('⚠️ Missing dependencies detected in environment! Running automatic npm install...');
+    try {
+        require('child_process').execSync('npm install --legacy-peer-deps', { stdio: 'inherit', cwd: __dirname });
+        console.log('✅ Dependencies successfully installed!');
+    } catch (installErr) {
+        console.error('❌ Failed to run automatic npm install:', installErr.message);
+    }
+}
+
 require('./config');
 require('./settings');
 
