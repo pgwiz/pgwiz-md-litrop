@@ -8,7 +8,7 @@ module.exports = {
   category: 'general',
   description: 'Check bot status and system info',
   usage: '.alive',
-  isPrefixless: true,
+  
 
   async handler(sock, message, args, context = {}) {
     const chatId = context.chatId || message.key.remoteJid;

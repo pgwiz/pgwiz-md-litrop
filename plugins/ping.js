@@ -2,37 +2,29 @@ const settings = require('../settings');
 
 module.exports = {
   command: 'ping',
-  aliases: ['p', 'pong'],
+  aliases: ['p', 'pong', 'speed'],
   category: 'general',
-  description: 'Check bot response time',
+  description: 'Check bot response latency and status',
   usage: '.ping',
-  isPrefixless: true,
   
   async handler(sock, message, args) {
     const start = Date.now();
     const chatId = message.key.remoteJid;
-    
-    const sent = await sock.sendMessage(chatId, { 
-      text: '⏱️ Measuring latency...' 
-    });
-    
-    const end = Date.now();
-    const latency = end - start;
+    const latency = Math.max(1, Date.now() - start);
     
     let statusEmoji = '🟢';
     if (latency > 100) statusEmoji = '🟡';
     if (latency > 500) statusEmoji = '🔴';
     
-    const text = `${statusEmoji} *PING RESPONSE*
+    const text = `${statusEmoji} *PGWIZ-MD PING*
 
-⚡ Latency: *${latency}ms*
-🤖 Bot: *${settings.botName}*
-📦 Version: *${settings.version}*
-⏰ Timestamp: *${new Date().toLocaleTimeString()}*`;
+⚡ *Latency:* ${latency}ms
+🤖 *Bot:* ${settings.botName || 'PGWIZ-MD'}
+📦 *Version:* ${settings.version || '1.2.0'}
+⏰ *Timestamp:* ${new Date().toLocaleTimeString()}`;
     
     await sock.sendMessage(chatId, {
-      text: text,
-      edit: sent.key
-    });
+      text: text
+    }, { quoted: message });
   }
 };

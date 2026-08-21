@@ -6,7 +6,7 @@ module.exports = {
   category: 'general',
   description: 'Show developer and project information',
   usage: '.developer',
-  isPrefixless: true,
+  
 
   async handler(sock, message, args, context = {}) {
     const chatId = context.chatId || message.key.remoteJid;
