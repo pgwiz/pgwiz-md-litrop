@@ -1,4 +1,4 @@
-global.alwaysOnlineState = true;
+global.alwaysOnlineState = undefined;
 global.botLaunchTimestamp = Math.floor(Date.now() / 1000);
 /* process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'; */
 
@@ -335,41 +335,11 @@ async function getPresenceConfig() {
     } catch (e) {}
 
     const envVal = process.env.ALWAYS_ONLINE || process.env.ALWAYS_ONLINE_PRESENCE;
-    const isEn = (envVal !== undefined) 
+    const isEn = (envVal !== undefined && String(envVal).trim() !== '')
         ? (String(envVal).toLowerCase() === 'true' || String(envVal) === '1' || String(envVal).toLowerCase() === 'on')
-        : true;
+        : (settings.alwaysOnline ?? false);
     global.alwaysOnlineState = isEn;
     return { alwaysOnline: isEn };
-}
-
-
-async function broadcastPresenceAvailable(sock) {
-    if (!sock) return;
-    try {
-        const ghostMode = await store.getSetting('global', 'stealthMode');
-        if (ghostMode && ghostMode.enabled) return;
-
-        const alwaysOnline = await isAlwaysOnlineEnabled();
-        if (!alwaysOnline) return;
-
-        const me = sock?.authState?.creds?.me || sock?.user;
-        const name = String(me?.name || settings.botName || 'PGWIZ-MD').replace(/@/g, '');
-        if (me && !me.name) me.name = name;
-
-        // 1. Standard Baileys presence update
-        await sock.sendPresenceUpdate('available').catch(() => {});
-
-        // 2. Direct presence stanza to WhatsApp server for 100% reliable online indicator
-        if (typeof sock.sendNode === 'function') {
-            await sock.sendNode({
-                tag: 'presence',
-                attrs: {
-                    name,
-                    type: 'available'
-                }
-            }).catch(() => {});
-        }
-    } catch {}
 }
 
 async function isAlwaysOnlineEnabled() {
@@ -767,7 +737,7 @@ async function startBot() {
                 creds: state.creds,
                 keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "silent" }, nullStream)),
             },
-            markOnlineOnConnect: !isGhostActive,
+            markOnlineOnConnect: false,
             generateHighQualityLinkPreview: false,
             syncFullHistory: false,
             shouldSyncHistoryMessage: () => false, // Disable history sync for real-time only
@@ -795,25 +765,19 @@ async function startBot() {
         botSocket.sendPresenceUpdate = async function (...args) {
             const [presenceType, jid] = args;
             const ghostMode = await store.getSetting('global', 'stealthMode');
-            if (ghostMode && ghostMode.enabled) {
-                printLog('info', '👻 Blocked presence update (stealth mode)');
-                return;
-            }
+            if (ghostMode && ghostMode.enabled) return;
 
             const alwaysOnline = await isAlwaysOnlineEnabled();
             if (alwaysOnline) {
                 const state = String(presenceType || '').toLowerCase();
-                if (state === 'unavailable') {
-                    return; // Never go offline when alwaysOnline is enabled
-                }
+                if (state === 'unavailable') return; // Stay online when alwaysOnline is enabled
                 if (state === 'paused') {
-                    // Re-assert available presence after typing finishes
                     return originalSendPresenceUpdate.call(this, 'available', jid);
                 }
-            } else if (!alwaysOnline && !jid) {
+            } else {
                 const state = String(presenceType || '').toLowerCase();
-                if (state === 'available') {
-                    return originalSendPresenceUpdate.call(this, 'unavailable');
+                if (state === 'paused' || state === 'available') {
+                    if (!jid) return originalSendPresenceUpdate.call(this, 'unavailable');
                 }
             }
 

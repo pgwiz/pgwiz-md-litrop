@@ -342,35 +342,6 @@ async function getPresenceConfig() {
     return { alwaysOnline: isEn };
 }
 
-async function broadcastPresenceAvailable(sock) {
-    if (!sock) return;
-    try {
-        const ghostMode = await store.getSetting('global', 'stealthMode');
-        if (ghostMode && ghostMode.enabled) return;
-
-        const alwaysOnline = await isAlwaysOnlineEnabled();
-        if (!alwaysOnline) return;
-
-        const me = sock?.authState?.creds?.me || sock?.user;
-        const name = String(me?.name || settings.botName || 'PGWIZ-MD').replace(/@/g, '');
-        if (me && !me.name) me.name = name;
-
-        // 1. Standard Baileys presence update
-        await sock.sendPresenceUpdate('available').catch(() => {});
-
-        // 2. Direct presence stanza to WhatsApp server for 100% reliable online indicator
-        if (typeof sock.sendNode === 'function') {
-            await sock.sendNode({
-                tag: 'presence',
-                attrs: {
-                    name,
-                    type: 'available'
-                }
-            }).catch(() => {});
-        }
-    } catch {}
-}
-
 async function isAlwaysOnlineEnabled() {
     try {
         const config = await getPresenceConfig();
@@ -794,25 +765,19 @@ async function startBot() {
         botSocket.sendPresenceUpdate = async function (...args) {
             const [presenceType, jid] = args;
             const ghostMode = await store.getSetting('global', 'stealthMode');
-            if (ghostMode && ghostMode.enabled) {
-                printLog('info', '👻 Blocked presence update (stealth mode)');
-                return;
-            }
+            if (ghostMode && ghostMode.enabled) return;
 
             const alwaysOnline = await isAlwaysOnlineEnabled();
             if (alwaysOnline) {
                 const state = String(presenceType || '').toLowerCase();
-                if (state === 'unavailable') {
-                    return; // Never go offline when alwaysOnline is enabled
-                }
+                if (state === 'unavailable') return; // Stay online when alwaysOnline is enabled
                 if (state === 'paused') {
-                    // Re-assert available presence after typing finishes
                     return originalSendPresenceUpdate.call(this, 'available', jid);
                 }
-            } else if (!alwaysOnline && !jid) {
+            } else {
                 const state = String(presenceType || '').toLowerCase();
-                if (state === 'available') {
-                    return originalSendPresenceUpdate.call(this, 'unavailable');
+                if (state === 'paused' || state === 'available') {
+                    if (!jid) return originalSendPresenceUpdate.call(this, 'unavailable');
                 }
             }
 

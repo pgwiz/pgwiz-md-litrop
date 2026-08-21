@@ -63,7 +63,7 @@ module.exports = {
     command: 'alwaysonline',
     aliases: ['alwayson', 'autoonline', 'online', 'presence'],
     category: 'owner',
-    description: 'Toggle 24/7 continuous online presence (on/off)',
+    description: 'Toggle continuous online presence 24/7 (on/off)',
     usage: '.alwaysonline <on|off>',
     ownerOnly: true,
 
@@ -97,7 +97,7 @@ module.exports = {
                 }
 
                 return await sock.sendMessage(chatId, {
-                    text: '✅ *Always-Online is now ENABLED!*\n\nThe bot will now stay online 24/7 continuously.',
+                    text: '✅ *Always-Online is now ENABLED!*\n\nThe bot will now broadcast online presence 24/7 continuously.',
                     ...channelInfo
                 }, { quoted: message });
             }
@@ -112,7 +112,7 @@ module.exports = {
                 }
 
                 return await sock.sendMessage(chatId, {
-                    text: '❌ *Always-Online is now DISABLED.*\n\nThe bot will now appear offline when idle as normal.',
+                    text: '❌ *Always-Online is now DISABLED.*\n\nThe bot will now appear offline when idle.',
                     ...channelInfo
                 }, { quoted: message });
             }
