@@ -73,72 +73,20 @@ Easily connect to your WhatsApp account by pair code.
 
 ----
 
-### Step 4: Deploy Now
+### Step 4: Deploy Now 🚀
 
-**Option A: Deploy In Heroku**
-1. [Sign Up on Heroku](https://signup.heroku.com/) if you haven’t already.
-2. Click the button below to deploy directly In Heroku:
-   <br>
-   <a href='https://heroku.com/deploy?template=https://github.com/pgwiz/pgwiz-md-litrop/Bypass' target="_blank">
-      <img alt='Deploy In Heroku' src='https://img.shields.io/badge/-DEPLOY%20NOW-purple?style=for-the-badge&logo=heroku&logoColor=white'/>
-   </a>
+Choose your preferred cloud provider or hosting panel below to deploy in 1-click:
 
-**Option B: Deploy In Koyeb**
-1. [Sign Up on Koyeb](https://app.koyeb.com/auth/signup). if you haven’t already.
-2. Click the button below to deploy using Koyeb:
-   <br>
-   <a href='https://app.koyeb.com' target="_blank">
-      <img alt='Deploy In Koyeb' src='https://img.shields.io/badge/-DEPLOY-red?style=for-the-badge&logo=koyeb&logoColor=white'/>
-   </a>
-
-**Option C: Deploy In Railway**
-1. [Sign Up on Railway](https://railway.app/login) if you haven’t already.
-2. Click the button below to deploy using Railway:
-   <br>
-   <a href='https://railway.app/new' target="_blank">
-      <img alt='Deploy In Railway' src='https://img.shields.io/badge/-DEPLOY-purple?style=for-the-badge&logo=railway&logoColor=white'/>
-   </a>
-
-**Option D: Deploy In Render**
-1. [Sign Up on Render](https://dashboard.render.com/register) if you haven’t already.
-2. Click the button below to deploy using Render:
-   <br>
-   <a href='https://dashboard.render.com' target="_blank">
-      <img alt='Deploy In Render' src='https://img.shields.io/badge/-DEPLOY-black?style=for-the-badge&logo=render&logoColor=white'/>
-   </a>
-   
-**Option E: Deploy In Replit**
-1. [Sign Up on Replit](https://repl.it) if you haven’t already.
-2. Click the button below to deploy using Replit:
-   <br>
-   <a href='https://repl.it/github/pgwiz/pgwiz-md-litrop' target="_blank">
-      <img alt='Deploy In Replit' src='https://img.shields.io/badge/-DEPLOY-orange?style=for-the-badge&logo=replit&logoColor=white'/>
-   </a>
-
-**Option F: Deploy In Sevalla**
-1. [Sign Up on Sevalla](https://sevalla.com/signup/) if you haven’t already.
-2. Click the button below to deploy using Sevalla:
-   <br>
-   <a href='https://sevalla.com' target="_blank">
-      <img alt='Deploy In Sevalla' src='https://img.shields.io/badge/-DEPLOY%20NOW-blue?style=for-the-badge&logo=sevalla&logoColor=white'/>
-   </a>
-   
-**Option G: Deploy In Fly.io**
-1. [Sign Up on Fly.io](https://fly.io/app/sign-up) if you haven’t already.
-2. Click the button below to deploy using Fly.io:
-   <br>
-   <a href='https://fly.io' target="_blank">
-      <img alt='Deploy In Sevalla' src='https://img.shields.io/badge/-DEPLOY%20NOW-magenta?style=for-the-badge&logo=flyio&logoColor=white'/>
-   </a>
-
-**Option H: Deploy In Panel**
-1. First You Have to Sign up on discord using web or app then click below.
-2. [Sign Up On Panel](https://optiklink.com/auth) if you don’t have Already.
-3. Click the button below to deploy using Panel:
-   <br>
-   <a href='https://control.optiklink.com/' target="_blank">
-      <img alt='Deploy In Panel' src='https://img.shields.io/badge/-DEPLOY-green?style=for-the-badge&logo=Cloudflare&logoColor=white'/>
-   </a>
+| Platform | Signup | 1-Click Deployment |
+| :--- | :--- | :--- |
+| **Heroku** | [Sign Up on Heroku](https://signup.heroku.com/) | [![Deploy to Heroku](https://img.shields.io/badge/Deploy%20on-Heroku-7056bf?style=for-the-badge&logo=heroku&logoColor=white)](https://heroku.com/deploy?template=https://github.com/pgwiz/pgwiz-md-litrop) |
+| **Koyeb** | [Sign Up on Koyeb](https://app.koyeb.com/auth/signup) | [![Deploy to Koyeb](https://img.shields.io/badge/Deploy%20on-Koyeb-121212?style=for-the-badge&logo=koyeb&logoColor=white)](https://app.koyeb.com) |
+| **Railway** | [Sign Up on Railway](https://railway.app/login) | [![Deploy to Railway](https://img.shields.io/badge/Deploy%20on-Railway-0B0D0E?style=for-the-badge&logo=railway&logoColor=white)](https://railway.app/new) |
+| **Render** | [Sign Up on Render](https://dashboard.render.com/register) | [![Deploy to Render](https://img.shields.io/badge/Deploy%20on-Render-46E3B7?style=for-the-badge&logo=render&logoColor=black)](https://dashboard.render.com) |
+| **Replit** | [Sign Up on Replit](https://repl.it/) | [![Deploy on Replit](https://img.shields.io/badge/Deploy%20on-Replit-F26207?style=for-the-badge&logo=replit&logoColor=white)](https://repl.it/github/pgwiz/pgwiz-md-litrop) |
+| **Sevalla** | [Sign Up on Sevalla](https://sevalla.com/signup/) | [![Deploy on Sevalla](https://img.shields.io/badge/Deploy%20on-Sevalla-0052FF?style=for-the-badge&logo=sevalla&logoColor=white)](https://sevalla.com) |
+| **Fly.io** | [Sign Up on Fly.io](https://fly.io/app/sign-up) | [![Deploy on Fly.io](https://img.shields.io/badge/Deploy%20on-Fly.io-24185B?style=for-the-badge&logo=flydotio&logoColor=white)](https://fly.io) |
+| **Panel / Pterodactyl** | [Sign Up via Discord](https://optiklink.com/auth) | [![Deploy on Panel](https://img.shields.io/badge/Deploy%20on-Panel-22c55e?style=for-the-badge&logo=gnu-bash&logoColor=white)](https://session-s.pgwiz.cloud/deploy/panel) |
 
 ---
 
@@ -155,21 +103,19 @@ Easily connect to your WhatsApp account by pair code.
 
 ---
 
-## Features
+## ✨ Features Showcase
 
-- **Tag all group members** with the `.tagall` command
-- **Automated Tasks** with the `.autoreact, .autostatus, .autoread` commands
-- **Admin restricted usage** (Only group admins can use certain commands)
-- **Owner restricted usage** (Only owner/sudo can use certain commands)
-- **Games** like Tic-Tac-Toe for interactive group engagement
-- **Social Media** downloaders for popular social media webistes and apps
-- **Text Makers** with `.ephoto`
-- **Text-to-Speech** with `.tts`
-- **Sticker creation** with `.sticker`
-- **Logo creations** with `.ephoto`
-- **Anti-link detection** for group safety
-- **Warn and manage group members** with admin control
-- **And much more .....**
+Explore the full interactive list of capabilities on our [🌐 Web Features Showcase](https://session-s.pgwiz.cloud/features).
+
+| Category | Description & Highlights | Key Commands |
+| :--- | :--- | :--- |
+| 🛡️ **Group Moderation** | Tag members, manage infractions, restrict permissions, schedule auto-clearing. | `.tagall`, `.warn`, `.clear`, `.autoclear` |
+| ⚡ **24/7 Automation** | Always-online presence heartbeat, auto status viewer with ignore list, auto read & reactions. | `.alwaysonline`, `.autostatus`, `.autoread`, `.autoreact` |
+| 📥 **Media Downloaders** | High-speed scrapers for YouTube MP3/MP4, TikTok without watermarks, Facebook & Reels. | `.play`, `.song`, `.video`, `.tiktok`, `.fb` |
+| 🎨 **Creative Tools** | Instant sticker conversion, multi-lingual TTS voice synthesizer, 3D logo maker, AI background remover. | `.sticker`, `.tts`, `.ephoto`, `.removebg` |
+| 🎮 **Interactive & Games** | Turn-based Tic-Tac-Toe, smart conversational AI chatbot, custom mention stickers. | `.tictactoe`, `.chatbot`, `.mention` |
+| 🔒 **Security & Safeguards** | Anti-Link, Anti-Badword, Anti-Delete message recoverer, Anti-Call, and PM spam protection. | `.antilink`, `.antidelete`, `.anticall`, `.pmblocker` |
+| 👑 **Owner & Sudo Control** | Multi-owner sudo whitelist, multi-mode switcher (`public`, `private`, `self`, `groups`, `inbox`). | `.mode`, `.setsudo`, `.delsudo`, `.block` |
 
 ---
 
