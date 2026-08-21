@@ -127,42 +127,77 @@ It is lightweight and can be easily customized to add more commands as per your 
 
 ---
 
-## Self Hosting Guide
+## 💻 Self-Hosting Guide
 
-### Deploye in Termux/Ubuntu/Vps/Rdp
-   
-```
+Deploy the bot natively on **Termux (Android)** or your own **Linux VPS / RDP / Ubuntu server**.
+
+---
+
+### 📱 Option 1: Termux (Android)
+
+<details open>
+<summary><b>Click to view Termux setup steps</b></summary>
+<br>
+
+**1️⃣ Setup Ubuntu Environment:**
+```bash
 pkg update && pkg upgrade -y
-```
-```
-pkg install proot-distro
-```
-```
+pkg install proot-distro -y
 proot-distro install ubuntu
-```
-```
 proot-distro login ubuntu
 ```
-```
+
+**2️⃣ Install System Dependencies & Node.js 20+ LTS:**
+```bash
 apt update && apt upgrade -y
-```
-```
 apt install -y webp git ffmpeg curl imagemagick
+curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && apt install -y nodejs
 ```
-```
-apt -y remove nodejs
-curl -fsSl https://deb.nodesource.com/setup_20.x | bash - && apt -y install nodejs
-```
-```
+
+**3️⃣ Clone & Launch:**
+```bash
 git clone https://github.com/pgwiz/pgwiz-md-litrop.git
 cd pgwiz-md-litrop
-```
-```
 npm install
-```
-```
 npm start
 ```
+
+> 💡 **Quick Note:** Set your `SESSION_ID` in `.env` or `config.env` before running `npm start`.
+</details>
+
+---
+
+### 🖥️ Option 2: Linux VPS / RDP / Ubuntu Server
+
+<details>
+<summary><b>Click to view VPS setup steps</b></summary>
+<br>
+
+**1️⃣ One-Step Installation:**
+```bash
+# 1. Update and install packages
+sudo apt update && sudo apt upgrade -y
+sudo apt install -y git ffmpeg curl imagemagick webp
+
+# 2. Install Node.js 20+ LTS
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt install -y nodejs
+
+# 3. Clone and install
+git clone https://github.com/pgwiz/pgwiz-md-litrop.git
+cd pgwiz-md-litrop
+npm install
+npm start
+```
+
+**2️⃣ Run 24/7 in Background (PM2):**
+```bash
+npm install -g pm2
+pm2 start index.js --name "pgwiz-md-litrop"
+pm2 save
+pm2 startup
+```
+</details>
 
 ---
 
