@@ -22,6 +22,8 @@
     "start:clean": "npm run cleanup && npm run start:optimized",
     "start:fresh": "npm run reset-session && npm start",
     "install:panel": "npm install --legacy-peer-deps",
+    "install:pnpm": "pnpm install --no-frozen-lockfile",
+    "start:pnpm": "pnpm start",
     "install:force": "npm install --force",
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "node build.js",
