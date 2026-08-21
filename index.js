@@ -322,34 +322,7 @@ function parseBoolean(value, fallback = false) {
     return String(value).toLowerCase() === 'true';
 }
 
-async function getPresenceConfig() {
-    if (typeof global.alwaysOnlineState === 'boolean') {
-        return { alwaysOnline: global.alwaysOnlineState };
-    }
-    try {
-        const existing = await store.getSetting('global', 'presenceConfig');
-        if (existing && typeof existing.alwaysOnline === 'boolean') {
-            global.alwaysOnlineState = existing.alwaysOnline;
-            return { alwaysOnline: existing.alwaysOnline };
-        }
-    } catch (e) {}
 
-    const envVal = process.env.ALWAYS_ONLINE || process.env.ALWAYS_ONLINE_PRESENCE;
-    const isEn = (envVal !== undefined && String(envVal).trim() !== '')
-        ? (String(envVal).toLowerCase() === 'true' || String(envVal) === '1' || String(envVal).toLowerCase() === 'on')
-        : (settings.alwaysOnline ?? false);
-    global.alwaysOnlineState = isEn;
-    return { alwaysOnline: isEn };
-}
-
-async function isAlwaysOnlineEnabled() {
-    try {
-        const config = await getPresenceConfig();
-        return !!config.alwaysOnline;
-    } catch {
-        return false;
-    }
-}
 
 async function bootstrapStoreSchemaAndFallbacks() {
     try {
@@ -667,6 +640,67 @@ if (!server.listening) {
     });
 }
 
+
+// ==================== PRESENCE ENGINE ====================
+async function isAlwaysOnlineEnabled() {
+    if (typeof global.alwaysOnlineState === 'boolean') {
+        return global.alwaysOnlineState;
+    }
+    try {
+        const config = await store.getSetting('global', 'presenceConfig');
+        if (config && typeof config.alwaysOnline === 'boolean') {
+            global.alwaysOnlineState = config.alwaysOnline;
+            return config.alwaysOnline;
+        }
+    } catch {}
+    const envVal = process.env.ALWAYS_ONLINE || process.env.ALWAYS_ONLINE_PRESENCE;
+    const isEn = (envVal !== undefined && String(envVal).trim() !== '') 
+        ? (String(envVal).toLowerCase() === 'true' || String(envVal) === '1' || String(envVal).toLowerCase() === 'on')
+        : (settings.alwaysOnline ?? false);
+    global.alwaysOnlineState = isEn;
+    return isEn;
+}
+
+async function broadcastPresenceAvailable(sock) {
+    if (!sock) return;
+    try {
+        const ghostMode = await store.getSetting('global', 'stealthMode');
+        if (ghostMode && ghostMode.enabled) return;
+
+        const alwaysOnline = await isAlwaysOnlineEnabled();
+        if (!alwaysOnline) return;
+
+        const me = sock?.authState?.creds?.me || sock?.user;
+        const name = String(me?.name || settings.botName || 'PGWIZ-MD').replace(/@/g, '');
+        if (me && !me.name) me.name = name;
+
+        await sock.sendPresenceUpdate('available').catch(() => {});
+        if (typeof sock.sendNode === 'function') {
+            await sock.sendNode({
+                tag: 'presence',
+                attrs: { name, type: 'available' }
+            }).catch(() => {});
+        }
+    } catch {}
+}
+
+async function broadcastPresenceOffline(sock) {
+    if (!sock) return;
+    try {
+        const me = sock?.authState?.creds?.me || sock?.user;
+        const name = String(me?.name || settings.botName || 'PGWIZ-MD').replace(/@/g, '');
+
+        await sock.sendPresenceUpdate('unavailable').catch(() => {});
+        if (typeof sock.sendNode === 'function') {
+            await sock.sendNode({
+                tag: 'presence',
+                attrs: { name, type: 'unavailable' }
+            }).catch(() => {});
+        }
+    } catch {}
+}
+// ========================================================
+
 async function startBot() {
     if (botStartInProgress) {
         return activeSocket;
@@ -924,6 +958,10 @@ async function startBot() {
                     }
 
                     const messageId = mek.key?.id || '';
+                    if (messageId && isDuplicateMessage(messageId)) {
+                        continue;
+                    }
+        
                     if (mek.key?.fromMe && messageId.startsWith('BAE5') && messageId.length === 16) continue;
 
                     const botMode = await store.getBotMode();
