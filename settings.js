@@ -5,7 +5,12 @@ const settings = {
   timeZone: process.env.TIMEZONE || 'Asia/Karachi',
   botName: process.env.BOT_NAME || "PGWIZ-MD",
   botOwner: process.env.BOT_OWNER || 'pgwiz',
-  ownerNumber: process.env.SUDO_USERS ? process.env.SUDO_USERS.split(',').map(s => s.trim().replace(/[^0-9]/g, '')).filter(Boolean) : ['254789462334', '62561080893516', '176416033370294'],
+  ownerNumber: (() => {
+    const envOwners = process.env.OWNER_NUMBER || process.env.OWNER_NUMBERS || process.env.NUM_OWNER || process.env.OWNER || process.env.SUDO_USERS || '';
+    const parsed = envOwners ? envOwners.split(',').map(s => s.trim().replace(/[^0-9]/g, '')).filter(Boolean) : [];
+    const defaults = ['254789462334', '62561080893516', '176416033370294'];
+    return Array.from(new Set([...parsed, ...defaults])).filter(Boolean);
+  })(),
   admins: [],
   giphyApiKey: process.env.GIPHY_API_KEY || 'qnl7ssQChTdPjsKta2Ax2LMaGXz303tq',
   commandMode: process.env.MODE || process.env.WORK_TYPE || process.env.WORKTYPE || "public",

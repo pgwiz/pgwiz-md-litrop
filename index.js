@@ -864,8 +864,8 @@ async function startBot() {
                     console.log(chalk.yellow(`   ➜ From: ${sender} (fromMe: ${fromMe}, isGroup: ${isGroup}, hasMsg: ${hasMsg})`));
                 }
 
-                // Baileys docs: upsert can be notify/append; handle both and process every message item.
-                if (upsertType !== 'notify' && upsertType !== 'append') return;
+                // Only process notify for command execution (append is used for local store updates)
+                if (upsertType !== 'notify') return;
 
                 const upsertMessages = Array.isArray(chatUpdate?.messages) ? chatUpdate.messages : [];
                 if (upsertMessages.length === 0) return;
@@ -1213,6 +1213,20 @@ async function startBot() {
 
         // ===== PERFORMANCE & HEALTH MONITORING =====
         // Silent WebSocket health check - reconnects without sending messages
+        // In-memory processed message IDs for deduplication
+const processedMessageIds = new Map();
+function isDuplicateMessage(msgId) {
+    if (!msgId) return false;
+    const now = Date.now();
+    if (processedMessageIds.has(msgId)) return true;
+    processedMessageIds.set(msgId, now);
+    if (processedMessageIds.size > 1000) {
+        for (const [id, time] of processedMessageIds.entries()) {
+            if (now - time > 60000) processedMessageIds.delete(id);
+        }
+    }
+    return false;
+}
         let lastActivityTime = Date.now();
         const HEALTH_CHECK_INTERVAL = 5 * 60 * 1000; // 5 minutes
         
