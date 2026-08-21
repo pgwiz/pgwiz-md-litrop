@@ -5,10 +5,10 @@ const settings = {
     return String(v).toLowerCase() === 'true' || String(v) === '1' || String(v).toLowerCase() === 'on';
   })(),
   prefixes: ['.', '!', '/', '#', '_'],
-  packname: process.env.PACKNAME || process.env.PACK_NAME || 'PGWIZ-MD',
+  packname: process.env.PACKNAME || process.env.PACK_NAME || process.env.BOT_NAME || "PGWIZ-MD",
   author: process.env.AUTHOR || process.env.PACK_AUTHOR || '‎pgwiz',
   timeZone: process.env.TIMEZONE || 'Asia/Karachi',
-  botName: process.env.BOT_NAME || "PGWIZ-MD",
+  botName: process.env.BOT_NAME || process.env.BOTNAME || "PGWIZ-MD",
   botOwner: process.env.BOT_OWNER || 'pgwiz',
   ownerNumber: (() => {
     const envOwners = process.env.OWNER_NUMBER || process.env.OWNER_NUMBERS || process.env.NUM_OWNER || process.env.OWNER || process.env.SUDO_USERS || '';
@@ -28,7 +28,7 @@ const settings = {
   channelLink: "https://whatsapp.com/channel/0029Va8cpObHwXbDoZE9VY3K",
   ytch: "pgwiz",
   newsletterJid: '120363179639202475@newsletter',
-  newsletterName: process.env.BOT_NAME || "PGWIZ-MD"
+  newsletterName: process.env.BOT_NAME || process.env.BOTNAME || process.env.NEWSLETTER_NAME || "PGWIZ-MD"
 };
 
 module.exports = settings;

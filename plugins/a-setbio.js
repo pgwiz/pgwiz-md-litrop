@@ -35,7 +35,7 @@ async function fetchQuotes() {
     if (allQuotes.length === 0) {
       // Fallback quotes if fetch fails
       return [
-        '💎 By PGWIZ-MD - Your WhatsApp Bot',
+        `💎 By ${settings.botName || "PGWIZ-MD"} - Your WhatsApp Bot`,
         '🌟 Stay positive, work hard, make it happen.',
         '✨ Believe in yourself and all that you are.',
         '🚀 The future belongs to those who believe in the beauty of their dreams.',
@@ -51,12 +51,12 @@ async function fetchQuotes() {
     
     return allQuotes;
   } catch (error) {
-    return cachedQuotes.length > 0 ? cachedQuotes : ['💎 By PGWIZ-MD - Your WhatsApp Bot'];
+    return cachedQuotes.length > 0 ? cachedQuotes : [`💎 By ${settings.botName || "PGWIZ-MD"} - Your WhatsApp Bot`];
   }
 }
 
 function getRandomQuote(quotes) {
-  if (!quotes || quotes.length === 0) return '💎 By PGWIZ-MD';
+  if (!quotes || quotes.length === 0) return `💎 By ${settings.botName || "PGWIZ-MD"}`;
   return quotes[Math.floor(Math.random() * quotes.length)];
 }
 
@@ -72,7 +72,7 @@ async function updateAutoBio(sock) {
     if (autoBioSettings.customBio) {
       bio = autoBioSettings.customBio.replace('{quote}', randomQuote);
     } else {
-      bio = `${randomQuote}\n\n💎 PGWIZ-MD`;
+      bio = `${randomQuote}\n\n💎 ${settings.botName || "PGWIZ-MD"}`;
     }
     if (bio.length > 139) {
       bio = bio.substring(0, 136) + '...';
@@ -130,7 +130,7 @@ module.exports = {
                 `• \`.setbio set <text>\` - Set custom bio\n` +
                 `• \`.setbio reset\` - Reset to default bio\n` +
                 `• \`.setbio preview\` - Preview random quote\n\n` +
-                `*Default Bio:*\n{quote}\n💎 PGWIZ-MD\n\n` +
+                `*Default Bio:*\n{quote}\n💎 ${settings.botName || "PGWIZ-MD"}\n\n` +
                 `*Custom Bio:*\n${autoBioSettings.customBio || 'Not set'}\n\n` +
                 `*Note:* Use \`{quote}\` in custom bio to insert random quotes.\n\n` +
                 `*Sources:*\n• Famous Quotes\n• Motivational Quotes\n• Pickup Lines`
@@ -141,7 +141,7 @@ module.exports = {
         const quotes = await fetchQuotes();
         const randomQuote = getRandomQuote(quotes);
         return await sock.sendMessage(chatId, {
-          text: `*📝 Preview Quote*\n\n${randomQuote}\n\n💎 PGWIZ-MD\n\n_This is how your bio will look with random quotes_`
+          text: `*📝 Preview Quote*\n\n${randomQuote}\n\n💎 ${settings.botName || 'PGWIZ-MD'}\n\n_This is how your bio will look with random quotes_`
         }, { quoted: message });
       }
 
@@ -216,7 +216,7 @@ module.exports = {
         }
 
         return await sock.sendMessage(chatId, {
-          text: '✅ *Bio reset to default!*\n\n*Default bio:*\n{quote}\n💎 PGWIZ-MD'
+          text: `✅ *Bio reset to default!*\n\n*Default bio:*\n{quote}\n💎 ${settings.botName || "PGWIZ-MD"}`
         }, { quoted: message });
       }
 

@@ -23,13 +23,13 @@ module.exports = {
         isForwarded: true,
         forwardedNewsletterMessageInfo: {
           newsletterJid: settings.newsletterJid || '120363179639202475@newsletter',
-          newsletterName: settings.newsletterName || 'PGWIZ-MD',
+          newsletterName: settings.newsletterName || settings.botName || 'PGWIZ-MD',
           serverMessageId: -1
         }
       }
     };
 
-    const text = `⚡ *PGWIZ-MD EDITION & VERSION*
+    const text = `⚡ *${(settings.botName || 'PGWIZ-MD').toUpperCase()} EDITION & VERSION*
 
 📦 *Edition:* \`Lightweight Edition (pgwiz-md-litrop)\`
 🚀 *Version:* \`v${settings.version}\`

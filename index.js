@@ -1115,13 +1115,13 @@ async function startBot() {
                     const ghostStatus = (ghostMode && ghostMode.enabled) ? '\n👻 Stealth Mode: ACTIVE' : '';
 
                     await botSocket.sendMessage(botNumber, {
-                        text: `🤖 Bot Connected Successfully!\n\n⏰ Time: ${new Date().toLocaleString()}\n✅ Status: Online and Ready!${ghostStatus}\n\n✅Make sure to join below channel`,
+                        text: `🤖 ${settings.botName || 'PGWIZ-MD'} Connected Successfully!\n\n⏰ Time: ${new Date().toLocaleString()}\n✅ Status: Online and Ready!${ghostStatus}\n\n✅Make sure to join below channel`,
                         contextInfo: {
                             forwardingScore: 1,
                             isForwarded: true,
                             forwardedNewsletterMessageInfo: {
                                 newsletterJid: '120363179639202475@newsletter',
-                                newsletterName: 'PGWIZ-MD',
+                                newsletterName: settings.newsletterName || settings.botName || 'PGWIZ-MD',
                                 serverMessageId: -1
                             }
                         }
@@ -1306,7 +1306,7 @@ function isDuplicateMessage(msgId) {
 
 
 async function main() {
-    printLog('info', 'Starting PGWIZ-MD BOT...');
+    printLog('info', `Starting ${settings.botName || 'PGWIZ-MD'} BOT...`);
     startupSessionCleanup();
 
     await bootstrapStoreSchemaAndFallbacks();
