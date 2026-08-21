@@ -1,3 +1,4 @@
+const settings = require('../settings');
 /*****************************************************************************
  *                                                                           *
  *                     Developed By Bot Owner                                *

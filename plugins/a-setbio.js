@@ -1,3 +1,4 @@
+const settings = require('../settings');
 const store = require('../lib/lightweight_store');
 const axios = require('axios');
 

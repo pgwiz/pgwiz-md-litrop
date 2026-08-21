@@ -55,7 +55,7 @@ async function getMenuChannelInfo() {
   const custom = await store.getSetting('global', 'menuChannel');
   return {
     newsletterJid: custom?.newsletterJid || settings.newsletterJid || '120363179639202475@newsletter',
-    newsletterName: custom?.newsletterName || settings.newsletterName || 'PGWIZ-MD'
+    newsletterName: custom?.newsletterName || settings.newsletterName || settings.botName || 'PGWIZ-MD'
   };
 }
 
