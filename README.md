@@ -29,6 +29,7 @@
 <!-- Quick Navigation Canvas -->
 <p align="center">
   <a href="#-quick-deploy-canvas"><img src="https://img.shields.io/badge/🚀_Deploy-1--Click-0070f3?style=for-the-badge" alt="Deploy"></a>
+  <a href="https://session-s.pgwiz.cloud/wiki"><img src="https://img.shields.io/badge/📖_Command-Wiki_(240+)-eab308?style=for-the-badge" alt="Wiki"></a>
   <a href="https://session-s.pgwiz.cloud/features"><img src="https://img.shields.io/badge/✨_Features-Showcase-00d4aa?style=for-the-badge" alt="Features"></a>
   <a href="https://session-s.pgwiz.cloud"><img src="https://img.shields.io/badge/🔑_Session-Scanner-ff4d4d?style=for-the-badge" alt="Pair"></a>
   <a href="#-environment-configuration-canvas"><img src="https://img.shields.io/badge/⚙️_Config-Env_Vars-8b5cf6?style=for-the-badge" alt="Env"></a>
@@ -47,7 +48,8 @@ flowchart LR
     SCK <--> AUTH[Dual Auth Engine
 SQLite3 + MongoDB Sync]
     SCK <--> DISP[Message Deduplicator & Router]
-    DISP --> PLUG[Modular Command Execution Engine]
+    DISP --> PLUG[Modular Command Execution Engine
+240+ Plugins]
     PLUG --> RES[Auto-Reaction / Media Transcoder / AI Response]
 ```
 
@@ -124,7 +126,7 @@ Choose your hosting provider below for instant zero-configuration deployment:
 | :--- | :--- | :--- |
 | **Heroku** | [Sign Up on Heroku](https://signup.heroku.com/) | [![Deploy on Heroku](https://img.shields.io/badge/Deploy%20on-Heroku-7056bf?style=for-the-badge&logo=heroku&logoColor=white)](https://heroku.com/deploy?template=https://github.com/pgwiz/pgwiz-md-litrop) |
 | **Koyeb** | [Sign Up on Koyeb](https://app.koyeb.com/auth/signup) | [![Deploy on Koyeb](https://img.shields.io/badge/Deploy%20on-Koyeb-121212?style=for-the-badge&logo=koyeb&logoColor=white)](https://app.koyeb.com) |
-| **Railway** | [Sign Up on Railway](https://railway.app/login) | [![Deploy on Railway](https://img.shields.io/badge/Deploy%20on-Railway-0B0D0E?style=for-the-badge&logo=railway&logoColor=white)](https://railway.app/new) |
+| **Railway** | [Sign Up on Railway](https://railway.app/login) | [![Deploy to Railway](https://img.shields.io/badge/Deploy%20on-Railway-0B0D0E?style=for-the-badge&logo=railway&logoColor=white)](https://railway.app/new) |
 | **Render** | [Sign Up on Render](https://dashboard.render.com/register) | [![Deploy on Render](https://img.shields.io/badge/Deploy%20on-Render-46E3B7?style=for-the-badge&logo=render&logoColor=black)](https://dashboard.render.com) |
 | **Replit** | [Sign Up on Replit](https://repl.it/) | [![Deploy on Replit](https://img.shields.io/badge/Deploy%20on-Replit-F26207?style=for-the-badge&logo=replit&logoColor=white)](https://repl.it/github/pgwiz/pgwiz-md-litrop) |
 | **Sevalla** | [Sign Up on Sevalla](https://sevalla.com/signup/) | [![Deploy on Sevalla](https://img.shields.io/badge/Deploy%20on-Sevalla-0052FF?style=for-the-badge&logo=sevalla&logoColor=white)](https://sevalla.com) |
@@ -205,9 +207,10 @@ pm2 startup
 
 ---
 
-## ✨ Features Showcase
+## 📖 Complete Command Wiki & Guide
 
-Explore the full interactive list of capabilities on our [🌐 Web Features Showcase](https://session-s.pgwiz.cloud/features).
+Access our interactive online manual with real-time search, filters, and usage examples:
+👉 **[🌐 Open PGWIZ-MD Command Wiki (240+ Plugins)](https://session-s.pgwiz.cloud/wiki)**
 
 | Category | Description & Highlights | Key Commands |
 | :--- | :--- | :--- |
