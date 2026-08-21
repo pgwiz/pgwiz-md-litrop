@@ -1,17 +1,17 @@
-# 📖 Complete Command Reference (242 Commands)
+# 📖 Complete Command & Subcommand Reference (242 Commands)
 
-Below is the complete categorized reference of all 242 plugins and commands available in PGWIZ-MD.
+Below is the complete categorized reference of all 242 plugins and commands available in PGWIZ-MD, including syntax, arguments, and subcommands.
 
 ---
 
 ## 📂 Category: ADMIN (25 Commands)
 
-| Command | Usage | Permissions | Description |
+| Command | Usage / Subcommands | Permissions | Description |
 | :--- | :--- | :--- | :--- |
 | `.wipe` | `.wipe [bot | all | prefix] [count]` | ⚡ Public | Force delete messages (bot/all/prefix) |
-| `.antibadword` | `.antibadword <on|off|add|remove|list>` | 🛡️ Admin | Configure anti-badword filter to delete messages containing inappropriate words |
-| `.antilink` | `.antilink <on|off|set>` | 🛡️ Admin | Prevent users from sending links in the group |
-| `.antitag` | `.antitag <on|off|set>` | 🛡️ Admin | Prevent users from tagging all members |
+| `.antibadword` | `.antibadword on`<br>`.antibadword off`<br>`.antibadword add <word>`<br>`.antibadword del <word>` | 🛡️ Admin | Configure anti-badword filter to delete messages containing inappropriate words |
+| `.antilink` | `.antilink on`<br>`.antilink off`<br>`.antilink action <delete|warn|kick>` | 🛡️ Admin | Prevent users from sending links in the group |
+| `.antitag` | `.antitag delete`<br>`.antitag kick` | 🛡️ Admin | Prevent users from tagging all members |
 | `.chatbot` | `.chatbot <on|off>` | 🛡️ Admin | Enable or disable AI chatbot for the group |
 | `.delete` | `.delete <count> [@user] or reply with .delete` | 🛡️ Admin | Delete recent messages from group or specific user |
 | `.demote` | `.demote @user or reply to message` | 🛡️ Admin | Demote user(s) from admin to member |
@@ -19,7 +19,7 @@ Below is the complete categorized reference of all 242 plugins and commands avai
 | `.hidetag` | `.hidetag <message> or reply to message` | 🛡️ Admin | Tag all non-admin members without showing their names |
 | `.kick` | `.kick @user or reply to message` | 🛡️ Admin | Remove user(s) from the group |
 | `.mute` | `.mute [duration in minutes]` | 🛡️ Admin | Mute the group for a specified duration |
-| `.pgvars` | `.pgvars <list/update/delete> [KEY=VALUE]` | 👑 Owner | Manage .env variables (Owner Only) |
+| `.pgvars` | `.pgvars list`<br>`.pgvars get <VAR_NAME>`<br>`.pgvars set <VAR_NAME> <VALUE>`<br>`.pgvars del <VAR_NAME>`<br>`.pgvars reset` | 👑 Owner | Manage .env variables (Owner Only) |
 | `.promote` | `.promote [@user] or reply to message` | 🛡️ Admin | Promote user(s) to admin |
 | `.resetlink` | `.resetlink` | 🛡️ Admin | Reset group invite link |
 | `.setgdesc` | `.setgdesc <new description>` | 🛡️ Admin | Change group description |
@@ -31,24 +31,24 @@ Below is the complete categorized reference of all 242 plugins and commands avai
 | `.unban` | `.unban [@user] or reply to message` | ⚡ Public | Unban a user from using the bot |
 | `.unmute` | `.unmute` | 🛡️ Admin | Unmute the group |
 | `.vvadmin` | `.vvadmin (reply to a view-once media)` | ⚡ Public | Forward a view-once media (image/video/audio) to the main admin. |
-| `.warn` | `.warn [@user] or reply to message` | 🛡️ Admin | Warn a user (auto-kick after 3 warnings) |
+| `.warn` | `.warn @user [reason]`<br>`.warnings @user`<br>`.resetwarn @user` | 🛡️ Admin | Warn a user (auto-kick after 3 warnings) |
 | `.welcome` | `.welcome [on/off/message]` | 🛡️ Admin | Configure welcome message for the group |
 
 ## 📂 Category: OWNER (41 Commands)
 
-| Command | Usage | Permissions | Description |
+| Command | Usage / Subcommands | Permissions | Description |
 | :--- | :--- | :--- | :--- |
 | `.getfile` | `.getfile <filename>` | ⚡ Public | Read and display file contents from bot directory |
 | `.setbio` | `.setbio <on|off|set|reset>` | 👑 Owner | Set custom WhatsApp bio with random quotes |
-| `.alwaysonline` | `.alwaysonline <on|off|true|false>` | 👑 Owner | Toggle bot continuous online presence (on/off, true/false) |
+| `.alwaysonline` | `.alwaysonline on`<br>`.alwaysonline off` | 👑 Owner | Toggle bot continuous online presence (on/off, true/false) |
 | `.anticall` | `.anticall <on|off|status>` | 👑 Owner | Enable or disable auto-blocking of incoming calls |
-| `.antidelete` | `.antidelete <on|off>` | 👑 Owner | Enable or disable antidelete feature to track deleted messages |
-| `.autoreact` | `.autoreact on/off` | 👑 Owner | Toggle auto-react to messages |
-| `.autoclear` | `.autoclear <on|off|set <time>|status|list>` | 👑 Owner | Set automatic periodic chat clearing on a group or DM (e.g. .autoclear on, .autoclear set 12h) |
-| `.autoread` | `.autoread <on|off>` | 👑 Owner | Toggle automatic message reading (blue ticks) |
-| `.autostatus` | `.autostatus <on|off|react on|react off|ignore <num>|unignore <num>|ignored>` | 👑 Owner | Automatically view and react to WhatsApp statuses |
-| `.autotyping` | `.autotyping <on|off>` | 👑 Owner | Toggle auto-typing indicator when bot is processing messages |
-| `.clear` | `.clear` | 👑 Owner | Clear messages from the current chat or group |
+| `.antidelete` | `.antidelete on`<br>`.antidelete off` | 👑 Owner | Enable or disable antidelete feature to track deleted messages |
+| `.autoreact` | `.autoreact on`<br>`.autoreact off`<br>`.autoreact emojis <emoji_list>` | 👑 Owner | Toggle auto-react to messages |
+| `.autoclear` | `.autoclear <interval>`<br>`.autoclear off`<br>`.autoclear status` | 👑 Owner | Set automatic periodic chat clearing on a group or DM (e.g. .autoclear on, .autoclear set 12h) |
+| `.autoread` | `.autoread on`<br>`.autoread off` | 👑 Owner | Toggle automatic message reading (blue ticks) |
+| `.autostatus` | `.autostatus on`<br>`.autostatus off`<br>`.autostatus ignore <phone_number>`<br>`.autostatus unignore <phone_number>`<br>`.autostatus ignored` | 👑 Owner | Automatically view and react to WhatsApp statuses |
+| `.autotyping` | `.autotyping on`<br>`.autotyping enable`<br>`.autotyping off`<br>`.autotyping disable` | 👑 Owner | Toggle auto-typing indicator when bot is processing messages |
+| `.clear` | `.clear`<br>`.cleartemp` | 👑 Owner | Clear messages from the current chat or group |
 | `.clearsession` | `.clearsession` | ⚡ Public | Clear session files |
 | `.cleartmp` | `.cleartmp` | ⚡ Public | Clear tmp and temp directories |
 | `.creact` | `.creact on/off` | 👑 Owner | Toggle command reactions |
@@ -61,9 +61,9 @@ Below is the complete categorized reference of all 242 plugins and commands avai
 | `.listcmd` | `.listcmd` | ⚡ Public | List all sticker commands |
 | `.listrent` | `.listrent` | ⚡ Public | List all currently active sub-bots |
 | `.maintenance` | `.maintenance [minutes / stop]` | ⚡ Public | Disable non-owner commands for a duration or stop it early |
-| `.manage` | `.manage [toggle/alias] [command_name] [new_alias]` | ⚡ Public | Manage bot commands and aliases |
+| `.manage` | `.manage toggle`<br>`.manage alias` | ⚡ Public | Manage bot commands and aliases |
 | `.mention` | `.mention <on|off> or .setmention (reply to media)` | 👑 Owner | Toggle or set custom mention reply |
-| `.mode` | `.mode [public|private|groups|inbox|self|status]` | 👑 Owner | Advanced bot access control - Set who can use the bot and where |
+| `.mode` | `.mode public`<br>`.mode private`<br>`.mode self`<br>`.mode groups`<br>`.mode inbox` | 👑 Owner | Advanced bot access control - Set who can use the bot and where |
 | `.pmblocker` | `.pmblocker <on|off|status|setmsg>` | 👑 Owner | Block private messages and auto-block users who DM the bot |
 | `.gitpull` | `.gitpull` | 👑 Owner | Reload all plugins (Pull changes from git if available) |
 | `.reload` | `.reload` | 👑 Owner | Reload all plugins |
@@ -82,7 +82,7 @@ Below is the complete categorized reference of all 242 plugins and commands avai
 
 ## 📂 Category: TOOLS (37 Commands)
 
-| Command | Usage | Permissions | Description |
+| Command | Usage / Subcommands | Permissions | Description |
 | :--- | :--- | :--- | :--- |
 | `.chhistory` | `.chhistory <ChannelJID>` | ⚡ Public | Fetch IDs of previous channel posts |
 | `.base64` | `.base64 <text> OR reply to a message` | ⚡ Public | Encode text to Base64 |
@@ -124,7 +124,7 @@ Below is the complete categorized reference of all 242 plugins and commands avai
 
 ## 📂 Category: DOWNLOAD (19 Commands)
 
-| Command | Usage | Permissions | Description |
+| Command | Usage / Subcommands | Permissions | Description |
 | :--- | :--- | :--- | :--- |
 | `.ytvid` | `.ytvid <youtube url> [quality]` | ⚡ Public | Download YouTube videos |
 | `.alamy` | `.alamy <Alamy URL>` | ⚡ Public | Download image or video from Alamy URL |
@@ -148,7 +148,7 @@ Below is the complete categorized reference of all 242 plugins and commands avai
 
 ## 📂 Category: MUSIC (6 Commands)
 
-| Command | Usage | Permissions | Description |
+| Command | Usage / Subcommands | Permissions | Description |
 | :--- | :--- | :--- | :--- |
 | `.ytsearch` | `.yts [query]` | ⚡ Public | Search YouTube |
 | `.lyrics` | `.lyrics <song name>` | ⚡ Public | Get lyrics of a song along with artist and image |
@@ -159,7 +159,7 @@ Below is the complete categorized reference of all 242 plugins and commands avai
 
 ## 📂 Category: AI (3 Commands)
 
-| Command | Usage | Permissions | Description |
+| Command | Usage / Subcommands | Permissions | Description |
 | :--- | :--- | :--- | :--- |
 | `.gpt` | `.gpt <question> or .gemini <question>` | ⚡ Public | Ask a question to AI (GPT or Gemini) |
 | `.imagine` | `.imagine <prompt>` | ⚡ Public | Generate an AI image based on your prompt |
@@ -167,7 +167,7 @@ Below is the complete categorized reference of all 242 plugins and commands avai
 
 ## 📂 Category: GENERAL (16 Commands)
 
-| Command | Usage | Permissions | Description |
+| Command | Usage / Subcommands | Permissions | Description |
 | :--- | :--- | :--- | :--- |
 | `.alive` | `.alive` | ⚡ Public | Check bot status and system info |
 | `.channelid` | `.channelid <url>` | ⚡ Public | Get the internal JID of a WhatsApp Channel |
@@ -184,11 +184,11 @@ Below is the complete categorized reference of all 242 plugins and commands avai
 | `.version` | `.version` | ⚡ Public | Display bot edition, version and system info |
 | `.viewonce` | `.viewonce (reply to a view-once media)` | ⚡ Public | Re-send a view-once image, video, or voice note. |
 | `.developer` | `.developer` | ⚡ Public | Show developer and project information |
-| `.save` | `.save <text> | reply + .save | .save list | .save del <id>` | ⚡ Public | Save a text snippet for later |
+| `.save` | `.save list`<br>`.save all`<br>`.save del`<br>`.save delete`<br>`.save remove` | ⚡ Public | Save a text snippet for later |
 
 ## 📂 Category: APKS (6 Commands)
 
-| Command | Usage | Permissions | Description |
+| Command | Usage / Subcommands | Permissions | Description |
 | :--- | :--- | :--- | :--- |
 | `.android` | `.android <apk_name>` | ⚡ Public | Search APKs and download by reply |
 | `.apkmirror` | `.apkmirror <apk_name>` | ⚡ Public | Search APKs from APKMirror and download by reply |
@@ -199,20 +199,20 @@ Below is the complete categorized reference of all 242 plugins and commands avai
 
 ## 📂 Category: MENU (8 Commands)
 
-| Command | Usage | Permissions | Description |
+| Command | Usage / Subcommands | Permissions | Description |
 | :--- | :--- | :--- | :--- |
 | `.animu` | `.animu <type>` | ⚡ Public | Send anime stickers or quotes |
 | `.animes` | `.animes <anime_name>` | ⚡ Public | Send random anime images |
 | `.audiofx` | `.bass / .nightcore (reply to audio)` | ⚡ Public | Apply audio effects to voice notes |
 | `.canvas` | `.canvas <type> [args]` | ⚡ Public | Generate various fun images using avatar |
-| `.notes` | `.notes <add|all|del|delall> [text|ID]` | ⚡ Public | Store, view, and delete your personal notes |
+| `.notes` | `.notes add`<br>`.notes all`<br>`.notes del`<br>`.notes delall` | ⚡ Public | Store, view, and delete your personal notes |
 | `.images` | `.images <category>` | ⚡ Public | Send 3 random images for a given category |
 | `.stext` | `.stext <text>` | ⚡ Public | Style text in different fancy formats |
 | `.ephoto` | `.ephoto <type> <text>` | ⚡ Public | Generate styled text with various effects |
 
 ## 📂 Category: STICKERS (12 Commands)
 
-| Command | Usage | Permissions | Description |
+| Command | Usage / Subcommands | Permissions | Description |
 | :--- | :--- | :--- | :--- |
 | `.attp` | `.attp <text>` | ⚡ Public | Generate an animated sticker from text |
 | `.emojimix` | `.emojimix 😎+🥰` | ⚡ Public | Mix two emojis into a sticker |
@@ -220,7 +220,7 @@ Below is the complete categorized reference of all 242 plugins and commands avai
 | `.igs` | `.igs <instagram URL>` | ⚡ Public | Convert Instagram post/reel to sticker |
 | `.igsc` | `.igsc <instagram URL>` | ⚡ Public | Convert Instagram post/reel to cropped sticker |
 | `.s2img` | `.s2img (reply to a sticker)` | ⚡ Public | Convert a sticker to an image |
-| `.sticker` | `.sticker (reply to image/video)` | ⚡ Public | Convert an image or video into a sticker |
+| `.sticker` | `.sticker [reply to image/video/gif]`<br>`.take <packname> | <author>` | ⚡ Public | Convert an image or video into a sticker |
 | `.sticker2` | `.sticker2 (reply to image/video or send with caption)` | ⚡ Public | Convert image/video to sticker |
 | `.crop` | `.crop (reply to image/video/sticker)` | ⚡ Public | Crop image/video/sticker to circle sticker |
 | `.stickers` | `.stickers <search term>` | ⚡ Public | Search for stickers using Tenor |
@@ -229,7 +229,7 @@ Below is the complete categorized reference of all 242 plugins and commands avai
 
 ## 📂 Category: GROUP (14 Commands)
 
-| Command | Usage | Permissions | Description |
+| Command | Usage / Subcommands | Permissions | Description |
 | :--- | :--- | :--- | :--- |
 | `.ban` | `.ban @user or reply to message` | ⚡ Public | Ban a user from using the bot |
 | `.character` | `.character @user` | ⚡ Public | Analyze someone\ |
@@ -248,7 +248,7 @@ Below is the complete categorized reference of all 242 plugins and commands avai
 
 ## 📂 Category: SEARCH (6 Commands)
 
-| Command | Usage | Permissions | Description |
+| Command | Usage / Subcommands | Permissions | Description |
 | :--- | :--- | :--- | :--- |
 | `.bing` | `.bing <query>` | ⚡ Public | Search something on Bing |
 | `.define` | `.define <word>` | ⚡ Public | Search a word on Dictionary |
@@ -259,7 +259,7 @@ Below is the complete categorized reference of all 242 plugins and commands avai
 
 ## 📂 Category: IMAGES (7 Commands)
 
-| Command | Usage | Permissions | Description |
+| Command | Usage / Subcommands | Permissions | Description |
 | :--- | :--- | :--- | :--- |
 | `.coding` | `.coding` | ⚡ Public | Get a random programming image |
 | `.cyberimg` | `.cyberimg` | ⚡ Public | Get a random cyberspace image |
@@ -271,19 +271,19 @@ Below is the complete categorized reference of all 242 plugins and commands avai
 
 ## 📂 Category: GAMES (7 Commands)
 
-| Command | Usage | Permissions | Description |
+| Command | Usage / Subcommands | Permissions | Description |
 | :--- | :--- | :--- | :--- |
 | `.dado` | `.dado` | ⚡ Public | Roll a random dice sticker |
 | `.dare` | `.dare` | ⚡ Public | Get a random dare |
 | `.hangman` | `.hangman to start, then .guess <letter>` | ⚡ Public | Play hangman word guessing game |
 | `.math` | `.math` | ⚡ Public | Solve math problems |
-| `.tictactoe` | `.tictactoe [room name]` | 👥 Group | Play TicTacToe game with another user |
+| `.tictactoe` | `.tictactoe @opponent`<br>`.tictactoe <1-9>`<br>`.tictactoe surrender` | 👥 Group | Play TicTacToe game with another user |
 | `.trivia` | `.trivia [answer]` | ⚡ Public | Start a trivia game or answer the question |
 | `.truth` | `.truth` | ⚡ Public | Get a random truth from the Shizo API. |
 
 ## 📂 Category: FUN (9 Commands)
 
-| Command | Usage | Permissions | Description |
+| Command | Usage / Subcommands | Permissions | Description |
 | :--- | :--- | :--- | :--- |
 | `.8ball` | `.8ball Will I be rich?` | ⚡ Public | Ask the magic 8-ball a question |
 | `.fact` | `.fact` | ⚡ Public | Get a random interesting fact |
@@ -297,7 +297,7 @@ Below is the complete categorized reference of all 242 plugins and commands avai
 
 ## 📂 Category: STALK (8 Commands)
 
-| Command | Usage | Permissions | Description |
+| Command | Usage / Subcommands | Permissions | Description |
 | :--- | :--- | :--- | :--- |
 | `.genshin` | `.genshin <UID>` | ⚡ Public | Stalk Genshin Impact UID |
 | `.github` | `.github <username>` | ⚡ Public | Lookup GitHub user profile |
@@ -310,7 +310,7 @@ Below is the complete categorized reference of all 242 plugins and commands avai
 
 ## 📂 Category: INFO (12 Commands)
 
-| Command | Usage | Permissions | Description |
+| Command | Usage / Subcommands | Permissions | Description |
 | :--- | :--- | :--- | :--- |
 | `.script` | `.script` | ⚡ Public | Get information about the PGWIZ-MD GitHub repository |
 | `.imdb` | `.imdb <movie/series title>` | ⚡ Public | Get detailed information about a movie or series from IMDB |
@@ -327,7 +327,7 @@ Below is the complete categorized reference of all 242 plugins and commands avai
 
 ## 📂 Category: QUOTES (6 Commands)
 
-| Command | Usage | Permissions | Description |
+| Command | Usage / Subcommands | Permissions | Description |
 | :--- | :--- | :--- | :--- |
 | `.goodnight` | `.goodnight` | ⚡ Public | Send a random good night message |
 | `.quote` | `.quote` | ⚡ Public | Get a random quote |

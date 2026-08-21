@@ -9,7 +9,7 @@ Configure your bot using environment variables in your deployment dashboard or l
 | Variable | Required | Description | Example |
 | :--- | :---: | :--- | :--- |
 | `SESSION_ID` | **Yes** | Authentication session token from pairing scanner | `pgwiz_PGWIZ-MD_xxxx...` |
-| `OWNER_NUMBER` | Optional | WhatsApp number(s) of bot owner (comma-separated) | `254111791418,254789462334` |
+| `OWNER_NUMBER` | Optional | WhatsApp number(s) of bot owner (comma-separated) | `254700000000` |
 | `BOT_NAME` | Optional | Display name used by the bot | `PGWIZ-MD` |
 | `MODE` | Optional | Working mode: `public`, `private`, `self`, `groups`, `inbox` | `public` |
 | `PREFIX` | Optional | Command trigger prefix | `.` |
