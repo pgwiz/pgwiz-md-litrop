@@ -738,7 +738,7 @@ async function startBot() {
         const dbRouter = createDBRouter(store, { normalizeJid: jidNormalizedUser });
 
         // Create retry counter cache with short TTL (10 seconds) so old messages don't stay cached
-        const msgRetryCounterCache = new NodeCache({ stdTTL: 10, checkperiod: 5 });
+        const msgRetryCounterCache = new NodeCache({ stdTTL: 300, checkperiod: 60 });
 
         printLog('info', `Credentials loaded. Registered: ${state.creds?.registered || false}`);
 
@@ -771,7 +771,8 @@ async function startBot() {
             generateHighQualityLinkPreview: false,
             syncFullHistory: false,
             shouldSyncHistoryMessage: () => false, // Disable history sync for real-time only
-            retryRequestDelayMs: 2000, // Reduce retry delay from 5s to 2s
+            retryRequestDelayMs: 2500,
+            maxMsgRetryCount: 3, // Reduce retry delay from 5s to 2s
             fireInitQueries: false,
             getMessage: async (key) => dbRouter.loadConversationMessage(key),
             msgRetryCounterCache,
@@ -910,9 +911,7 @@ async function startBot() {
                 const upsertMessages = Array.isArray(chatUpdate?.messages) ? chatUpdate.messages : [];
                 if (upsertMessages.length === 0) return;
 
-                if (botSocket?.msgRetryCounterCache) {
-                    botSocket.msgRetryCounterCache.clear();
-                }
+                // Preserved msgRetryCounterCache to prevent infinite message retry loops
 
                 for (const mek of upsertMessages) {
                     if (isStaleSocket()) return;
