@@ -342,6 +342,36 @@ async function getPresenceConfig() {
     return { alwaysOnline: isEn };
 }
 
+
+async function broadcastPresenceAvailable(sock) {
+    if (!sock) return;
+    try {
+        const ghostMode = await store.getSetting('global', 'stealthMode');
+        if (ghostMode && ghostMode.enabled) return;
+
+        const alwaysOnline = await isAlwaysOnlineEnabled();
+        if (!alwaysOnline) return;
+
+        const me = sock?.authState?.creds?.me || sock?.user;
+        const name = String(me?.name || settings.botName || 'PGWIZ-MD').replace(/@/g, '');
+        if (me && !me.name) me.name = name;
+
+        // 1. Standard Baileys presence update
+        await sock.sendPresenceUpdate('available').catch(() => {});
+
+        // 2. Direct presence stanza to WhatsApp server for 100% reliable online indicator
+        if (typeof sock.sendNode === 'function') {
+            await sock.sendNode({
+                tag: 'presence',
+                attrs: {
+                    name,
+                    type: 'available'
+                }
+            }).catch(() => {});
+        }
+    } catch {}
+}
+
 async function isAlwaysOnlineEnabled() {
     try {
         const config = await getPresenceConfig();
@@ -724,6 +754,10 @@ async function startBot() {
             printLog('info', '👻 STEALTH MODE IS ACTIVE - Starting in stealth mode');
         }
 
+        if (state.creds?.me && !state.creds.me.name) {
+            state.creds.me.name = settings.botName || 'PGWIZ-MD';
+        }
+
         const botSocket = makeWASocket({
             version,
             logger: pino({ level: 'silent' }, nullStream), // Silent logger with null stream
@@ -1088,33 +1122,11 @@ async function startBot() {
                 }
 
                 const presenceConfig = await getPresenceConfig();
-                if (presenceConfig.alwaysOnline && !(ghostMode && ghostMode.enabled)) {
-                    try {
-                        await originalSendPresenceUpdate.call(botSocket, 'available');
-                        printLog('presence', '🟢 Always-online presence activated');
-                    } catch (error) {
-                        printLog('warning', `Failed to set initial always-online presence: ${error.message}`);
-                    }
-                } else if (!ghostMode || !ghostMode.enabled) {
-                    try {
-                        await originalSendPresenceUpdate.call(botSocket, 'unavailable');
-                    } catch (error) {}
-                }
-
-                // Continuous presence heartbeat (15s interval for WhatsApp MD active presence)
-                registerBotInterval(setInterval(async () => {
-                    try {
-                        const currentGhostMode = await store.getSetting('global', 'stealthMode');
-                        if (currentGhostMode && currentGhostMode.enabled) return;
-
-                        const currentPresenceConfig = await getPresenceConfig();
-                        if (currentPresenceConfig.alwaysOnline) {
-                            await originalSendPresenceUpdate.call(botSocket, 'available').catch(() => {});
-                        }
-                    } catch {
-                        // Silent failure
-                    }
-                }, 15 * 1000));
+                // 🟢 Ultra-Reliable Always-Online Presence Engine
+                broadcastPresenceAvailable(botSocket);
+                registerBotInterval(setInterval(() => {
+                    broadcastPresenceAvailable(botSocket);
+                }, 10 * 1000));
 
                 try {
                     const botNumber = botSocket.user.id.split(':')[0] + '@s.whatsapp.net';

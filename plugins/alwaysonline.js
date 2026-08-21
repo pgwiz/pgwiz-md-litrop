@@ -24,6 +24,23 @@ async function isAlwaysOnlineEnabled() {
     return isEn;
 }
 
+async function sendOnlinePresence(sock) {
+    if (!sock) return;
+    try {
+        const me = sock?.authState?.creds?.me || sock?.user;
+        const name = String(me?.name || settings.botName || 'PGWIZ-MD').replace(/@/g, '');
+        if (me && !me.name) me.name = name;
+
+        await sock.sendPresenceUpdate('available').catch(() => {});
+        if (typeof sock.sendNode === 'function') {
+            await sock.sendNode({
+                tag: 'presence',
+                attrs: { name, type: 'available' }
+            }).catch(() => {});
+        }
+    } catch {}
+}
+
 module.exports = {
     command: 'alwaysonline',
     aliases: ['alwayson', 'autoonline', 'online', 'presence'],
@@ -57,7 +74,7 @@ module.exports = {
                 await store.saveSetting('global', 'presenceConfig', { alwaysOnline: true });
 
                 if (!ghostActive) {
-                    await sock.sendPresenceUpdate('available').catch(() => {});
+                    await sendOnlinePresence(sock);
                     if (chatId) await sock.sendPresenceUpdate('available', chatId).catch(() => {});
                 }
 
@@ -92,5 +109,6 @@ module.exports = {
         }
     },
 
-    isAlwaysOnlineEnabled
+    isAlwaysOnlineEnabled,
+    sendOnlinePresence
 };
