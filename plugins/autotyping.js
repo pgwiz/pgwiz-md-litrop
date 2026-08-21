@@ -1,3 +1,9 @@
+async function isAlwaysOnline() {
+    try {
+        const config = await store.getSetting('global', 'presenceConfig');
+        return !!(config && config.alwaysOnline);
+    } catch { return false; }
+}
 const fs = require('fs');
 const path = require('path');
 const store = require('../lib/lightweight_store');
@@ -87,7 +93,7 @@ async function handleAutotypingForMessage(sock, chatId, userMessage) {
     if (enabled) {
         try {
             await sock.presenceSubscribe(chatId);
-            await sock.sendPresenceUpdate('available', chatId);
+            if (await isAlwaysOnline()) { await sock.sendPresenceUpdate('available', chatId); }
             await new Promise(resolve => setTimeout(resolve, 500));
             
             await sock.sendPresenceUpdate('composing', chatId);
@@ -117,7 +123,7 @@ async function handleAutotypingForCommand(sock, chatId) {
     if (enabled) {
         try {
             await sock.presenceSubscribe(chatId);
-            await sock.sendPresenceUpdate('available', chatId);
+            if (await isAlwaysOnline()) { await sock.sendPresenceUpdate('available', chatId); }
             await new Promise(resolve => setTimeout(resolve, 500));
             
             await sock.sendPresenceUpdate('composing', chatId);

@@ -781,7 +781,7 @@ async function startBot() {
         const originalSendReceipt = botSocket.sendReceipt;
         const originalSendReadReceipt = botSocket.sendReadReceipt;
 
-        botSocket.sendPresenceUpdate = async function (...args) {
+        (botSocket || pgwizSocket).sendPresenceUpdate = async function (...args) {
             const [presenceType, jid] = args;
             const ghostMode = await store.getSetting('global', 'stealthMode');
             if (ghostMode && ghostMode.enabled) return;
@@ -793,14 +793,18 @@ async function startBot() {
                 if (state === 'paused') {
                     return originalSendPresenceUpdate.call(this, 'available', jid);
                 }
+                return originalSendPresenceUpdate.apply(this, args);
             } else {
                 const state = String(presenceType || '').toLowerCase();
-                if (state === 'paused' || state === 'available') {
-                    if (!jid) return originalSendPresenceUpdate.call(this, 'unavailable');
+                if (state === 'available') {
+                    // Drop available updates when alwaysOnline is disabled so commands don't force online
+                    return;
                 }
+                if (state === 'paused') {
+                    return originalSendPresenceUpdate.call(this, 'unavailable', jid);
+                }
+                return originalSendPresenceUpdate.apply(this, args);
             }
-
-            return originalSendPresenceUpdate.apply(this, args);
         };
 
         botSocket.readMessages = async function (...args) {
