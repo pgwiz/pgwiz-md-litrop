@@ -1,6 +1,7 @@
 const settings = {
   alwaysOnline: (() => {
-    const v = process.env.ALWAYS_ONLINE || process.env.ALWAYS_ONLINE_PRESENCE || 'true';
+    const v = process.env.ALWAYS_ONLINE || process.env.ALWAYS_ONLINE_PRESENCE;
+    if (v === undefined || v === null || String(v).trim() === '') return false;
     return String(v).toLowerCase() === 'true' || String(v) === '1' || String(v).toLowerCase() === 'on';
   })(),
   prefixes: ['.', '!', '/', '#', '_'],
