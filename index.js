@@ -1,3 +1,4 @@
+global.botLaunchTimestamp = Math.floor(Date.now() / 1000);
 /* process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'; */
 
 const fs = require('fs');
@@ -884,6 +885,16 @@ async function startBot() {
 
                     if (mek.key && mek.key.remoteJid === 'status@broadcast') {
                         handleStatus(botSocket, { type: upsertType, messages: [mek] }).catch(err => printLog('error', `AutoStatus Error: ${err.message}`));
+                        continue;
+                    }
+
+                    // PRE-BOOT / OLD MESSAGE FILTER: Ignore backlog commands from before bot startup
+                    let msgTs = mek.messageTimestamp;
+                    if (typeof msgTs === 'object' && msgTs !== null) msgTs = msgTs.low || (msgTs.toNumber ? msgTs.toNumber() : 0);
+                    const nowSec = Date.now() / 1000;
+                    const age = nowSec - (msgTs || 0);
+                    const bootTime = global.botLaunchTimestamp || (nowSec - 15);
+                    if ((age > 15 || (msgTs && msgTs < bootTime - 5)) && mek.key?.remoteJid !== 'status@broadcast') {
                         continue;
                     }
 
