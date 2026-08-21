@@ -1,3 +1,4 @@
+global.alwaysOnlineState = true;
 global.botLaunchTimestamp = Math.floor(Date.now() / 1000);
 /* process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'; */
 
@@ -322,26 +323,29 @@ function parseBoolean(value, fallback = false) {
 }
 
 async function getPresenceConfig() {
+    if (typeof global.alwaysOnlineState === 'boolean') {
+        return { alwaysOnline: global.alwaysOnlineState };
+    }
     try {
         const existing = await store.getSetting('global', 'presenceConfig');
         if (existing && typeof existing.alwaysOnline === 'boolean') {
+            global.alwaysOnlineState = existing.alwaysOnline;
             return { alwaysOnline: existing.alwaysOnline };
         }
     } catch (e) {}
 
     const envVal = process.env.ALWAYS_ONLINE || process.env.ALWAYS_ONLINE_PRESENCE;
-    if (envVal !== undefined && String(envVal).trim() !== '') {
-        const s = String(envVal).toLowerCase().trim();
-        return { alwaysOnline: s === 'true' || s === '1' || s === 'yes' || s === 'on' };
-    }
-    return { alwaysOnline: false };
+    const isEn = (envVal !== undefined) 
+        ? (String(envVal).toLowerCase() === 'true' || String(envVal) === '1' || String(envVal).toLowerCase() === 'on')
+        : true;
+    global.alwaysOnlineState = isEn;
+    return { alwaysOnline: isEn };
 }
 
 async function isAlwaysOnlineEnabled() {
-    try {
-        const config = await getPresenceConfig();
-        return !!config.alwaysOnline;
-    } catch {
+    const config = await getPresenceConfig();
+    return !!config.alwaysOnline;
+} catch {
         return false;
     }
 }

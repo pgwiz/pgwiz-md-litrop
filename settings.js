@@ -1,4 +1,8 @@
 const settings = {
+  alwaysOnline: (() => {
+    const v = process.env.ALWAYS_ONLINE || process.env.ALWAYS_ONLINE_PRESENCE || 'true';
+    return String(v).toLowerCase() === 'true' || String(v) === '1' || String(v).toLowerCase() === 'on';
+  })(),
   prefixes: ['.', '!', '/', '#', '_'],
   packname: process.env.PACKNAME || process.env.PACK_NAME || 'PGWIZ-MD',
   author: process.env.AUTHOR || process.env.PACK_AUTHOR || '‎pgwiz',
