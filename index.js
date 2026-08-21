@@ -641,24 +641,39 @@ if (!server.listening) {
 }
 
 
+
+
+
 // ==================== PRESENCE ENGINE ====================
+async function getPresenceConfig() {
+    try {
+        const config = await store.getSetting('global', 'presenceConfig');
+        if (config && typeof config === 'object') {
+            return {
+                alwaysOnline: Boolean(config.alwaysOnline),
+                presenceType: config.presenceType || 'available',
+                chatPresence: config.chatPresence || {}
+            };
+        }
+    } catch {}
+    const envAlwaysOnline = process.env.ALWAYS_ONLINE || process.env.ALWAYS_ONLINE_PRESENCE;
+    const isAlwaysOnline = (envAlwaysOnline !== undefined && String(envAlwaysOnline).trim() !== '')
+        ? (String(envAlwaysOnline).toLowerCase() === 'true' || String(envAlwaysOnline) === '1' || String(envAlwaysOnline).toLowerCase() === 'on')
+        : (settings.alwaysOnline ?? false);
+    return {
+        alwaysOnline: isAlwaysOnline,
+        presenceType: isAlwaysOnline ? 'available' : 'unavailable',
+        chatPresence: {}
+    };
+}
+
 async function isAlwaysOnlineEnabled() {
     if (typeof global.alwaysOnlineState === 'boolean') {
         return global.alwaysOnlineState;
     }
-    try {
-        const config = await store.getSetting('global', 'presenceConfig');
-        if (config && typeof config.alwaysOnline === 'boolean') {
-            global.alwaysOnlineState = config.alwaysOnline;
-            return config.alwaysOnline;
-        }
-    } catch {}
-    const envVal = process.env.ALWAYS_ONLINE || process.env.ALWAYS_ONLINE_PRESENCE;
-    const isEn = (envVal !== undefined && String(envVal).trim() !== '') 
-        ? (String(envVal).toLowerCase() === 'true' || String(envVal) === '1' || String(envVal).toLowerCase() === 'on')
-        : (settings.alwaysOnline ?? false);
-    global.alwaysOnlineState = isEn;
-    return isEn;
+    const config = await getPresenceConfig();
+    global.alwaysOnlineState = config.alwaysOnline;
+    return config.alwaysOnline;
 }
 
 async function broadcastPresenceAvailable(sock) {

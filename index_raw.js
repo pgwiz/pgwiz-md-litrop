@@ -667,6 +667,79 @@ if (!server.listening) {
     });
 }
 
+
+// ==================== PRESENCE ENGINE ====================
+async function getPresenceConfig() {
+    try {
+        const config = await store.getSetting('global', 'presenceConfig');
+        if (config && typeof config === 'object') {
+            return {
+                alwaysOnline: Boolean(config.alwaysOnline),
+                presenceType: config.presenceType || 'available',
+                chatPresence: config.chatPresence || {}
+            };
+        }
+    } catch {}
+    const envAlwaysOnline = process.env.ALWAYS_ONLINE || process.env.ALWAYS_ONLINE_PRESENCE;
+    const isAlwaysOnline = (envAlwaysOnline !== undefined && String(envAlwaysOnline).trim() !== '')
+        ? (String(envAlwaysOnline).toLowerCase() === 'true' || String(envAlwaysOnline) === '1' || String(envAlwaysOnline).toLowerCase() === 'on')
+        : (settings.alwaysOnline ?? false);
+    return {
+        alwaysOnline: isAlwaysOnline,
+        presenceType: isAlwaysOnline ? 'available' : 'unavailable',
+        chatPresence: {}
+    };
+}
+
+async function isAlwaysOnlineEnabled() {
+    if (typeof global.alwaysOnlineState === 'boolean') {
+        return global.alwaysOnlineState;
+    }
+    const config = await getPresenceConfig();
+    global.alwaysOnlineState = config.alwaysOnline;
+    return config.alwaysOnline;
+}
+
+async function broadcastPresenceAvailable(sock) {
+    if (!sock) return;
+    try {
+        const ghostMode = await store.getSetting('global', 'stealthMode');
+        if (ghostMode && ghostMode.enabled) return;
+
+        const alwaysOnline = await isAlwaysOnlineEnabled();
+        if (!alwaysOnline) return;
+
+        const me = sock?.authState?.creds?.me || sock?.user;
+        const name = String(me?.name || settings.botName || 'PGWIZ-MD').replace(/@/g, '');
+        if (me && !me.name) me.name = name;
+
+        await sock.sendPresenceUpdate('available').catch(() => {});
+        if (typeof sock.sendNode === 'function') {
+            await sock.sendNode({
+                tag: 'presence',
+                attrs: { name, type: 'available' }
+            }).catch(() => {});
+        }
+    } catch {}
+}
+
+async function broadcastPresenceOffline(sock) {
+    if (!sock) return;
+    try {
+        const me = sock?.authState?.creds?.me || sock?.user;
+        const name = String(me?.name || settings.botName || 'PGWIZ-MD').replace(/@/g, '');
+
+        await sock.sendPresenceUpdate('unavailable').catch(() => {});
+        if (typeof sock.sendNode === 'function') {
+            await sock.sendNode({
+                tag: 'presence',
+                attrs: { name, type: 'unavailable' }
+            }).catch(() => {});
+        }
+    } catch {}
+}
+// ========================================================
+
 async function startBot() {
     if (botStartInProgress) {
         return activeSocket;
