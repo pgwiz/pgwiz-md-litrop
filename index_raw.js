@@ -760,10 +760,14 @@ async function startBot() {
             }
 
             const alwaysOnline = await isAlwaysOnlineEnabled();
-            if (alwaysOnline && !jid) {
+            if (alwaysOnline) {
                 const state = String(presenceType || '').toLowerCase();
-                if (state === 'paused' || state === 'unavailable') {
-                    return;
+                if (state === 'unavailable') {
+                    return; // Never go offline when alwaysOnline is enabled
+                }
+                if (state === 'paused') {
+                    // Re-assert available presence after typing finishes
+                    return originalSendPresenceUpdate.call(this, 'available', jid);
                 }
             } else if (!alwaysOnline && !jid) {
                 const state = String(presenceType || '').toLowerCase();
@@ -1081,7 +1085,7 @@ async function startBot() {
                     } catch (error) {}
                 }
 
-                // Continuous presence heartbeat (25s interval)
+                // Continuous presence heartbeat (15s interval for WhatsApp MD active presence)
                 registerBotInterval(setInterval(async () => {
                     try {
                         const currentGhostMode = await store.getSetting('global', 'stealthMode');
@@ -1089,12 +1093,12 @@ async function startBot() {
 
                         const currentPresenceConfig = await getPresenceConfig();
                         if (currentPresenceConfig.alwaysOnline) {
-                            await originalSendPresenceUpdate.call(botSocket, 'available');
+                            await originalSendPresenceUpdate.call(botSocket, 'available').catch(() => {});
                         }
                     } catch {
                         // Silent failure
                     }
-                }, 25 * 1000));
+                }, 15 * 1000));
 
                 try {
                     const botNumber = botSocket.user.id.split(':')[0] + '@s.whatsapp.net';
