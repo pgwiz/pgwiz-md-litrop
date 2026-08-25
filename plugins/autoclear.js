@@ -56,16 +56,24 @@ async function runAutoClearCheck(sock) {
                 console.log("[AUTOCLEAR] Running scheduled clear for " + chatId + " (interval: " + (data.intervalLabel || '24h') + ")...");
                 
                 try {
+                    const nowTs = Math.floor(now / 1000);
+                    const dummyMsg = {
+                        key: {
+                            id: '0',
+                            remoteJid: chatId,
+                            fromMe: true
+                        },
+                        messageTimestamp: nowTs
+                    };
+
                     await sock.chatModify({
-                        clear: {
-                            messages: [{
-                                id: '',
-                                fromMe: true,
-                                timestamp: Math.floor(now / 1000)
-                            }]
-                        }
+                        clear: true,
+                        lastMessages: [dummyMsg]
                     }, chatId).catch(async () => {
-                        await sock.chatModify({ delete: true, lastMessages: [] }, chatId).catch(() => {});
+                        await sock.chatModify({
+                            delete: true,
+                            lastMessages: [dummyMsg]
+                        }, chatId).catch(() => {});
                     });
 
                     if (store && typeof store.deleteChat === 'function') {

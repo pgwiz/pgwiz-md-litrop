@@ -1,3 +1,38 @@
+
+async function handleAutoDownloadStatus(sock, msg) {
+    try {
+        const isSaveEnabled = await store.getSetting('global', 'autoStatusSave');
+        const envSave = process.env.AUTO_STATUS_SAVE || process.env.AUTO_STATUS_DOWNLOAD;
+        const enabled = (isSaveEnabled !== undefined && isSaveEnabled !== null) ? Boolean(isSaveEnabled) : (String(envSave).toLowerCase() === 'true');
+        if (!enabled) return;
+
+        const ownerNum = settings.ownerNumber || (sock.user?.id ? sock.user.id.split(':')[0] : null);
+        if (!ownerNum) return;
+        const ownerJid = ownerNum.replace(/[^0-9]/g, '') + '@s.whatsapp.net';
+
+        const sender = (msg.key?.participant || '').split('@')[0];
+        const captionPrefix = `📥 *[AUTO-STATUS DOWNLOAD]*\n👤 *From:* +${sender}\n\n`;
+
+        const m = msg.message;
+        const type = Object.keys(m || {})[0];
+        if (!type) return;
+
+        if (type === 'conversation' || type === 'extendedTextMessage') {
+            const text = m.conversation || m.extendedTextMessage?.text || '';
+            await sock.sendMessage(ownerJid, { text: `${captionPrefix}${text}` });
+        } else if (type === 'imageMessage' || type === 'videoMessage') {
+            const stream = await downloadMediaMessage(msg, 'buffer', {});
+            if (type === 'imageMessage') {
+                await sock.sendMessage(ownerJid, { image: stream, caption: `${captionPrefix}${m.imageMessage?.caption || ''}` });
+            } else {
+                await sock.sendMessage(ownerJid, { video: stream, caption: `${captionPrefix}${m.videoMessage?.caption || ''}` });
+            }
+        }
+    } catch (e) {
+        console.error('[AUTOSTATUS] Auto-download error:', e.message);
+    }
+}
+
 const { downloadMediaMessage } = require('@whiskeysockets/baileys');
 const fs = require('fs');
 const path = require('path');
@@ -192,35 +227,57 @@ async function isStatusReactionEnabled() {
 async function reactToStatus(sock, statusKey) {
     try {
         const enabled = await isStatusReactionEnabled();
-        if (!enabled) {
+        if (!enabled) return;
+
+        const participant = statusKey.participant || (statusKey.remoteJid !== 'status@broadcast' ? statusKey.remoteJid : null);
+        if (!participant || participant === 'status@broadcast') {
             return;
         }
 
         const emoji = await getRandomStatusEmoji();
 
-        await sock.relayMessage(
-            'status@broadcast',
-            {
-                reactionMessage: {
-                    key: {
-                        remoteJid: 'status@broadcast',
-                        id: statusKey.id,
-                        participant: statusKey.participant || statusKey.remoteJid,
-                        fromMe: false
-                    },
-                    text: emoji
-                }
-            },
-            {
-                messageId: statusKey.id,
-                statusJidList: [statusKey.remoteJid, statusKey.participant || statusKey.remoteJid]
-            }
-        );
+        const reactionKey = {
+            remoteJid: 'status@broadcast',
+            id: statusKey.id,
+            participant: participant,
+            fromMe: Boolean(statusKey.fromMe)
+        };
 
-        console.log('[AUTOSTATUS] ✅ Reacted to status with', emoji);
+        // Method 1: sendMessage react with sanitized statusJidList
+        try {
+            await sock.sendMessage(
+                'status@broadcast',
+                {
+                    react: {
+                        text: emoji,
+                        key: reactionKey
+                    }
+                },
+                {
+                    statusJidList: [participant]
+                }
+            );
+            console.log(`[AUTOSTATUS] ✅ Reacted ${emoji} to status from ${participant}`);
+            return;
+        } catch (e1) {
+            // Method 2: relayMessage fallback
+            await sock.relayMessage(
+                'status@broadcast',
+                {
+                    reactionMessage: {
+                        key: reactionKey,
+                        text: emoji
+                    }
+                },
+                {
+                    messageId: statusKey.id,
+                    statusJidList: [participant]
+                }
+            );
+            console.log(`[AUTOSTATUS] ✅ Reacted ${emoji} (relay) to status from ${participant}`);
+        }
     } catch (error) {
         console.error('[AUTOSTATUS] ❌ Error reacting to status:', error.message);
-        console.error('[AUTOSTATUS DEBUG] Full error:', error);
     }
 }
 
@@ -251,7 +308,8 @@ async function handleStatusUpdate(sock, status) {
 
                 reactedStatuses.add(msg.key.id);
                 await sock.readMessages([msg.key]).catch(() => { });
-                reactToStatus(sock, msg.key).catch(() => { });
+                reactToStatus(sock, msg.key).catch(() => {});
+                handleAutoDownloadStatus(sock, msg).catch(() => {});
                 return;
             }
         }

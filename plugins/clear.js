@@ -11,30 +11,37 @@ module.exports = {
     async handler(sock, message, args, context = {}) {
         const chatId = context.chatId || message.key.remoteJid;
         const channelInfo = context.channelInfo || {};
+        const isGroup = chatId.endsWith('@g.us');
+        const targetName = isGroup ? 'Group' : 'Chat';
 
         try {
-            const isGroup = chatId.endsWith('@g.us');
-            const targetName = isGroup ? 'Group' : 'Chat';
-
             const statusMsg = await sock.sendMessage(chatId, {
-                text: "🧹 *Clearing " + targetName + "...*",
+                text: `🧹 *Clearing ${targetName}...*`,
                 ...channelInfo
             }, { quoted: message });
 
-            // 1. Baileys clear command
+            const nowTs = Math.floor(Date.now() / 1000);
+            const dummyMsg = {
+                key: {
+                    id: message.key?.id || '0',
+                    remoteJid: chatId,
+                    fromMe: true
+                },
+                messageTimestamp: message.messageTimestamp || nowTs
+            };
+
+            // 1. WhatsApp Clear Chat App Patch with valid lastMessages
             try {
                 await sock.chatModify({
-                    clear: {
-                        messages: [{
-                            id: message.key?.id || '',
-                            fromMe: message.key?.fromMe || false,
-                            timestamp: message.messageTimestamp || Math.floor(Date.now() / 1000)
-                        }]
-                    }
+                    clear: true,
+                    lastMessages: [dummyMsg]
                 }, chatId);
-            } catch (err) {
-                // Fallback delete
-                await sock.chatModify({ delete: true, lastMessages: [] }, chatId).catch(() => {});
+            } catch (err1) {
+                // Fallback deleteChat patch
+                await sock.chatModify({
+                    delete: true,
+                    lastMessages: [dummyMsg]
+                }, chatId).catch(() => {});
             }
 
             // 2. Clean local store messages
@@ -42,11 +49,11 @@ module.exports = {
                 await store.deleteChat(chatId).catch(() => {});
             }
 
-            // 3. Delete the temporary status message after 3 seconds
+            // 3. Delete status message after 2.5s
             if (statusMsg && statusMsg.key) {
                 setTimeout(async () => {
                     await sock.sendMessage(chatId, { delete: statusMsg.key }).catch(() => {});
-                }, 3000);
+                }, 2500);
             }
 
         } catch (error) {
