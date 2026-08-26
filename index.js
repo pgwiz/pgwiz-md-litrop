@@ -1,3 +1,17 @@
+require('dotenv').config();
+
+// Immediate HTTP server binding for Heroku/Koyeb/Render port compliance
+try {
+    const { server, PORT } = require('./lib/server');
+    if (server && !server.listening) {
+        server.listen(PORT, '0.0.0.0', () => {
+            console.log(`[SERVER] ✅ HTTP healthcheck server active on 0.0.0.0:${PORT}`);
+        });
+    }
+} catch (e) {
+    console.error('[SERVER] Warning: Early server start skipped:', e.message);
+}
+
 global.alwaysOnlineState = undefined;
 global.botLaunchTimestamp = Math.floor(Date.now() / 1000);
 /* process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'; */

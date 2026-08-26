@@ -1,104 +1,107 @@
 {
-  "name": "PGWIZ-MD",
-  "description": " Whatsapp automation",
+  "name": "PGWIZ-MD Lite",
+  "description": "WhatsApp multi-device automation bot with advanced plugin engine",
   "keywords": [
-    "whatsapp Bot"
+    "whatsapp",
+    "bot",
+    "baileys",
+    "pgwiz",
+    "automation"
   ],
   "repository": "https://github.com/pgwiz/PGWIZ-MD",
-  "stack": "container",
   "env": {
-    "MONGO_URL": {
-      "description": "Put if you have mongodb database url",
-      "required": false,
-      "value": ""
-    },
-    "MYSQL_URL": {
-      "description": "Put if you have mysql database url",
-      "required": false,
-      "value": ""
-    },
-    "POSTGRES_URL": {
-      "description": "Put if you have postgres database url",
-      "required": false,
-      "value": ""
-    },
-     "HKEY": {
-      "description": "Put your Heroku api key Here , Get one from here https://dashboard.heroku.com/account",
-      "required": true,
-      "value": ""
-    },
-     "HAPP": {
-      "description": "Put the Heroku app name, same as above entered",
-      "required": true,
-      "value": ""
-    },
     "SESSION_ID": {
-      "description": "Put your session id",
+      "description": "Your PGWIZ session ID (e.g. PGWIZ-MD~...)",
       "required": true,
       "value": ""
     },
-    "DB_URL": {
-      "description": "SQLite database file path",
+    "BOT_NAME": {
+      "description": "Custom bot name displayed on menus and captions",
       "required": false,
-      "value": "./baileys_store.db"
+      "value": "PGWIZ-MD"
+    },
+    "BOT_OWNER": {
+      "description": "Owner display name",
+      "required": false,
+      "value": "pgwiz"
+    },
+    "OWNER_NUMBER": {
+      "description": "Owner phone number(s) comma-separated with country code (e.g. 254712345678)",
+      "required": false,
+      "value": ""
+    },
+    "MODE": {
+      "description": "Bot work type mode: public, private, inbox, or groups",
+      "required": false,
+      "value": "public"
+    },
+    "ALWAYS_ONLINE": {
+      "description": "Keep bot status constantly online (true or false)",
+      "required": false,
+      "value": "false"
     },
     "AUTO_STATUS_VIEW": {
-      "description": "Automatically view all WhatsApp statuses",
+      "description": "Automatically view incoming WhatsApp statuses",
       "required": false,
       "value": "true"
     },
     "AUTO_STATUS_REACT": {
-      "description": "Automatically react to all WhatsApp statuses",
+      "description": "Automatically react to incoming WhatsApp statuses",
       "required": false,
       "value": "true"
     },
+    "AUTO_STATUS_DOWNLOAD": {
+      "description": "Automatically download status media and forward to owner",
+      "required": false,
+      "value": "false"
+    },
     "STATUS_EMOJIS": {
-      "description": "Comma-separated emojis for status reactions",
+      "description": "Comma-separated list of emojis for auto status reactions",
       "required": false,
       "value": "💙,🖤,⭐"
     },
     "AUTOREAD": {
-      "description": "Automatically mark incoming messages as read",
+      "description": "Automatically mark chat messages as read",
       "required": false,
       "value": "false"
     },
     "AUTOTYPING": {
-      "description": "Automatically show typing indicator while processing",
+      "description": "Show typing indicator while executing commands",
       "required": false,
       "value": "false"
     },
     "ANTICALL": {
-      "description": "Automatically reject and block incoming calls",
+      "description": "Automatically decline incoming calls",
       "required": false,
       "value": "false"
     },
     "ANTIDELETE": {
-      "description": "Restore deleted messages automatically",
+      "description": "Resend deleted messages to owner or group",
       "required": false,
       "value": "false"
     },
     "AUTOREACT": {
-      "description": "Automatically react to incoming chat messages",
+      "description": "Automatically react to incoming messages with emojis",
       "required": false,
       "value": "false"
     },
-    "ALWAYS_ONLINE": {
-      "description": "Keep bot presence online continuously",
-      "required": false,
-      "value": "false"
-    },
-    "FORCE_SESSION_RESET": {
-      "description": "Force full session reset at startup (one-time recovery toggle)",
-      "required": false,
-      "value": "true"
-    },
-     "REMOVEBG_KEY": {
-      "description": "Put your Remove background api key",
+    "MONGO_URL": {
+      "description": "Optional MongoDB connection URL for persistent cloud storage",
       "required": false,
       "value": ""
-    }
     },
-    "buildpacks": [
+    "FORCE_SESSION_RESET": {
+      "description": "One-time session wipe on startup (set false for normal operation)",
+      "required": false,
+      "value": "false"
+    },
+    "TIMEZONE": {
+      "description": "Timezone for time and date commands",
+      "required": false,
+      "value": "Africa/Nairobi"
+    }
+  },
+  "buildpacks": [
     {
       "url": "heroku/nodejs"
     },

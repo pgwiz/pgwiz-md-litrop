@@ -1,3 +1,4 @@
+require('dotenv').config();
 const settings = {
   alwaysOnline: (() => {
     const v = process.env.ALWAYS_ONLINE || process.env.ALWAYS_ONLINE_PRESENCE;
