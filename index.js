@@ -1176,10 +1176,17 @@ async function startBot() {
 
                 const presenceConfig = await getPresenceConfig();
                 // 🟢 Ultra-Reliable Always-Online Presence Engine
-                broadcastPresenceAvailable(botSocket);
-                registerBotInterval(setInterval(() => {
+                const isAlwaysOn = await isAlwaysOnlineEnabled();
+                if (isAlwaysOn) {
                     broadcastPresenceAvailable(botSocket);
-                }, 10 * 1000));
+                    registerBotInterval(setInterval(async () => {
+                        if (await isAlwaysOnlineEnabled()) {
+                            broadcastPresenceAvailable(botSocket);
+                        }
+                    }, 10 * 1000));
+                } else {
+                    broadcastPresenceOffline(botSocket);
+                }
 
                 try {
                     const botNumber = botSocket.user.id.split(':')[0] + '@s.whatsapp.net';
@@ -1513,6 +1520,7 @@ folders.forEach(folder => {
             }
         });
 });
+                    
 
 /**
 * console.log(chalk.greenBright(`✅ OK files: ${okFiles}`));
