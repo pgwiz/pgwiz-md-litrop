@@ -72,7 +72,6 @@
     "gtts": "^0.2.1",
     "human-readable": "^0.2.1",
     "jimp": "^1.6.0",
-    "libphonenumber-js": "^1.11.18",
     "megajs": "^1.3.9",
     "moment-timezone": "^0.5.43",
     "mongoose": "^9.0.2",
