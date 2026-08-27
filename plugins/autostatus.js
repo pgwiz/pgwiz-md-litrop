@@ -234,58 +234,26 @@ async function reactToStatus(sock, statusKey) {
             return;
         }
 
-        const emoji = await getRandomStatusEmoji();
+        const emoji = getRandomStatusEmoji();
 
-        const reactionKey = {
-            remoteJid: 'status@broadcast',
-            id: statusKey.id,
-            participant: participant,
-            fromMe: false
+        const reactionMessage = {
+            react: {
+                text: emoji,
+                key: {
+                    remoteJid: 'status@broadcast',
+                    id: statusKey.id,
+                    participant: participant
+                }
+            }
         };
 
-        // 1. Send status reaction via status@broadcast with statusJidList
-        try {
-            await sock.sendMessage(
-                'status@broadcast',
-                {
-                    react: {
-                        text: emoji,
-                        key: reactionKey
-                    }
-                },
-                {
-                    statusJidList: [participant]
-                }
-            );
-        } catch (e1) {
-            // Fallback via relayMessage
-            await sock.relayMessage(
-                'status@broadcast',
-                {
-                    reactionMessage: {
-                        key: reactionKey,
-                        text: emoji
-                    }
-                },
-                {
-                    messageId: statusKey.id,
-                    statusJidList: [participant]
-                }
-            ).catch(() => {});
-        }
-
-        // 2. Also send reaction to participant direct chat so it appears in their WhatsApp status & DM
-        try {
-            await sock.sendMessage(
-                participant,
-                {
-                    react: {
-                        text: emoji,
-                        key: reactionKey
-                    }
-                }
-            ).catch(() => {});
-        } catch {}
+        await sock.sendMessage(
+            'status@broadcast',
+            reactionMessage,
+            {
+                statusJidList: [participant]
+            }
+        );
 
         console.log(`[AUTOSTATUS] ✅ Reacted ${emoji} to status from ${participant}`);
     } catch (error) {
@@ -304,7 +272,6 @@ async function handleStatusUpdate(sock, status) {
         const enabled = await isAutoStatusEnabled();
         if (!enabled || !sock) return;
 
-        // Handle Messages (New Status Broadcasts)
         const msgs = status.messages || (status.key ? [status] : []);
         for (const msg of msgs) {
             const key = msg.key || msg;
@@ -323,16 +290,20 @@ async function handleStatusUpdate(sock, status) {
             if (reactedStatuses.has(key.id)) continue;
             reactedStatuses.add(key.id);
 
-            // 1. Mark status as viewed/read
-            await sock.readMessages([{
-                remoteJid: 'status@broadcast',
-                id: key.id,
-                participant: key.participant,
-                fromMe: false
-            }]).catch(() => {});
+            // 1. Mark status as viewed/read first (required for reaction visibility)
+            try {
+                await sock.readMessages([{
+                    remoteJid: 'status@broadcast',
+                    id: key.id,
+                    participant: key.participant
+                }]);
+            } catch {}
 
-            // 2. React to status with emoji
-            reactToStatus(sock, key).catch(() => {});
+            // Brief delay to ensure read receipt registers before reaction
+            await new Promise(resolve => setTimeout(resolve, 600));
+
+            // 2. Send status reaction
+            await reactToStatus(sock, key);
 
             // 3. Auto-download media if enabled
             if (msg.message) {
