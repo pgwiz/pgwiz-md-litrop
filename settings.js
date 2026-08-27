@@ -1,4 +1,44 @@
-require('dotenv').config();
+// Zero-dependency environment loader with safe dotenv fallback (compatible with all panels & environments)
+(function loadEnvironment() {
+    try {
+        require('dotenv').config();
+    } catch {
+        // Safe fallback: parse .env using native fs without external dependencies
+        try {
+            const fs = require('fs');
+            const path = require('path');
+            const candidates = [
+                path.join(__dirname, '.env'),
+                path.join(process.cwd(), '.env'),
+                path.join(__dirname, '..', '.env'),
+                path.join(process.cwd(), '..', '.env'),
+                path.join(process.cwd(), 'pgwiz-md-litrop', '.env'),
+                path.join(process.cwd(), 'MEGA-MD', '.env')
+            ];
+            for (const envFile of candidates) {
+                if (fs.existsSync(envFile)) {
+                    const raw = fs.readFileSync(envFile, 'utf8');
+                    for (let line of raw.split(/\r?\n/)) {
+                        line = line.trim();
+                        if (!line || line.startsWith('#')) continue;
+                        const eq = line.indexOf('=');
+                        if (eq > 0) {
+                            const key = line.substring(0, eq).trim();
+                            let val = line.substring(eq + 1).trim();
+                            if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+                                val = val.slice(1, -1);
+                            }
+                            if (process.env[key] === undefined) {
+                                process.env[key] = val;
+                            }
+                        }
+                    }
+                    break;
+                }
+            }
+        } catch {}
+    }
+})();
 const settings = {
   alwaysOnline: (() => {
     const v = process.env.ALWAYS_ONLINE || process.env.ALWAYS_ONLINE_PRESENCE;
