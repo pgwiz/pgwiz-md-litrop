@@ -16,7 +16,6 @@ function run(cmd) {
 async function hasGitRepo() {
   const gitDir = path.join(process.cwd(), '.git');
   if (!fs.existsSync(gitDir)) {
-    // On Heroku, try to initialize git if it doesn't exist
     try {
       await run('git init');
       await run('git remote add origin https://github.com/pgwiz/pgwiz-md-litrop.git').catch(() => {});
@@ -38,7 +37,6 @@ async function isHerokuEnv() {
 }
 
 async function updateViaGit() {
-  // Fix remote if needed:
   await run('git remote set-url origin https://github.com/pgwiz/pgwiz-md-litrop.git').catch(() => { });
   const oldRev = (await run('git rev-parse HEAD').catch(() => 'unknown')).trim();
   await run('git fetch --all --prune');
@@ -47,27 +45,7 @@ async function updateViaGit() {
   const commits = alreadyUpToDate ? '' : await run(`git log --pretty=format:"%h %s (%an)" ${oldRev}..${newRev}`).catch(() => '');
   const files = alreadyUpToDate ? '' : await run(`git diff --name-status ${oldRev}..${newRev}`).catch(() => '');
   await run(`git reset --hard ${newRev}`);
-  await run('git clean -fd -e session -e .env -e store.json -e session/');
-
-  // Clear old session files (except creds.json) to prevent encryption conflicts after update
-  const sessionDir = path.join(process.cwd(), 'session');
-  if (fs.existsSync(sessionDir)) {
-    try {
-      const sessionFiles = fs.readdirSync(sessionDir);
-      let clearedCount = 0;
-      for (const file of sessionFiles) {
-        if (file !== 'creds.json') {
-          try {
-            fs.unlinkSync(path.join(sessionDir, file));
-            clearedCount++;
-          } catch { }
-        }
-      }
-      if (clearedCount > 0) {
-        console.log(`🧹 Cleared ${clearedCount} old session files after update`);
-      }
-    } catch { }
-  }
+  await run('git clean -fd -e session -e .env -e store.json -e session/ -e baileys_store.db');
 
   return { oldRev, newRev, alreadyUpToDate, commits, files };
 }
@@ -138,7 +116,7 @@ async function extractZip(zipPath, outDir) {
     await run(`busybox unzip -o '${zipPath}' -d '${outDir}'`);
     return;
   } catch { }
-  throw new Error("No system unzip tool found (unzip/7z/busybox). Git mode is recommended on this panel.");
+  throw new Error("No system unzip tool found (unzip/7z/busybox).");
 }
 
 function copyRecursive(src, dest, ignore = [], relative = '', outList = []) {
@@ -172,66 +150,20 @@ async function updateViaZip(sock, chatId, message, zipOverride) {
 
   const [root] = fs.readdirSync(extractTo).map(n => path.join(extractTo, n));
   const srcRoot = fs.existsSync(root) && fs.lstatSync(root).isDirectory() ? root : extractTo;
-  const ignore = ['node_modules', '.git', 'session', 'tmp', 'tmp/', 'temp', 'data', 'baileys_store.json', '.env'];
+  const ignore = ['node_modules', '.git', 'session', 'tmp', 'tmp/', 'temp', 'data', 'baileys_store.db', '.env'];
   const copied = [];
-  let preservedOwner = null;
-  let preservedBotOwner = null;
 
-  // Preserve .env file
+  // Preserve .env
   let preservedEnv = null;
   const envPath = path.join(process.cwd(), '.env');
   if (fs.existsSync(envPath)) {
-    try {
-      preservedEnv = fs.readFileSync(envPath, 'utf8');
-    } catch { }
+    try { preservedEnv = fs.readFileSync(envPath, 'utf8'); } catch {}
   }
 
-  try {
-    const currentSettings = require('../settings');
-    preservedOwner = currentSettings && currentSettings.ownerNumber ? String(currentSettings.ownerNumber) : null;
-    preservedBotOwner = currentSettings && currentSettings.botOwner ? String(currentSettings.botOwner) : null;
-  } catch { }
   copyRecursive(srcRoot, process.cwd(), ignore, '', copied);
 
-  // Restore .env file if it was preserved
   if (preservedEnv) {
-    try {
-      fs.writeFileSync(envPath, preservedEnv);
-    } catch { }
-  }
-
-  if (preservedOwner) {
-    try {
-      const settingsPath = path.join(process.cwd(), 'settings.js');
-      if (fs.existsSync(settingsPath)) {
-        let text = fs.readFileSync(settingsPath, 'utf8');
-        text = text.replace(/ownerNumber:\s*'[^']*'/, `ownerNumber: '${preservedOwner}'`);
-        if (preservedBotOwner) {
-          text = text.replace(/botOwner:\s*'[^']*'/, `botOwner: '${preservedBotOwner}'`);
-        }
-        fs.writeFileSync(settingsPath, text);
-      }
-    } catch { }
-  }
-
-  // Clear old session files (except creds.json) to prevent encryption conflicts after update
-  const sessionDir = path.join(process.cwd(), 'session');
-  if (fs.existsSync(sessionDir)) {
-    try {
-      const sessionFiles = fs.readdirSync(sessionDir);
-      let clearedCount = 0;
-      for (const file of sessionFiles) {
-        if (file !== 'creds.json') {
-          try {
-            fs.unlinkSync(path.join(sessionDir, file));
-            clearedCount++;
-          } catch { }
-        }
-      }
-      if (clearedCount > 0) {
-        console.log(`🧹 Cleared ${clearedCount} old session files after update`);
-      }
-    } catch { }
+    try { fs.writeFileSync(envPath, preservedEnv); } catch {}
   }
 
   try { fs.rmSync(extractTo, { recursive: true, force: true }); } catch { }
@@ -239,57 +171,58 @@ async function updateViaZip(sock, chatId, message, zipOverride) {
   return { copiedFiles: copied };
 }
 
-async function restartProcess() {
-  const isHeroku = await isHerokuEnv();
-  if (isHeroku) {
-    // On Heroku, we restart the dyno via the platform
-    try {
-      await run('heroku restart -a ' + (process.env.HEROKU_APP_NAME || 'app'));
-      return;
-    } catch { }
-    // Fallback: Exit and let Heroku restart
-    setTimeout(() => {
-      process.exit(0);
-    }, 1000);
-    return;
-  }
-
-  // Try PM2 first
+// 🟢 HOT RELOAD: Reloads all plugins and settings in-memory without killing the process
+function performHotReload() {
+  let reloadedCount = 0;
   try {
-    await run('pm2 restart all');
-    return;
-  } catch { }
-  
-  // Fallback: Exit and let systemd/pm2 handle it
-  setTimeout(() => {
-    process.exit(0);
-  }, 500);
+    Object.keys(require.cache).forEach(id => {
+      if (id.includes('/plugins/') || id.includes('\\plugins\\') || id.includes('settings.js') || id.includes('lib/messageHandler')) {
+        delete require.cache[id];
+        reloadedCount++;
+      }
+    });
+
+    // Re-require settings
+    try {
+      require('../settings');
+    } catch {}
+
+    // Run garbage collection if enabled
+    if (global.gc) {
+      try { global.gc(); } catch {}
+    }
+
+    console.log(`[HOT-RELOAD] ✅ Refreshed ${reloadedCount} modules in-memory without restart!`);
+  } catch (err) {
+    console.error('[HOT-RELOAD] Error during in-memory reload:', err.message);
+  }
+  return reloadedCount;
 }
 
 module.exports = {
   command: 'update',
-  aliases: ['upgrade', 'restart'],
+  aliases: ['upgrade', 'hotreload', 'reload'],
   category: 'owner',
-  description: 'Update bot from git without stopping (supports Heroku)',
-  usage: '.update [zip_url]',
+  description: 'Update bot files and hot-reload plugins without disconnecting',
+  usage: '.update [--cold|zip_url]',
   ownerOnly: true,
 
   async handler(sock, message, args, context) {
     const { chatId, channelInfo } = context;
+    const isColdRequested = args.includes('--cold') || args.includes('-c') || args.includes('cold') || args.includes('restart');
 
     try {
       const isHeroku = await isHerokuEnv();
       const deploymentType = isHeroku ? 'Heroku' : 'Git';
       
-      await sock.sendMessage(chatId, {
-        text: `🔄 Updating bot on ${deploymentType}…`,
+      const statusMsg = await sock.sendMessage(chatId, {
+        text: `🔄 *Checking for updates on ${deploymentType}…*`,
         ...channelInfo
       }, { quoted: message });
 
       let changesSummary = '';
       let hasUpdates = false;
 
-      // Check if git repository exists
       let gitAvailable = false;
       try {
         gitAvailable = await hasGitRepo();
@@ -299,104 +232,78 @@ module.exports = {
 
       if (gitAvailable) {
         try {
-          // Fetch latest from remote and get commit diff
           const { oldRev, newRev, alreadyUpToDate, commits, files } = await updateViaGit();
 
           if (alreadyUpToDate) {
-            // No updates available - show message but don't restart
             hasUpdates = false;
-            changesSummary = `✅ Already up to date!\n📌 Current: ${newRev.substring(0, 7)}\n\nNo new updates available from remote.`;
+            changesSummary = `✅ *Bot is already up to date!*\n📌 *Commit:* \`${newRev.substring(0, 7)}\`\n\n_No new updates available from remote._`;
           } else {
-            // Updates found - show detailed changelog
             hasUpdates = true;
-            changesSummary = `✅ Updated successfully!\n\n`;
-            changesSummary += `📌 Old: ${oldRev.substring(0, 7)}\n`;
-            changesSummary += `📌 New: ${newRev.substring(0, 7)}\n\n`;
+            changesSummary = `✅ *Updated Successfully!*\n\n`;
+            changesSummary += `📌 *Old:* \`${oldRev.substring(0, 7)}\`\n`;
+            changesSummary += `📌 *New:* \`${newRev.substring(0, 7)}\`\n\n`;
 
-            // Show last 5 commits
             if (commits && commits.trim()) {
               const commitLines = commits.split('\n').filter(l => l.trim()).slice(0, 5);
               if (commitLines.length > 0) {
-                changesSummary += `📝 Recent commits:\n${commitLines.map(c => `• ${c}`).join('\n')}\n\n`;
+                changesSummary += `📝 *Recent Commits:*\n${commitLines.map(c => `• ${c}`).join('\n')}\n\n`;
               }
             }
 
-            // Show changed files (max 10)
             if (files && files.trim()) {
-              const fileLines = files.split('\n').filter(l => l.trim()).slice(0, 10);
+              const fileLines = files.split('\n').filter(l => l.trim()).slice(0, 8);
               if (fileLines.length > 0) {
-                changesSummary += `📁 Changed files:\n${fileLines.map(f => `• ${f}`).join('\n')}`;
-                const totalFiles = files.split('\n').filter(l => l.trim()).length;
-                if (totalFiles > 10) {
-                  changesSummary += `\n... and ${totalFiles - 10} more`;
-                }
+                changesSummary += `📁 *Updated Files:*\n${fileLines.map(f => `• ${f}`).join('\n')}`;
               }
             }
           }
-
-          // Install dependencies after update
-          await run('npm install --no-audit --no-fund');
         } catch (gitError) {
-          console.error('Git update failed, trying ZIP:', gitError);
-          const zipOverride = args[0] || null;
+          console.error('Git update failed, falling back to ZIP:', gitError.message);
+          const zipOverride = args.find(a => a.startsWith('http')) || null;
           const { copiedFiles } = await updateViaZip(sock, chatId, message, zipOverride);
 
-          changesSummary = `✅ Updated from ZIP!\n\n`;
-          changesSummary += `📁 Files updated: ${copiedFiles.length}\n\n`;
+          changesSummary = `✅ *Updated from ZIP Archive!*\n\n📁 *Files updated:* ${copiedFiles.length}\n\n`;
           hasUpdates = copiedFiles.length > 0;
-
-          if (copiedFiles.length > 0) {
-            const shown = copiedFiles.slice(0, 10);
-            changesSummary += `Recent changes:\n${shown.map(f => `• ${f}`).join('\n')}`;
-            if (copiedFiles.length > 10) {
-              changesSummary += `\n... and ${copiedFiles.length - 10} more files`;
-            }
-          }
         }
       } else {
-        const zipOverride = args[0] || null;
+        const zipOverride = args.find(a => a.startsWith('http')) || null;
         const { copiedFiles } = await updateViaZip(sock, chatId, message, zipOverride);
 
-        changesSummary = `✅ Updated from ZIP!\n\n`;
-        changesSummary += `📁 Files updated: ${copiedFiles.length}\n\n`;
+        changesSummary = `✅ *Updated from ZIP Archive!*\n\n📁 *Files updated:* ${copiedFiles.length}\n\n`;
         hasUpdates = copiedFiles.length > 0;
-
-        if (copiedFiles.length > 0) {
-          const shown = copiedFiles.slice(0, 10);
-          changesSummary += `Recent changes:\n${shown.map(f => `• ${f}`).join('\n')}`;
-          if (copiedFiles.length > 10) {
-            changesSummary += `\n... and ${copiedFiles.length - 10} more files`;
-          }
-        }
       }
 
+      // Perform in-memory Hot Reload (Zero Downtime)
+      const reloadedCount = performHotReload();
+      changesSummary += `\n\n⚡ *Hot Reload Active:* Refreshed in-memory without disconnecting!`;
+
+      // Get latest version
       try {
         delete require.cache[require.resolve('../settings')];
         const newSettings = require('../settings');
-        const v = newSettings.version || 'unknown';
-        if (changesSummary) {
-          changesSummary += `\n\n🔖 Version: ${v}`;
-        }
-      } catch { }
+        const v = newSettings.version || '5.2.0';
+        changesSummary += `\n🔖 *Version:* ${v}`;
+      } catch {}
 
-      // Send status message
       await sock.sendMessage(chatId, {
         text: changesSummary,
         ...channelInfo
       }, { quoted: message });
 
-      // Only restart if there are actual updates
-      if (hasUpdates) {
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        await restartProcess();
+      // Only perform cold process exit if explicitly requested
+      if (isColdRequested && hasUpdates) {
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        process.exit(0);
       }
 
     } catch (err) {
       console.error('Update failed:', err);
       await sock.sendMessage(chatId, {
-        text: `❌ Update failed:\n${String(err.message || err)}`,
+        text: `❌ *Update failed:*\n${String(err.message || err)}`,
         ...channelInfo
       }, { quoted: message });
     }
-  }
+  },
+
+  performHotReload
 };

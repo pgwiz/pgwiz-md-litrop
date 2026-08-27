@@ -1,6 +1,6 @@
 const settings = require('../settings');
 const store = require('../lib/lightweight_store');
-const axios = require('axios');
+// Lazy-loaded: const axios = require('axios');
 
 const QUOTE_URLS = [
   'https://raw.githubusercontent.com/pgwiz/Islamic-Database/main/TXT-DATA/Quotes.txt',
@@ -111,6 +111,7 @@ module.exports = {
   ownerOnly: true,
 
   async handler(sock, message, args, context = {}) {
+    const axios = require('axios');
     const chatId = context.chatId || message.key.remoteJid;
     const action = args[0]?.toLowerCase();
 

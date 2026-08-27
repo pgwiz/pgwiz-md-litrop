@@ -1,4 +1,4 @@
-const axios = require('axios');
+// Lazy-loaded: const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
@@ -151,6 +151,7 @@ module.exports = {
   usage: '.addplugin [list|remove] [group|all] | .addplugin <pack:category|url>',
 
   async handler(sock, message, args, context = {}) {
+    const axios = require('axios');
     const chatId = context.chatId || message.key.remoteJid;
 
     const cmd = args?.[0]?.toLowerCase();
