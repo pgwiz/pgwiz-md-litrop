@@ -1,34 +1,47 @@
-FROM node:20-bookworm
+# ==========================================
+# Stage 1: Build & Compile Native Addons
+# ==========================================
+FROM node:20-alpine AS builder
 
-# Install system dependencies (git, ffmpeg, curl, imagemagick, webp, build tools for C++ addons like better-sqlite3)
-RUN apt-get update && \
-    apt-get install -y \
-    git \
-    ffmpeg \
-    curl \
-    imagemagick \
-    webp \
-    python3 \
-    build-essential \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install PM2 globally
-RUN npm install -g pm2
-
-# Set the working directory
 WORKDIR /app
 
-# Copy package.json and package-lock.json
+# Install native build tools for compiling C++ addons (better-sqlite3)
+RUN apk add --no-cache python3 make g++ git
+
+# Copy package manifests first for optimal layer caching
 COPY package*.json ./
 
-# Install project dependencies
-RUN npm install --legacy-peer-deps
+# Install dependencies
+RUN npm install --legacy-peer-deps --no-audit --no-fund
 
-# Copy the rest of the application code
+# ==========================================
+# Stage 2: Ultra-Lightweight Production Runner
+# ==========================================
+FROM node:20-alpine AS runner
+
+WORKDIR /app
+
+# Install essential runtime utilities for WhatsApp media processing
+RUN apk add --no-cache \
+    ffmpeg \
+    libwebp-tools \
+    git \
+    curl \
+    tzdata
+
+# Set environment
+ENV NODE_ENV=production \
+    PORT=5000 \
+    DB_URL="./data/baileys_store.db"
+
+# Copy pre-compiled dependencies from builder stage
+COPY --from=builder /app/node_modules ./node_modules
+
+# Copy application source files
 COPY . .
 
-# Expose the port
+# Expose HTTP healthcheck port
 EXPOSE 5000
 
-# Start the application using PM2 runtime
-CMD ["pm2-runtime", "start", "index.js", "--name", "mega-md", "--output", "/dev/stdout", "--error", "/dev/stderr"]
+# Start bot directly with memory limit (instant boot, zero PM2 overhead)
+CMD ["node", "--max-old-space-size=256", "index.js"]
