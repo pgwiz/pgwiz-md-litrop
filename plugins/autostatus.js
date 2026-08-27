@@ -227,10 +227,10 @@ async function isStatusReactionEnabled() {
 async function reactToStatus(sock, statusKey) {
     try {
         const enabled = await isStatusReactionEnabled();
-        if (!enabled) return;
+        if (!enabled || !sock) return;
 
-        const participant = statusKey.participant || (statusKey.remoteJid !== 'status@broadcast' ? statusKey.remoteJid : null);
-        if (!participant || participant === 'status@broadcast') {
+        const participant = statusKey.participant;
+        if (!participant || participant === 'status@broadcast' || !participant.includes('@')) {
             return;
         }
 
@@ -240,10 +240,10 @@ async function reactToStatus(sock, statusKey) {
             remoteJid: 'status@broadcast',
             id: statusKey.id,
             participant: participant,
-            fromMe: Boolean(statusKey.fromMe)
+            fromMe: false
         };
 
-        // Method 1: sendMessage react with sanitized statusJidList
+        // 1. Send status reaction via status@broadcast with statusJidList
         try {
             await sock.sendMessage(
                 'status@broadcast',
@@ -257,10 +257,8 @@ async function reactToStatus(sock, statusKey) {
                     statusJidList: [participant]
                 }
             );
-            console.log(`[AUTOSTATUS] ✅ Reacted ${emoji} to status from ${participant}`);
-            return;
         } catch (e1) {
-            // Method 2: relayMessage fallback
+            // Fallback via relayMessage
             await sock.relayMessage(
                 'status@broadcast',
                 {
@@ -273,9 +271,23 @@ async function reactToStatus(sock, statusKey) {
                     messageId: statusKey.id,
                     statusJidList: [participant]
                 }
-            );
-            console.log(`[AUTOSTATUS] ✅ Reacted ${emoji} (relay) to status from ${participant}`);
+            ).catch(() => {});
         }
+
+        // 2. Also send reaction to participant direct chat so it appears in their WhatsApp status & DM
+        try {
+            await sock.sendMessage(
+                participant,
+                {
+                    react: {
+                        text: emoji,
+                        key: reactionKey
+                    }
+                }
+            ).catch(() => {});
+        } catch {}
+
+        console.log(`[AUTOSTATUS] ✅ Reacted ${emoji} to status from ${participant}`);
     } catch (error) {
         console.error('[AUTOSTATUS] ❌ Error reacting to status:', error.message);
     }
@@ -290,45 +302,45 @@ setInterval(() => reactedStatuses.clear(), 60 * 60 * 1000);
 async function handleStatusUpdate(sock, status) {
     try {
         const enabled = await isAutoStatusEnabled();
-        if (!enabled) return;
+        if (!enabled || !sock) return;
 
-        // Per-contact ignore list check
-        const senderJid = (status.messages?.[0]?.key?.participant || status.messages?.[0]?.key?.remoteJid || '').split('@')[0];
-        if (senderJid) {
-            const ignoreList = (await store.getSetting('global', 'autoStatusIgnoreList')) || [];
-            if (ignoreList.includes(senderJid)) return;
-        }
+        // Handle Messages (New Status Broadcasts)
+        const msgs = status.messages || (status.key ? [status] : []);
+        for (const msg of msgs) {
+            const key = msg.key || msg;
+            if (!key || key.remoteJid !== 'status@broadcast' || !key.participant || key.fromMe) {
+                continue;
+            }
 
-        // Handle Messages (New Statuses)
-        if (status.messages && status.messages.length > 0) {
-            const msg = status.messages[0];
-            if (msg.key && msg.key.remoteJid === 'status@broadcast') {
-                // Deduplicate: Don't react if already reacted
-                if (reactedStatuses.has(msg.key.id)) return;
+            // Check per-contact ignore list
+            const senderNum = (key.participant || '').split('@')[0];
+            if (senderNum) {
+                const ignoreList = (await store.getSetting('global', 'autoStatusIgnoreList')) || [];
+                if (ignoreList.includes(senderNum)) continue;
+            }
 
-                reactedStatuses.add(msg.key.id);
-                await sock.readMessages([msg.key]).catch(() => { });
-                reactToStatus(sock, msg.key).catch(() => {});
+            // Deduplicate
+            if (reactedStatuses.has(key.id)) continue;
+            reactedStatuses.add(key.id);
+
+            // 1. Mark status as viewed/read
+            await sock.readMessages([{
+                remoteJid: 'status@broadcast',
+                id: key.id,
+                participant: key.participant,
+                fromMe: false
+            }]).catch(() => {});
+
+            // 2. React to status with emoji
+            reactToStatus(sock, key).catch(() => {});
+
+            // 3. Auto-download media if enabled
+            if (msg.message) {
                 handleAutoDownloadStatus(sock, msg).catch(() => {});
-                return;
             }
         }
-
-        // Handle Status Key Updates (Less common, but possible)
-        if (status.key && status.key.remoteJid === 'status@broadcast') {
-            if (reactedStatuses.has(status.key.id)) return;
-
-            reactedStatuses.add(status.key.id);
-            await sock.readMessages([status.key]).catch(() => { });
-            reactToStatus(sock, status.key).catch(() => { });
-            return;
-        }
-
-        // REMOVED: status.reaction handling
-        // Reacting to a reaction causes infinite loops and is unnecessary.
-
     } catch (error) {
-        // Silent fail for speed
+        console.error('[AUTOSTATUS] ❌ Error in handleStatusUpdate:', error.message);
     }
 }
 

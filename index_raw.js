@@ -1348,8 +1348,7 @@ async function startBot() {
         });
 
         botSocket.ev.on('messages.reaction', async (reaction) => {
-            if (isStaleSocket()) return;
-            await handleStatus(botSocket, reaction);
+            // Message reactions handled by reaction plugins, not status handler
         });
 
         // ===== PERFORMANCE & HEALTH MONITORING =====
