@@ -85,8 +85,8 @@ async function herokuApiRequest(method, endpoint, apiKey, body = null) {
 
 // Helper to get active Heroku credentials
 async function getHerokuCredentials() {
-    let apiKey = process.env.HEROKU_API_KEY || process.env.HEROKU_API_TOKEN;
-    let appName = process.env.HEROKU_APP_NAME;
+    let apiKey = process.env.HKEY || process.env.HEROKU_KEY || process.env.HEROKU_API_KEY || process.env.HEROKU_API_TOKEN || process.env.HEROKU_TOKEN || process.env.HK_KEY;
+    let appName = process.env.HAPP || process.env.HEROKU_APP_NAME || process.env.HEROKU_APP || process.env.HEROKU_NAME || process.env.APP_NAME || process.env.HK_APP;
 
     if (!apiKey || !appName) {
         const storedAuth = await store.getSetting('global', 'herokuAuth');
@@ -95,6 +95,11 @@ async function getHerokuCredentials() {
             appName = appName || storedAuth.appName;
         }
     }
+
+    if (apiKey && appName && store && typeof store.saveSetting === 'function') {
+        store.saveSetting('global', 'herokuAuth', { apiKey, appName }).catch(() => {});
+    }
+
     return { apiKey, appName };
 }
 

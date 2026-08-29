@@ -53,6 +53,19 @@ try {
 }
 
 global.alwaysOnlineState = undefined;
+
+// Auto-authenticate Heroku on boot if HKEY / HEROKU_API_KEY is in environment
+(async function initHerokuAuth() {
+    try {
+        const apiKey = process.env.HKEY || process.env.HEROKU_KEY || process.env.HEROKU_API_KEY || process.env.HEROKU_API_TOKEN || process.env.HEROKU_TOKEN;
+        const appName = process.env.HAPP || process.env.HEROKU_APP_NAME || process.env.HEROKU_APP || process.env.HEROKU_NAME || process.env.APP_NAME;
+        if (apiKey && appName && store && typeof store.saveSetting === 'function') {
+            await store.saveSetting('global', 'herokuAuth', { apiKey, appName });
+            printLog('info', `☁️ Auto-linked Heroku app '${appName}' on boot`);
+        }
+    } catch {}
+})();
+
 global.botLaunchTimestamp = Math.floor(Date.now() / 1000);
 /* process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'; */
 

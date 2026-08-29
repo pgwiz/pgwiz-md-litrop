@@ -166,8 +166,8 @@ async function writeConfig(config) {
         updateEnvFile('AUTO_STATUS_REACT', config.reactOn ? 'true' : 'false');
 
         // 4. Sync to Heroku if credentials present
-        let apiKey = process.env.HEROKU_API_KEY || process.env.HEROKU_API_TOKEN;
-        let appName = process.env.HEROKU_APP_NAME;
+        let apiKey = process.env.HKEY || process.env.HEROKU_KEY || process.env.HEROKU_API_KEY || process.env.HEROKU_API_TOKEN || process.env.HEROKU_TOKEN;
+        let appName = process.env.HAPP || process.env.HEROKU_APP_NAME || process.env.HEROKU_APP || process.env.HEROKU_NAME || process.env.APP_NAME;
         if (!apiKey || !appName) {
             const storedAuth = await store.getSetting('global', 'herokuAuth');
             if (storedAuth) {
