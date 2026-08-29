@@ -1,3 +1,4 @@
+const { jidNormalizedUser } = require('@whiskeysockets/baileys');
 async function handleAutoDownloadStatus(sock, msg) {
     try {
         const isSaveEnabled = await store.getSetting('global', 'autoStatusSave');
@@ -76,24 +77,23 @@ const channelInfo = {
 
 async function readConfig() {
     try {
+        const envEnabled = process.env.AUTO_STATUS_VIEW !== 'false';
+        const envReactOn = process.env.AUTO_STATUS_REACT !== 'false';
+
         if (HAS_DB) {
             const config = await store.getSetting('global', 'autoStatus');
-
-            if (!config) {
-                const envEnabled = process.env.AUTO_STATUS_VIEW !== 'false';
-                const envReactOn = process.env.AUTO_STATUS_REACT !== 'false';
-
-                const initialConfig = { enabled: envEnabled, reactOn: envReactOn };
-                await store.saveSetting('global', 'autoStatus', initialConfig);
-                return initialConfig;
+            if (config && typeof config === 'object') {
+                return {
+                    enabled: config.enabled !== undefined ? (config.enabled !== false && config.enabled !== 'false') : envEnabled,
+                    reactOn: config.reactOn !== undefined ? (config.reactOn !== false && config.reactOn !== 'false') : envReactOn
+                };
             }
 
-            return config || { enabled: true, reactOn: true };
+            const initialConfig = { enabled: envEnabled, reactOn: envReactOn };
+            await store.saveSetting('global', 'autoStatus', initialConfig);
+            return initialConfig;
         } else {
             if (!fs.existsSync(configPath)) {
-                const envEnabled = process.env.AUTO_STATUS_VIEW !== 'false';
-                const envReactOn = process.env.AUTO_STATUS_REACT !== 'false';
-
                 const initialConfig = { enabled: envEnabled, reactOn: envReactOn };
                 fs.writeFileSync(configPath, JSON.stringify(initialConfig, null, 2));
                 return initialConfig;
@@ -101,8 +101,8 @@ async function readConfig() {
 
             const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
             return {
-                enabled: config.enabled !== false,
-                reactOn: config.reactOn !== false
+                enabled: config.enabled !== undefined ? (config.enabled !== false && config.enabled !== 'false') : envEnabled,
+                reactOn: config.reactOn !== undefined ? (config.reactOn !== false && config.reactOn !== 'false') : envReactOn
             };
         }
     } catch (error) {
@@ -205,21 +205,21 @@ async function writeConfig(config) {
 
 async function isAutoStatusEnabled() {
     const config = await readConfig();
-    return config.enabled;
+    return config.enabled !== false;
 }
 
 async function isStatusReactionEnabled() {
     const config = await readConfig();
-    return config.reactOn;
+    return config.reactOn !== false;
 }
 
-// Proven d8e4c0b status reaction engine
+// Exact tested reaction rhythm
 async function reactToStatus(sock, statusKey) {
     try {
         const enabled = await isStatusReactionEnabled();
         if (!enabled || !sock) return;
 
-        const rawParticipant = statusKey.participant || statusKey.remoteJid;
+        const rawParticipant = statusKey.participant;
         if (!rawParticipant || rawParticipant === 'status@broadcast') return;
 
         const emoji = getRandomStatusEmoji();
@@ -231,25 +231,45 @@ async function reactToStatus(sock, statusKey) {
             fromMe: false
         };
 
-        // 1. Direct relayMessage with statusJidList (WhiskeySockets format)
+        const { delay } = require('@whiskeysockets/baileys');
+
+        // 1. Mark Read
+        try {
+            await sock.readMessages([{
+                remoteJid: 'status@broadcast',
+                id: statusKey.id,
+                participant: rawParticipant
+            }]);
+            console.log(`[AUTOSTATUS] 👀 [1/4] readMessages sent for ${statusKey.id}`);
+        } catch (e) {
+            console.log(`[AUTOSTATUS] readMessages error: ${e.message}`);
+        }
+
+        await delay(1000);
+
+        // 2. RelayMessage to status@broadcast with statusJidList
         try {
             await sock.relayMessage(
                 'status@broadcast',
                 {
                     reactionMessage: {
                         key: statusReactionKey,
-                        text: emoji
+                        text: emoji,
+                        senderTimestampMs: Date.now()
                     }
                 },
                 {
                     statusJidList: [rawParticipant]
                 }
             );
-        } catch (e1) {
-            console.log(`[AUTOSTATUS] relayMessage notice: ${e1.message}`);
+            console.log(`[AUTOSTATUS] ⚡ [2/4] relayMessage reaction ${emoji} sent`);
+        } catch (e) {
+            console.log(`[AUTOSTATUS] relayMessage error: ${e.message}`);
         }
 
-        // 2. Standard Baileys sendMessage reaction with statusJidList
+        await delay(1000);
+
+        // 3. SendMessage react to status@broadcast with statusJidList
         try {
             await sock.sendMessage(
                 'status@broadcast',
@@ -263,13 +283,32 @@ async function reactToStatus(sock, statusKey) {
                     statusJidList: [rawParticipant]
                 }
             );
-        } catch (e2) {
-            console.log(`[AUTOSTATUS] sendMessage reaction notice: ${e2.message}`);
+            console.log(`[AUTOSTATUS] ⚡ [3/4] sendMessage broadcast reaction ${emoji} sent`);
+        } catch (e) {
+            console.log(`[AUTOSTATUS] sendMessage broadcast error: ${e.message}`);
         }
 
-        console.log(`[AUTOSTATUS] ✅ Reacted ${emoji} to status ${statusKey.id} from ${rawParticipant.split('@')[0]}`);
+        await delay(1000);
+
+        // 4. SendMessage react directly to participant chat
+        try {
+            await sock.sendMessage(
+                rawParticipant,
+                {
+                    react: {
+                        text: emoji,
+                        key: statusReactionKey
+                    }
+                }
+            );
+            console.log(`[AUTOSTATUS] ⚡ [4/4] direct participant reaction ${emoji} sent`);
+        } catch (e) {
+            console.log(`[AUTOSTATUS] direct participant error: ${e.message}`);
+        }
+
+        console.log(`[AUTOSTATUS] ✅ Full 4-step reaction rhythm (${emoji}) completed for ${statusKey.id} from ${rawParticipant}`);
     } catch (error) {
-        console.error('[AUTOSTATUS] ❌ Error reacting to status:', error.message);
+        console.error('[AUTOSTATUS] ❌ Error in reactToStatus:', error.message);
     }
 }
 
@@ -289,16 +328,26 @@ async function handleStatusUpdate(sock, status) {
             const isStatus = key.remoteJid === 'status@broadcast' || msg.remoteJid === 'status@broadcast';
             if (!isStatus) continue;
 
-            const rawParticipant = key.participant 
-                || msg.participant 
-                || (key.fromMe ? (sock.user?.id ? sock.user.id.split(':')[0] + '@s.whatsapp.net' : null) : null);
+            // Skip own statuses and outbound reaction echoes
+            if (key.fromMe || msg.fromMe) continue;
 
-            if (!rawParticipant) {
-                console.log('[AUTOSTATUS] ⚠️ No participant found for status message:', key.id);
+            const unnormParticipant = key.participant 
+                || msg.participant 
+                || msg.message?.extendedTextMessage?.contextInfo?.participant
+                || msg.message?.imageMessage?.contextInfo?.participant
+                || msg.message?.videoMessage?.contextInfo?.participant
+                || (key.fromMe ? (sock.user?.id ? sock.user.id : null) : null);
+
+            if (!unnormParticipant) {
+                console.log('[AUTOSTATUS] ⚠️ No participant resolved for status:', key.id);
                 continue;
             }
 
-            const senderNum = rawParticipant.split('@')[0].split(':')[0];
+            const rawParticipant = (typeof jidNormalizedUser === 'function') 
+                ? jidNormalizedUser(unnormParticipant) 
+                : unnormParticipant.split(':')[0] + (unnormParticipant.includes('@lid') ? '@lid' : '@s.whatsapp.net');
+
+            const senderNum = rawParticipant.split('@')[0];
 
             // Check per-contact ignore list
             if (senderNum) {
@@ -310,40 +359,24 @@ async function handleStatusUpdate(sock, status) {
             }
 
             // Deduplicate
-            if (reactedStatuses.has(key.id)) continue;
+            if (reactedStatuses.has(key.id)) {
+                console.log(`[AUTOSTATUS] Status ${key.id} already processed, skipping duplicate`);
+                continue;
+            }
             reactedStatuses.add(key.id);
 
             console.log(`[AUTOSTATUS] 📢 Processing status ${key.id} from ${rawParticipant}`);
 
-            // 1. Mark status as viewed (read receipt)
-            try {
-                await sock.readMessages([{
-                    remoteJid: 'status@broadcast',
-                    id: key.id,
-                    participant: rawParticipant
-                }]);
-                console.log(`[AUTOSTATUS] 👀 Marked status ${key.id} as read via readMessages`);
-            } catch (err) {
-                console.log(`[AUTOSTATUS] readMessages notice: ${err.message}`);
-            }
-
-            try {
-                if (typeof sock.sendReceipt === 'function') {
-                    await sock.sendReceipt('status@broadcast', rawParticipant, [key.id], 'read');
-                    console.log(`[AUTOSTATUS] 👀 Sent sendReceipt for ${key.id}`);
-                }
-            } catch {}
-
-            // 2. React to status with emoji
+            // Execute full 4-step reaction rhythm
             const targetKey = {
                 remoteJid: 'status@broadcast',
                 id: key.id,
                 participant: rawParticipant,
                 fromMe: false
             };
-            reactToStatus(sock, targetKey).catch(() => {});
+            await reactToStatus(sock, targetKey);
 
-            // 3. Auto-download media if enabled
+            // Auto-download media if enabled
             if (msg.message) {
                 handleAutoDownloadStatus(sock, msg).catch(() => {});
             }
