@@ -354,6 +354,19 @@ async function handleStatusUpdate(sock, status) {
     }
 }
 
+
+async function applyStartupAutoStatusPolicy() {
+    try {
+        const config = await readConfig();
+        process.env.AUTO_STATUS_VIEW = config.enabled ? 'true' : 'false';
+        process.env.AUTO_STATUS_REACT = config.reactOn ? 'true' : 'false';
+        console.log(`[AUTOSTATUS] Startup policy applied: View=${config.enabled}, React=${config.reactOn}`);
+        return config;
+    } catch (e) {
+        console.error('[AUTOSTATUS] Error applying startup policy:', e.message);
+    }
+}
+
 module.exports = {
     command: 'autostatus',
     aliases: ['autoview', 'statusview'],
@@ -514,6 +527,7 @@ module.exports = {
     },
 
     handleStatusUpdate,
+    applyStartupAutoStatusPolicy,
     isAutoStatusEnabled,
     isStatusReactionEnabled,
     reactToStatus,
