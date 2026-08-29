@@ -2,9 +2,9 @@ const store = require('../lib/lightweight_store');
 
 module.exports = {
     command: 'clear',
-    aliases: ['clearchat', 'clr', 'clean', 'deletechat'],
+    aliases: ['clearchat', 'clr', 'clean'],
     category: 'owner',
-    description: 'Clear messages from the current chat or group',
+    description: 'Clear messages from the current chat or group (keeps the chat, deletes messages)',
     usage: '.clear',
     ownerOnly: true,
 
@@ -16,7 +16,7 @@ module.exports = {
 
         try {
             const statusMsg = await sock.sendMessage(chatId, {
-                text: `🧹 *Clearing ${targetName}...*`,
+                text: `🧹 *Clearing ${targetName} messages...*`,
                 ...channelInfo
             }, { quoted: message });
 
@@ -35,7 +35,7 @@ module.exports = {
                 chatMessages.push(message);
             }
 
-            // 2. Perform accurate chatModify clear using valid message keys
+            // 2. Perform accurate chatModify clear (wipe messages, KEEP the chat conversation)
             if (chatMessages && chatMessages.length > 0) {
                 const messagesToClear = chatMessages.map(m => ({
                     id: m.key?.id || m.id,
@@ -50,18 +50,6 @@ module.exports = {
                         console.warn(`[CLEAR] chatModify clear notice for ${chatId}:`, err.message);
                     });
                 }
-
-                // Delete entire chat view if last message exists
-                const lastMsg = chatMessages[chatMessages.length - 1];
-                if (lastMsg && lastMsg.key) {
-                    await sock.chatModify({
-                        delete: true,
-                        lastMessages: [{
-                            key: lastMsg.key,
-                            messageTimestamp: lastMsg.messageTimestamp || Math.floor(Date.now() / 1000)
-                        }]
-                    }, chatId).catch(() => {});
-                }
             }
 
             // 3. Clean local store messages
@@ -69,7 +57,7 @@ module.exports = {
                 await store.deleteChat(chatId).catch(() => {});
             }
 
-            // 4. Delete status message after 2.5s
+            // 4. Delete status confirmation message after 2.5s
             if (statusMsg && statusMsg.key) {
                 setTimeout(async () => {
                     await sock.sendMessage(chatId, { delete: statusMsg.key }).catch(() => {});

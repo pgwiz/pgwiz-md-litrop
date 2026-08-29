@@ -82,17 +82,7 @@ async function runAutoClearCheck(sock) {
                             });
                         }
 
-                        // Remove entire chat view if last message exists
-                        const lastMsg = chatMessages[chatMessages.length - 1];
-                        if (lastMsg && lastMsg.key) {
-                            await sock.chatModify({
-                                delete: true,
-                                lastMessages: [{
-                                    key: lastMsg.key,
-                                    messageTimestamp: lastMsg.messageTimestamp || Math.floor(now / 1000)
-                                }]
-                            }, chatId).catch(() => {});
-                        }
+                        // Messages cleared successfully (chat retained in inbox)
                     }
 
                     // 3. Clean local store cache
