@@ -75,38 +75,63 @@ const channelInfo = {
     }
 };
 
+function parseEnvBool(val, fallback = true) {
+    if (val === undefined || val === null || String(val).trim() === '') return fallback;
+    const s = String(val).trim().toLowerCase();
+    if (s === 'true' || s === '1' || s === 'yes' || s === 'on' || s === 'enabled') return true;
+    if (s === 'false' || s === '0' || s === 'no' || s === 'off' || s === 'disabled') return false;
+    return fallback;
+}
+
+function getStatusEmojis() {
+    const envEmojis = process.env.STATUS_EMOJIS || process.env.AUTO_STATUS_EMOJIS || process.env.STATUS_REACTION_EMOJIS;
+    if (envEmojis && typeof envEmojis === 'string' && envEmojis.trim() !== '') {
+        const parsed = envEmojis.split(',').map(e => e.trim()).filter(Boolean);
+        if (parsed.length > 0) return parsed;
+    }
+    return ['❤️', '🔥', '✨', '💯', '🌟', '⚡'];
+}
+
 async function readConfig() {
     try {
-        const envEnabled = process.env.AUTO_STATUS_VIEW !== 'false';
-        const envReactOn = process.env.AUTO_STATUS_REACT !== 'false';
+        const hasEnvView = (process.env.AUTO_STATUS_VIEW !== undefined && process.env.AUTO_STATUS_VIEW.trim() !== '')
+            || (process.env.AUTO_STATUS_READ !== undefined && process.env.AUTO_STATUS_READ.trim() !== '')
+            || (process.env.AUTO_READ_STATUS !== undefined && process.env.AUTO_READ_STATUS.trim() !== '');
+            
+        const hasEnvReact = (process.env.AUTO_STATUS_REACT !== undefined && process.env.AUTO_STATUS_REACT.trim() !== '')
+            || (process.env.AUTO_REACT_STATUS !== undefined && process.env.AUTO_REACT_STATUS.trim() !== '')
+            || (process.env.STATUS_REACT !== undefined && process.env.STATUS_REACT.trim() !== '');
+
+        const envViewRaw = process.env.AUTO_STATUS_VIEW ?? process.env.AUTO_STATUS_READ ?? process.env.AUTO_READ_STATUS;
+        const envReactRaw = process.env.AUTO_STATUS_REACT ?? process.env.AUTO_REACT_STATUS ?? process.env.STATUS_REACT;
+
+        const envEnabled = parseEnvBool(envViewRaw, true);
+        const envReactOn = parseEnvBool(envReactRaw, true);
 
         if (HAS_DB) {
             const config = await store.getSetting('global', 'autoStatus');
-            if (config && typeof config === 'object') {
-                return {
-                    enabled: config.enabled !== undefined ? (config.enabled !== false && config.enabled !== 'false') : envEnabled,
-                    reactOn: config.reactOn !== undefined ? (config.reactOn !== false && config.reactOn !== 'false') : envReactOn
-                };
-            }
-
-            const initialConfig = { enabled: envEnabled, reactOn: envReactOn };
-            await store.saveSetting('global', 'autoStatus', initialConfig);
-            return initialConfig;
+            return {
+                enabled: hasEnvView ? envEnabled : (config?.enabled !== undefined ? parseEnvBool(config.enabled, true) : envEnabled),
+                reactOn: hasEnvReact ? envReactOn : (config?.reactOn !== undefined ? parseEnvBool(config.reactOn, true) : envReactOn)
+            };
         } else {
             if (!fs.existsSync(configPath)) {
                 const initialConfig = { enabled: envEnabled, reactOn: envReactOn };
-                fs.writeFileSync(configPath, JSON.stringify(initialConfig, null, 2));
+                try { fs.writeFileSync(configPath, JSON.stringify(initialConfig, null, 2)); } catch {}
                 return initialConfig;
             }
 
-            const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-            return {
-                enabled: config.enabled !== undefined ? (config.enabled !== false && config.enabled !== 'false') : envEnabled,
-                reactOn: config.reactOn !== undefined ? (config.reactOn !== false && config.reactOn !== 'false') : envReactOn
-            };
+            try {
+                const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+                return {
+                    enabled: hasEnvView ? envEnabled : (config?.enabled !== undefined ? parseEnvBool(config.enabled, true) : envEnabled),
+                    reactOn: hasEnvReact ? envReactOn : (config?.reactOn !== undefined ? parseEnvBool(config.reactOn, true) : envReactOn)
+                };
+            } catch {
+                return { enabled: envEnabled, reactOn: envReactOn };
+            }
         }
     } catch (error) {
-        console.error('Error reading auto status config:', error);
         return { enabled: true, reactOn: true };
     }
 }

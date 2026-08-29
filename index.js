@@ -58,6 +58,25 @@ try {
 
 global.alwaysOnlineState = undefined;
 
+// ==================== ENVIRONMENT AUTO-DETECTION ON BOOT ====================
+(function logBootEnvironment() {
+    try {
+        const autoView = process.env.AUTO_STATUS_VIEW ?? process.env.AUTO_STATUS_READ ?? process.env.AUTO_READ_STATUS ?? 'true';
+        const autoReact = process.env.AUTO_STATUS_REACT ?? process.env.AUTO_REACT_STATUS ?? process.env.STATUS_REACT ?? 'true';
+        const alwaysOn = process.env.ALWAYS_ONLINE ?? process.env.ALWAYS_ONLINE_PRESENCE ?? 'false';
+        const botMode = process.env.MODE ?? process.env.WORK_TYPE ?? settings.commandMode ?? 'public';
+        const prefix = process.env.PREFIX ?? '.';
+        
+        console.log('[BOOT-ENV] ⚙️ Active Runtime Environment Variables:');
+        console.log(`   • AUTO_STATUS_VIEW : ${autoView}`);
+        console.log(`   • AUTO_STATUS_REACT: ${autoReact}`);
+        console.log(`   • ALWAYS_ONLINE    : ${alwaysOn}`);
+        console.log(`   • MODE             : ${botMode}`);
+        console.log(`   • PREFIX           : ${prefix}`);
+    } catch {}
+})();
+
+
 
 // Auto-authenticate Heroku & Koyeb on boot if credentials exist in environment
 (async function initCloudPlatformAuth() {
