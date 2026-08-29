@@ -284,25 +284,36 @@ async function handleStatusUpdate(sock, status) {
         const msgs = status.messages || (status.key ? [status] : []);
         for (const msg of msgs) {
             const key = msg.key || msg;
-            if (!key || key.remoteJid !== 'status@broadcast') {
+            if (!key) continue;
+
+            const isStatus = key.remoteJid === 'status@broadcast' || msg.remoteJid === 'status@broadcast';
+            if (!isStatus) continue;
+
+            const rawParticipant = key.participant 
+                || msg.participant 
+                || (key.fromMe ? (sock.user?.id ? sock.user.id.split(':')[0] + '@s.whatsapp.net' : null) : null);
+
+            if (!rawParticipant) {
+                console.log('[AUTOSTATUS] ⚠️ No participant found for status message:', key.id);
                 continue;
             }
 
-            const rawParticipant = key.participant || (key.fromMe ? (sock.user?.id ? sock.user.id.split(':')[0] + '@s.whatsapp.net' : null) : null);
-            if (!rawParticipant) continue;
+            const senderNum = rawParticipant.split('@')[0].split(':')[0];
 
             // Check per-contact ignore list
-            const senderNum = rawParticipant.split('@')[0].split(':')[0];
             if (senderNum) {
                 const ignoreList = (await store.getSetting('global', 'autoStatusIgnoreList')) || [];
-                if (ignoreList.includes(senderNum)) continue;
+                if (ignoreList.includes(senderNum)) {
+                    console.log(`[AUTOSTATUS] Skipping ignored contact: ${senderNum}`);
+                    continue;
+                }
             }
 
             // Deduplicate
             if (reactedStatuses.has(key.id)) continue;
             reactedStatuses.add(key.id);
 
-            console.log(`[AUTOSTATUS] 📢 Processing status ${key.id} from ${senderNum}`);
+            console.log(`[AUTOSTATUS] 📢 Processing status ${key.id} from ${rawParticipant}`);
 
             // 1. Mark status as viewed (read receipt)
             try {
@@ -311,14 +322,15 @@ async function handleStatusUpdate(sock, status) {
                     id: key.id,
                     participant: rawParticipant
                 }]);
-                console.log(`[AUTOSTATUS] 👀 Marked status ${key.id} as read`);
+                console.log(`[AUTOSTATUS] 👀 Marked status ${key.id} as read via readMessages`);
             } catch (err) {
-                console.log(`[AUTOSTATUS] Read receipt notice: ${err.message}`);
+                console.log(`[AUTOSTATUS] readMessages notice: ${err.message}`);
             }
 
             try {
                 if (typeof sock.sendReceipt === 'function') {
                     await sock.sendReceipt('status@broadcast', rawParticipant, [key.id], 'read');
+                    console.log(`[AUTOSTATUS] 👀 Sent sendReceipt for ${key.id}`);
                 }
             } catch {}
 
