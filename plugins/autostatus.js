@@ -315,12 +315,15 @@ async function handleStatusUpdate(sock, status) {
         const msgs = status.messages || (status.key ? [status] : []);
         for (const msg of msgs) {
             const key = msg.key || msg;
-            if (!key || key.remoteJid !== 'status@broadcast' || !key.participant || key.fromMe) {
+            if (!key || key.remoteJid !== 'status@broadcast') {
                 continue;
             }
 
+            const rawParticipant = key.participant || (key.fromMe ? (sock.user?.id ? sock.user.id.split(':')[0] + '@s.whatsapp.net' : null) : null);
+            if (!rawParticipant) continue;
+
             // Check per-contact ignore list
-            const senderNum = (key.participant || '').split('@')[0].split(':')[0];
+            const senderNum = rawParticipant.split('@')[0].split(':')[0];
             if (senderNum) {
                 const ignoreList = (await store.getSetting('global', 'autoStatusIgnoreList')) || [];
                 if (ignoreList.includes(senderNum)) continue;
@@ -330,19 +333,34 @@ async function handleStatusUpdate(sock, status) {
             if (reactedStatuses.has(key.id)) continue;
             reactedStatuses.add(key.id);
 
-            // 1. Mark status as viewed (read receipt)
-            await sock.readMessages([{
-                remoteJid: 'status@broadcast',
-                id: key.id,
-                participant: key.participant
-            }]).catch(() => {});
+            console.log(`[AUTOSTATUS] 📢 Processing status ${key.id} from ${senderNum}`);
 
-            if (typeof sock.sendReceipt === 'function') {
-                await sock.sendReceipt('status@broadcast', key.participant, [key.id], 'read').catch(() => {});
+            // 1. Mark status as viewed (read receipt)
+            try {
+                await sock.readMessages([{
+                    remoteJid: 'status@broadcast',
+                    id: key.id,
+                    participant: rawParticipant
+                }]);
+                console.log(`[AUTOSTATUS] 👀 Marked status ${key.id} as read`);
+            } catch (err) {
+                console.log(`[AUTOSTATUS] Read receipt notice: ${err.message}`);
             }
 
+            try {
+                if (typeof sock.sendReceipt === 'function') {
+                    await sock.sendReceipt('status@broadcast', rawParticipant, [key.id], 'read');
+                }
+            } catch {}
+
             // 2. React to status with emoji
-            reactToStatus(sock, key).catch(() => {});
+            const targetKey = {
+                remoteJid: 'status@broadcast',
+                id: key.id,
+                participant: rawParticipant,
+                fromMe: false
+            };
+            reactToStatus(sock, targetKey).catch(() => {});
 
             // 3. Auto-download media if enabled
             if (msg.message) {
@@ -353,7 +371,6 @@ async function handleStatusUpdate(sock, status) {
         console.error('[AUTOSTATUS] ❌ Error in handleStatusUpdate:', error.message);
     }
 }
-
 
 async function applyStartupAutoStatusPolicy() {
     try {
