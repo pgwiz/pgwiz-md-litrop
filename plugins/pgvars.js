@@ -180,7 +180,7 @@ async function getKoyebCredentials() {
 
 module.exports = {
     command: 'pgvars',
-    aliases: ['setenv', 'getenv', 'pgvar', 'herokuvar', 'koyebvar', 'var'],
+    aliases: ['setenv', 'getenv', 'pgvar', 'herokuvar', 'koyebvar', 'var', 'koyeb', 'heroku'],
     category: 'admin',
     description: 'Manage environment variables dynamically (.env, Heroku, Koyeb)',
     usage: '.pgvars [heroku|koyeb] <list|set|delete|auth> [KEY=VALUE]',
@@ -209,12 +209,14 @@ module.exports = {
             return;
         }
 
-        const targetPlatform = args[0].toLowerCase();
-        const isHerokuTarget = targetPlatform === 'heroku' || targetPlatform === 'hk';
-        const isKoyebTarget = targetPlatform === 'koyeb' || targetPlatform === 'ky';
-        const isCloudTarget = isHerokuTarget || isKoyebTarget;
+        const invokedCmd = (context.command || '').toLowerCase();
+        const firstArg = (args[0] || '').toLowerCase();
 
-        const subCmdIndex = isCloudTarget ? 1 : 0;
+        const isHerokuTarget = invokedCmd === 'heroku' || invokedCmd === 'herokuvar' || firstArg === 'heroku' || firstArg === 'hk';
+        const isKoyebTarget = invokedCmd === 'koyeb' || invokedCmd === 'koyebvar' || firstArg === 'koyeb' || firstArg === 'ky';
+        const isExplicitPlatformArg = firstArg === 'heroku' || firstArg === 'hk' || firstArg === 'koyeb' || firstArg === 'ky';
+
+        const subCmdIndex = isExplicitPlatformArg ? 1 : 0;
         const subCmd = (args[subCmdIndex] || 'list').toLowerCase();
         const remainingArgs = args.slice(subCmdIndex + 1);
 
