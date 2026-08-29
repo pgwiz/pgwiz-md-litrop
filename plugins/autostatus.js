@@ -226,26 +226,29 @@ async function reactToStatus(sock, statusKey) {
 
         const emoji = getRandomStatusEmoji();
 
+        const statusReactionKey = {
+            remoteJid: 'status@broadcast',
+            id: statusKey.id,
+            participant: participant,
+            fromMe: false
+        };
+
         // 1. Explicit read receipt to status@broadcast (guarantees view in viewer list)
         try {
             if (typeof sock.sendReceipt === 'function') {
                 await sock.sendReceipt('status@broadcast', participant, [statusKey.id], 'read');
             }
+            await sock.readMessages([statusKey]);
         } catch {}
 
-        // 2. Status broadcast reaction stanza
+        // 2. Multi-device Status Broadcast Reaction Stanza
         try {
             await sock.sendMessage(
                 'status@broadcast',
                 {
                     react: {
                         text: emoji,
-                        key: {
-                            remoteJid: 'status@broadcast',
-                            id: statusKey.id,
-                            participant: participant,
-                            fromMe: false
-                        }
+                        key: statusReactionKey
                     }
                 },
                 {
@@ -254,19 +257,28 @@ async function reactToStatus(sock, statusKey) {
             );
         } catch {}
 
-        // 3. Relay reaction fallback
+        // 3. Direct Status Reaction Delivery (triggers WhatsApp mobile notification & DM story reply)
+        try {
+            await sock.sendMessage(
+                participant,
+                {
+                    react: {
+                        text: emoji,
+                        key: statusReactionKey
+                    }
+                }
+            );
+        } catch {}
+
+        // 4. Fallback relayMessage to status@broadcast
         try {
             await sock.relayMessage(
                 'status@broadcast',
                 {
                     reactionMessage: {
-                        key: {
-                            remoteJid: 'status@broadcast',
-                            id: statusKey.id,
-                            participant: participant,
-                            fromMe: false
-                        },
-                        text: emoji
+                        key: statusReactionKey,
+                        text: emoji,
+                        senderTimestampMs: Date.now()
                     }
                 },
                 {
