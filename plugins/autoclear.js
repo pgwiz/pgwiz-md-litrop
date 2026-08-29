@@ -53,38 +53,58 @@ async function runAutoClearCheck(sock) {
             const lastCleared = data.lastClearedAt || 0;
 
             if (now - lastCleared >= interval) {
-                console.log("[AUTOCLEAR] Running scheduled clear for " + chatId + " (interval: " + (data.intervalLabel || '24h') + ")...");
+                console.log(`[AUTOCLEAR] Running scheduled clear for ${chatId} (interval: ${data.intervalLabel || '24h'})...`);
                 
                 try {
-                    const nowTs = Math.floor(now / 1000);
-                    const dummyMsg = {
-                        key: {
-                            id: '0',
-                            remoteJid: chatId,
-                            fromMe: true
-                        },
-                        messageTimestamp: nowTs
-                    };
+                    // 1. Fetch real messages from store
+                    let chatMessages = [];
+                    if (store && typeof store.loadMessages === 'function') {
+                        chatMessages = await store.loadMessages(chatId, 100);
+                    } else if (store && store.messages && store.messages[chatId]) {
+                        chatMessages = Array.isArray(store.messages[chatId]) 
+                            ? store.messages[chatId] 
+                            : Object.values(store.messages[chatId]);
+                    }
 
-                    await sock.chatModify({
-                        clear: true,
-                        lastMessages: [dummyMsg]
-                    }, chatId).catch(async () => {
-                        await sock.chatModify({
-                            delete: true,
-                            lastMessages: [dummyMsg]
-                        }, chatId).catch(() => {});
-                    });
+                    // 2. Perform accurate chatModify clear using valid message keys
+                    if (chatMessages && chatMessages.length > 0) {
+                        const messagesToClear = chatMessages.map(m => ({
+                            id: m.key?.id || m.id,
+                            fromMe: Boolean(m.key?.fromMe ?? m.fromMe),
+                            timestamp: String(m.messageTimestamp || m.timestamp || Math.floor(now / 1000))
+                        })).filter(m => m.id);
 
+                        if (messagesToClear.length > 0) {
+                            await sock.chatModify({
+                                clear: { messages: messagesToClear }
+                            }, chatId).catch(err => {
+                                console.warn(`[AUTOCLEAR] chatModify clear notice for ${chatId}:`, err.message);
+                            });
+                        }
+
+                        // Remove entire chat view if last message exists
+                        const lastMsg = chatMessages[chatMessages.length - 1];
+                        if (lastMsg && lastMsg.key) {
+                            await sock.chatModify({
+                                delete: true,
+                                lastMessages: [{
+                                    key: lastMsg.key,
+                                    messageTimestamp: lastMsg.messageTimestamp || Math.floor(now / 1000)
+                                }]
+                            }, chatId).catch(() => {});
+                        }
+                    }
+
+                    // 3. Clean local store cache
                     if (store && typeof store.deleteChat === 'function') {
                         await store.deleteChat(chatId).catch(() => {});
                     }
 
                     data.lastClearedAt = now;
                     changed = true;
-                    console.log("✅ [AUTOCLEAR] Cleared " + chatId + " successfully!");
+                    console.log(`✅ [AUTOCLEAR] Cleared ${chatId} successfully!`);
                 } catch (e) {
-                    console.error("❌ [AUTOCLEAR] Error clearing " + chatId + ":", e.message);
+                    console.error(`❌ [AUTOCLEAR] Error clearing ${chatId}:`, e.message);
                 }
             }
         }

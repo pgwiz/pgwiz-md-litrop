@@ -20,36 +20,56 @@ module.exports = {
                 ...channelInfo
             }, { quoted: message });
 
-            const nowTs = Math.floor(Date.now() / 1000);
-            const dummyMsg = {
-                key: {
-                    id: message.key?.id || '0',
-                    remoteJid: chatId,
-                    fromMe: true
-                },
-                messageTimestamp: message.messageTimestamp || nowTs
-            };
-
-            // 1. WhatsApp Clear Chat App Patch with valid lastMessages
-            try {
-                await sock.chatModify({
-                    clear: true,
-                    lastMessages: [dummyMsg]
-                }, chatId);
-            } catch (err1) {
-                // Fallback deleteChat patch
-                await sock.chatModify({
-                    delete: true,
-                    lastMessages: [dummyMsg]
-                }, chatId).catch(() => {});
+            // 1. Fetch genuine messages from store
+            let chatMessages = [];
+            if (store && typeof store.loadMessages === 'function') {
+                chatMessages = await store.loadMessages(chatId, 100);
+            } else if (store && store.messages && store.messages[chatId]) {
+                chatMessages = Array.isArray(store.messages[chatId]) 
+                    ? store.messages[chatId] 
+                    : Object.values(store.messages[chatId]);
             }
 
-            // 2. Clean local store messages
+            // Always include current command message so at least 1 real key is present
+            if (chatMessages.length === 0 && message?.key?.id) {
+                chatMessages.push(message);
+            }
+
+            // 2. Perform accurate chatModify clear using valid message keys
+            if (chatMessages && chatMessages.length > 0) {
+                const messagesToClear = chatMessages.map(m => ({
+                    id: m.key?.id || m.id,
+                    fromMe: Boolean(m.key?.fromMe ?? m.fromMe),
+                    timestamp: String(m.messageTimestamp || m.timestamp || Math.floor(Date.now() / 1000))
+                })).filter(m => m.id);
+
+                if (messagesToClear.length > 0) {
+                    await sock.chatModify({
+                        clear: { messages: messagesToClear }
+                    }, chatId).catch(err => {
+                        console.warn(`[CLEAR] chatModify clear notice for ${chatId}:`, err.message);
+                    });
+                }
+
+                // Delete entire chat view if last message exists
+                const lastMsg = chatMessages[chatMessages.length - 1];
+                if (lastMsg && lastMsg.key) {
+                    await sock.chatModify({
+                        delete: true,
+                        lastMessages: [{
+                            key: lastMsg.key,
+                            messageTimestamp: lastMsg.messageTimestamp || Math.floor(Date.now() / 1000)
+                        }]
+                    }, chatId).catch(() => {});
+                }
+            }
+
+            // 3. Clean local store messages
             if (store && typeof store.deleteChat === 'function') {
                 await store.deleteChat(chatId).catch(() => {});
             }
 
-            // 3. Delete status message after 2.5s
+            // 4. Delete status message after 2.5s
             if (statusMsg && statusMsg.key) {
                 setTimeout(async () => {
                     await sock.sendMessage(chatId, { delete: statusMsg.key }).catch(() => {});
