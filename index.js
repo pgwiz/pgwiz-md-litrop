@@ -1,3 +1,7 @@
+// High-Performance Engine Tuning for Heroku / Cloud Dynos
+if (!process.env.UV_THREADPOOL_SIZE) process.env.UV_THREADPOOL_SIZE = '16';
+if (!process.env.NODE_ENV) process.env.NODE_ENV = 'production';
+
 // Zero-dependency environment loader with safe dotenv fallback (compatible with all panels & environments)
 (function loadEnvironment() {
     try {
