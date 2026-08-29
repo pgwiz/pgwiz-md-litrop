@@ -213,7 +213,7 @@ async function isStatusReactionEnabled() {
     return config.reactOn !== false;
 }
 
-// Exact tested reaction rhythm
+// Exact tested reaction rhythm (Clean story delivery without DM spam)
 async function reactToStatus(sock, statusKey) {
     try {
         const enabled = await isStatusReactionEnabled();
@@ -233,21 +233,21 @@ async function reactToStatus(sock, statusKey) {
 
         const { delay } = require('@whiskeysockets/baileys');
 
-        // 1. Mark Read
+        // 1. Mark Read Receipt on Status Broadcast
         try {
             await sock.readMessages([{
                 remoteJid: 'status@broadcast',
                 id: statusKey.id,
                 participant: rawParticipant
             }]);
-            console.log(`[AUTOSTATUS] 👀 [1/4] readMessages sent for ${statusKey.id}`);
+            console.log(`[AUTOSTATUS] 👀 [1/3] readMessages sent for ${statusKey.id}`);
         } catch (e) {
-            console.log(`[AUTOSTATUS] readMessages error: ${e.message}`);
+            console.log(`[AUTOSTATUS] readMessages notice: ${e.message}`);
         }
 
         await delay(1000);
 
-        // 2. RelayMessage to status@broadcast with statusJidList
+        // 2. RelayMessage reaction stanza to status@broadcast
         try {
             await sock.relayMessage(
                 'status@broadcast',
@@ -262,14 +262,14 @@ async function reactToStatus(sock, statusKey) {
                     statusJidList: [rawParticipant]
                 }
             );
-            console.log(`[AUTOSTATUS] ⚡ [2/4] relayMessage reaction ${emoji} sent`);
+            console.log(`[AUTOSTATUS] ⚡ [2/3] relayMessage reaction ${emoji} sent`);
         } catch (e) {
-            console.log(`[AUTOSTATUS] relayMessage error: ${e.message}`);
+            console.log(`[AUTOSTATUS] relayMessage notice: ${e.message}`);
         }
 
         await delay(1000);
 
-        // 3. SendMessage react to status@broadcast with statusJidList
+        // 3. SendMessage react stanza to status@broadcast
         try {
             await sock.sendMessage(
                 'status@broadcast',
@@ -283,37 +283,39 @@ async function reactToStatus(sock, statusKey) {
                     statusJidList: [rawParticipant]
                 }
             );
-            console.log(`[AUTOSTATUS] ⚡ [3/4] sendMessage broadcast reaction ${emoji} sent`);
+            console.log(`[AUTOSTATUS] ⚡ [3/3] sendMessage broadcast reaction ${emoji} sent`);
         } catch (e) {
-            console.log(`[AUTOSTATUS] sendMessage broadcast error: ${e.message}`);
+            console.log(`[AUTOSTATUS] sendMessage broadcast notice: ${e.message}`);
         }
 
-        await delay(1000);
-
-        // 4. SendMessage react directly to participant chat
-        try {
-            await sock.sendMessage(
-                rawParticipant,
-                {
-                    react: {
-                        text: emoji,
-                        key: statusReactionKey
-                    }
-                }
-            );
-            console.log(`[AUTOSTATUS] ⚡ [4/4] direct participant reaction ${emoji} sent`);
-        } catch (e) {
-            console.log(`[AUTOSTATUS] direct participant error: ${e.message}`);
-        }
-
-        console.log(`[AUTOSTATUS] ✅ Full 4-step reaction rhythm (${emoji}) completed for ${statusKey.id} from ${rawParticipant}`);
+        console.log(`[AUTOSTATUS] ✅ Reaction rhythm (${emoji}) completed for ${statusKey.id} from ${rawParticipant}`);
     } catch (error) {
         console.error('[AUTOSTATUS] ❌ Error in reactToStatus:', error.message);
     }
 }
 
+// In-memory + SQLite deduplication set
 const reactedStatuses = new Set();
-setInterval(() => reactedStatuses.clear(), 60 * 60 * 1000);
+
+// Sequential queue to process statuses cleanly without interleaving
+let statusQueue = [];
+let isProcessingQueue = false;
+
+async function processStatusQueue(sock) {
+    if (isProcessingQueue || statusQueue.length === 0) return;
+    isProcessingQueue = true;
+
+    while (statusQueue.length > 0) {
+        const item = statusQueue.shift();
+        try {
+            await item.handler();
+        } catch (err) {
+            console.error('[AUTOSTATUS] Queue processing error:', err.message);
+        }
+    }
+
+    isProcessingQueue = false;
+}
 
 async function handleStatusUpdate(sock, status) {
     try {
@@ -331,15 +333,21 @@ async function handleStatusUpdate(sock, status) {
             // Skip own statuses and outbound reaction echoes
             if (key.fromMe || msg.fromMe) continue;
 
+            // 1. Age Guard: Skip historical backlog / old statuses older than 2 minutes (120s)
+            const timestamp = Number(msg.messageTimestamp || key.messageTimestamp || 0);
+            const nowSec = Math.floor(Date.now() / 1000);
+            if (timestamp && (nowSec - timestamp > 120)) {
+                console.log(`[AUTOSTATUS] ⏩ Skipping old status backlog ${key.id} (age: ${nowSec - timestamp}s)`);
+                continue;
+            }
+
             const unnormParticipant = key.participant 
                 || msg.participant 
                 || msg.message?.extendedTextMessage?.contextInfo?.participant
                 || msg.message?.imageMessage?.contextInfo?.participant
-                || msg.message?.videoMessage?.contextInfo?.participant
-                || (key.fromMe ? (sock.user?.id ? sock.user.id : null) : null);
+                || msg.message?.videoMessage?.contextInfo?.participant;
 
             if (!unnormParticipant) {
-                console.log('[AUTOSTATUS] ⚠️ No participant resolved for status:', key.id);
                 continue;
             }
 
@@ -358,28 +366,43 @@ async function handleStatusUpdate(sock, status) {
                 }
             }
 
-            // Deduplicate
+            // 2. In-memory & Persistent SQLite Deduplication
             if (reactedStatuses.has(key.id)) {
-                console.log(`[AUTOSTATUS] Status ${key.id} already processed, skipping duplicate`);
                 continue;
             }
-            reactedStatuses.add(key.id);
-
-            console.log(`[AUTOSTATUS] 📢 Processing status ${key.id} from ${rawParticipant}`);
-
-            // Execute full 4-step reaction rhythm
-            const targetKey = {
-                remoteJid: 'status@broadcast',
-                id: key.id,
-                participant: rawParticipant,
-                fromMe: false
-            };
-            await reactToStatus(sock, targetKey);
-
-            // Auto-download media if enabled
-            if (msg.message) {
-                handleAutoDownloadStatus(sock, msg).catch(() => {});
+            if (HAS_DB) {
+                const alreadyHandled = await store.getSetting('status_history', key.id);
+                if (alreadyHandled) {
+                    reactedStatuses.add(key.id);
+                    continue;
+                }
             }
+
+            reactedStatuses.add(key.id);
+            if (HAS_DB) {
+                await store.saveSetting('status_history', key.id, true).catch(() => {});
+            }
+
+            // 3. Push to sequential processing queue
+            statusQueue.push({
+                handler: async () => {
+                    console.log(`[AUTOSTATUS] 📢 Processing live status ${key.id} from ${rawParticipant}`);
+
+                    const targetKey = {
+                        remoteJid: 'status@broadcast',
+                        id: key.id,
+                        participant: rawParticipant,
+                        fromMe: false
+                    };
+                    await reactToStatus(sock, targetKey);
+
+                    if (msg.message) {
+                        handleAutoDownloadStatus(sock, msg).catch(() => {});
+                    }
+                }
+            });
+
+            processStatusQueue(sock).catch(() => {});
         }
     } catch (error) {
         console.error('[AUTOSTATUS] ❌ Error in handleStatusUpdate:', error.message);
