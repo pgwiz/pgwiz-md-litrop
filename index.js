@@ -1203,6 +1203,14 @@ async function startBot() {
 
                 global.botConnectedTime = Date.now();
                 printLog('success', 'Bot connected successfully!');
+                try {
+                    const { isAlwaysOnlineEnabled, startAlwaysOnlineLoop } = require('./plugins/alwaysonline');
+                    if (typeof isAlwaysOnlineEnabled === 'function') {
+                        isAlwaysOnlineEnabled().then(enabled => {
+                            if (enabled) startAlwaysOnlineLoop(pgwizSocket);
+                        }).catch(() => {});
+                    }
+                } catch (e) {}
 
                 const { startAutoBio } = require('./plugins/a-setbio');
                 startAutoBio(botSocket);

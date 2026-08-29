@@ -26,9 +26,42 @@ async function isAlwaysOnlineEnabled() {
     return isEn;
 }
 
+// Sustained 8-second keepalive loop (WhatsApp presence expires in ~10s)
+function startAlwaysOnlineLoop(sock) {
+    stopAlwaysOnlineLoop();
+    if (!sock) return;
+
+    // Send immediately
+    sendOnlinePresence(sock);
+
+    // Re-send every 8s to beat WhatsApp 10s expiration
+    global.alwaysOnlineInterval = setInterval(() => {
+        if (!global.alwaysOnlineState || !sock) {
+            stopAlwaysOnlineLoop();
+            return;
+        }
+        sendOnlinePresence(sock);
+    }, 8000);
+
+    console.log('[PRESENCE] 🟢 Sustained Always-Online 8s keepalive active');
+}
+
+function stopAlwaysOnlineLoop(sock = null) {
+    if (global.alwaysOnlineInterval) {
+        clearInterval(global.alwaysOnlineInterval);
+        global.alwaysOnlineInterval = null;
+    }
+    if (sock) {
+        sendOfflinePresence(sock);
+    }
+}
+
 async function sendOnlinePresence(sock) {
     if (!sock) return;
     try {
+        const ghostMode = await store.getSetting('global', 'stealthMode');
+        if (ghostMode && ghostMode.enabled) return;
+
         const me = sock?.authState?.creds?.me || sock?.user;
         const name = String(me?.name || settings.botName || 'PGWIZ-MD').replace(/@/g, '');
         if (me && !me.name) me.name = name;
@@ -61,7 +94,7 @@ async function sendOfflinePresence(sock) {
 
 module.exports = {
     command: 'alwaysonline',
-    aliases: ['alwayson', 'autoonline', 'online', 'presence'],
+    aliases: ['alwayson', 'autoonline', 'online'],
     category: 'owner',
     description: 'Toggle continuous online presence 24/7 (on/off)',
     usage: '.alwaysonline <on|off>',
@@ -79,46 +112,46 @@ module.exports = {
 
             if (!action || action === 'status') {
                 const statusText = '*🟢 ALWAYS ONLINE SETTINGS*\n\n' +
-                    '*Status:* ' + (isCurrentOnline ? '✅ Enabled (Online 24/7)' : '❌ Disabled (Standard Offline)') + '\n' +
+                    '*Status:* ' + (isCurrentOnline ? '✅ Enabled (Online 24/7 Keepalive)' : '❌ Disabled (Standard Offline)') + '\n' +
                     '*Stealth Mode:* ' + (ghostActive ? '👻 Active' : '❌ Inactive') + '\n\n' +
                     '*Commands:*\n' +
-                    '• .alwaysonline on - Stay online 24/7 continuously\n' +
-                    '• .alwaysonline off - Go offline when idle (standard mode)';
+                    '• `.alwaysonline on` - Stay online 24/7 continuously (auto-refreshes every 8s)\n' +
+                    '• `.alwaysonline off` - Go offline when idle (releases phone push notifications)';
                 return await sock.sendMessage(chatId, { text: statusText, ...channelInfo }, { quoted: message });
             }
 
             if (action === 'on' || action === 'enable' || action === 'true' || action === '1') {
                 global.alwaysOnlineState = true;
+                process.env.ALWAYS_ONLINE = 'true';
                 await store.saveSetting('global', 'presenceConfig', { alwaysOnline: true });
 
                 if (!ghostActive) {
-                    await sendOnlinePresence(sock);
+                    startAlwaysOnlineLoop(sock);
                     if (chatId) await sock.sendPresenceUpdate('available', chatId).catch(() => {});
                 }
 
                 return await sock.sendMessage(chatId, {
-                    text: '✅ *Always-Online is now ENABLED!*\n\nThe bot will now broadcast online presence 24/7 continuously.',
+                    text: '✅ *Always-Online is now ENABLED!*\n\nBot will now broadcast sustained online presence (auto-refreshing every 8s to beat WhatsApp 10s expiry).',
                     ...channelInfo
                 }, { quoted: message });
             }
 
             if (action === 'off' || action === 'disable' || action === 'false' || action === '0') {
                 global.alwaysOnlineState = false;
+                process.env.ALWAYS_ONLINE = 'false';
                 await store.saveSetting('global', 'presenceConfig', { alwaysOnline: false });
 
-                if (!ghostActive) {
-                    await sendOfflinePresence(sock);
-                    if (chatId) await sock.sendPresenceUpdate('unavailable', chatId).catch(() => {});
-                }
+                stopAlwaysOnlineLoop(sock);
+                if (chatId) await sock.sendPresenceUpdate('unavailable', chatId).catch(() => {});
 
                 return await sock.sendMessage(chatId, {
-                    text: '❌ *Always-Online is now DISABLED.*\n\nThe bot will now appear offline when idle.',
+                    text: '❌ *Always-Online is now DISABLED.*\n\nPresence set to unavailable. Phone will now receive push notifications normally without desktop client suppression.',
                     ...channelInfo
                 }, { quoted: message });
             }
 
             return await sock.sendMessage(chatId, {
-                text: '❌ *Invalid option!* Use: .alwaysonline on or .alwaysonline off',
+                text: '❌ *Invalid option!* Use: `.alwaysonline on` or `.alwaysonline off`',
                 ...channelInfo
             }, { quoted: message });
 
@@ -129,6 +162,8 @@ module.exports = {
     },
 
     isAlwaysOnlineEnabled,
+    startAlwaysOnlineLoop,
+    stopAlwaysOnlineLoop,
     sendOnlinePresence,
     sendOfflinePresence
 };
