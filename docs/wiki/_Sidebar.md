@@ -1,4 +1,5 @@
 * [📖 Home](Home)
+* [📱 Session Scanner](Session-Scanner)
 * [⚙️ Configuration](Configuration)
 * [🛠️ Environment Manager](Environment-Manager)
 * [⚡ Automation & Presence](Automation)

@@ -6,6 +6,7 @@ Welcome to the official **PGWIZ-MD** (and **pgwiz-md-litrop**) Wiki. PGWIZ-MD is
 
 ## ⚡ Quick Navigation
 
+* [📱 Session Pairing & QR Scanner](Session-Scanner) — Pair WhatsApp and generate SESSION_ID.
 * [⚙️ Configuration Guide](Configuration) — Environment variables, Heroku/Koyeb auto-auth, and database setups.
 * [🛠️ Dynamic Environment Manager](Environment-Manager) — Live `.pgvars`, `.heroku`, and `.koyeb` management.
 * [⚡ Automation & Presence Engine](Automation) — Auto-status, reaction rhythms, contact ignore lists, and 24/7 always-online.
