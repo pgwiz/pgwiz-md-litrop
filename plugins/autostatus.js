@@ -220,13 +220,10 @@ async function reactToStatus(sock, statusKey) {
         if (!enabled || !sock) return;
 
         const rawParticipant = statusKey.participant || statusKey.remoteJid;
-        if (!rawParticipant || rawParticipant === 'status@broadcast' || !rawParticipant.includes('@')) {
-            return;
-        }
+        if (!rawParticipant || rawParticipant === 'status@broadcast') return;
 
         const emoji = getRandomStatusEmoji();
 
-        // Target key specifically identifying the status story and its author
         const statusReactionKey = {
             remoteJid: 'status@broadcast',
             id: statusKey.id,
@@ -234,76 +231,48 @@ async function reactToStatus(sock, statusKey) {
             fromMe: false
         };
 
-        // 1. Explicit read receipt to status@broadcast (guarantees view in viewer list)
-        try {
-            await sock.readMessages([{
-                remoteJid: 'status@broadcast',
-                id: statusKey.id,
-                participant: rawParticipant
-            }]);
-        } catch {}
-
-        try {
-            if (typeof sock.sendReceipt === 'function') {
-                await sock.sendReceipt('status@broadcast', rawParticipant, [statusKey.id], 'read');
-            }
-        } catch {}
-
-        // 2. Status Broadcast Reaction Stanza with broadcast: true and statusJidList
-        try {
-            await sock.sendMessage(
-                'status@broadcast',
-                {
-                    react: {
-                        text: emoji,
-                        key: statusReactionKey
-                    }
-                },
-                {
-                    statusJidList: [rawParticipant],
-                    broadcast: true
-                }
-            );
-        } catch {}
-
-        // 3. Direct Story Reaction Delivery to author (triggers WhatsApp mobile notification & DM story reply)
-        try {
-            await sock.sendMessage(
-                rawParticipant,
-                {
-                    react: {
-                        text: emoji,
-                        key: statusReactionKey
-                    }
-                }
-            );
-        } catch {}
-
-        // 4. Relay Message Stanza fallback
+        // 1. Direct relayMessage with statusJidList (WhiskeySockets format)
         try {
             await sock.relayMessage(
                 'status@broadcast',
                 {
                     reactionMessage: {
                         key: statusReactionKey,
-                        text: emoji,
-                        senderTimestampMs: Date.now()
+                        text: emoji
                     }
                 },
                 {
-                    messageId: statusKey.id,
                     statusJidList: [rawParticipant]
                 }
             );
-        } catch {}
+        } catch (e1) {
+            console.log(`[AUTOSTATUS] relayMessage notice: ${e1.message}`);
+        }
 
-        console.log(`[AUTOSTATUS] ✅ Reacted ${emoji} to status from ${rawParticipant.split('@')[0]}`);
+        // 2. Standard Baileys sendMessage reaction with statusJidList
+        try {
+            await sock.sendMessage(
+                'status@broadcast',
+                {
+                    react: {
+                        text: emoji,
+                        key: statusReactionKey
+                    }
+                },
+                {
+                    statusJidList: [rawParticipant]
+                }
+            );
+        } catch (e2) {
+            console.log(`[AUTOSTATUS] sendMessage reaction notice: ${e2.message}`);
+        }
+
+        console.log(`[AUTOSTATUS] ✅ Reacted ${emoji} to status ${statusKey.id} from ${rawParticipant.split('@')[0]}`);
     } catch (error) {
         console.error('[AUTOSTATUS] ❌ Error reacting to status:', error.message);
     }
 }
 
-// Track reacted statuses to prevent duplicates/loops
 const reactedStatuses = new Set();
 setInterval(() => reactedStatuses.clear(), 60 * 60 * 1000);
 
