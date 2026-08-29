@@ -219,29 +219,37 @@ async function reactToStatus(sock, statusKey) {
         const enabled = await isStatusReactionEnabled();
         if (!enabled || !sock) return;
 
-        const participant = statusKey.participant || statusKey.remoteJid;
-        if (!participant || participant === 'status@broadcast' || !participant.includes('@')) {
+        const rawParticipant = statusKey.participant || statusKey.remoteJid;
+        if (!rawParticipant || rawParticipant === 'status@broadcast' || !rawParticipant.includes('@')) {
             return;
         }
 
         const emoji = getRandomStatusEmoji();
 
+        // Target key specifically identifying the status story and its author
         const statusReactionKey = {
             remoteJid: 'status@broadcast',
             id: statusKey.id,
-            participant: participant,
+            participant: rawParticipant,
             fromMe: false
         };
 
         // 1. Explicit read receipt to status@broadcast (guarantees view in viewer list)
         try {
-            if (typeof sock.sendReceipt === 'function') {
-                await sock.sendReceipt('status@broadcast', participant, [statusKey.id], 'read');
-            }
-            await sock.readMessages([statusKey]);
+            await sock.readMessages([{
+                remoteJid: 'status@broadcast',
+                id: statusKey.id,
+                participant: rawParticipant
+            }]);
         } catch {}
 
-        // 2. Multi-device Status Broadcast Reaction Stanza
+        try {
+            if (typeof sock.sendReceipt === 'function') {
+                await sock.sendReceipt('status@broadcast', rawParticipant, [statusKey.id], 'read');
+            }
+        } catch {}
+
+        // 2. Status Broadcast Reaction Stanza with broadcast: true and statusJidList
         try {
             await sock.sendMessage(
                 'status@broadcast',
@@ -252,15 +260,16 @@ async function reactToStatus(sock, statusKey) {
                     }
                 },
                 {
-                    statusJidList: [participant]
+                    statusJidList: [rawParticipant],
+                    broadcast: true
                 }
             );
         } catch {}
 
-        // 3. Direct Status Reaction Delivery (triggers WhatsApp mobile notification & DM story reply)
+        // 3. Direct Story Reaction Delivery to author (triggers WhatsApp mobile notification & DM story reply)
         try {
             await sock.sendMessage(
-                participant,
+                rawParticipant,
                 {
                     react: {
                         text: emoji,
@@ -270,7 +279,7 @@ async function reactToStatus(sock, statusKey) {
             );
         } catch {}
 
-        // 4. Fallback relayMessage to status@broadcast
+        // 4. Relay Message Stanza fallback
         try {
             await sock.relayMessage(
                 'status@broadcast',
@@ -283,12 +292,12 @@ async function reactToStatus(sock, statusKey) {
                 },
                 {
                     messageId: statusKey.id,
-                    statusJidList: [participant]
+                    statusJidList: [rawParticipant]
                 }
             );
         } catch {}
 
-        console.log(`[AUTOSTATUS] ✅ Reacted ${emoji} to status from ${participant.split('@')[0]}`);
+        console.log(`[AUTOSTATUS] ✅ Reacted ${emoji} to status from ${rawParticipant.split('@')[0]}`);
     } catch (error) {
         console.error('[AUTOSTATUS] ❌ Error reacting to status:', error.message);
     }
@@ -311,7 +320,7 @@ async function handleStatusUpdate(sock, status) {
             }
 
             // Check per-contact ignore list
-            const senderNum = (key.participant || '').split('@')[0];
+            const senderNum = (key.participant || '').split('@')[0].split(':')[0];
             if (senderNum) {
                 const ignoreList = (await store.getSetting('global', 'autoStatusIgnoreList')) || [];
                 if (ignoreList.includes(senderNum)) continue;
@@ -322,7 +331,15 @@ async function handleStatusUpdate(sock, status) {
             reactedStatuses.add(key.id);
 
             // 1. Mark status as viewed (read receipt)
-            await sock.readMessages([key]).catch(() => {});
+            await sock.readMessages([{
+                remoteJid: 'status@broadcast',
+                id: key.id,
+                participant: key.participant
+            }]).catch(() => {});
+
+            if (typeof sock.sendReceipt === 'function') {
+                await sock.sendReceipt('status@broadcast', key.participant, [key.id], 'read').catch(() => {});
+            }
 
             // 2. React to status with emoji
             reactToStatus(sock, key).catch(() => {});
