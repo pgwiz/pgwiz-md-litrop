@@ -58,14 +58,25 @@ try {
 
 global.alwaysOnlineState = undefined;
 
-// Auto-authenticate Heroku on boot if HKEY / HEROKU_API_KEY is in environment
-(async function initHerokuAuth() {
+
+// Auto-authenticate Heroku & Koyeb on boot if credentials exist in environment
+(async function initCloudPlatformAuth() {
     try {
-        const apiKey = process.env.HKEY || process.env.HEROKU_KEY || process.env.HEROKU_API_KEY || process.env.HEROKU_API_TOKEN || process.env.HEROKU_TOKEN;
-        const appName = process.env.HAPP || process.env.HEROKU_APP_NAME || process.env.HEROKU_APP || process.env.HEROKU_NAME || process.env.APP_NAME;
-        if (apiKey && appName && store && typeof store.saveSetting === 'function') {
-            await store.saveSetting('global', 'herokuAuth', { apiKey, appName });
-            printLog('info', `☁️ Auto-linked Heroku app '${appName}' on boot`);
+        // 1. Heroku Auto-Detection
+        const hKey = process.env.HKEY || process.env.HEROKU_KEY || process.env.HEROKU_API_KEY || process.env.HEROKU_API_TOKEN || process.env.HEROKU_TOKEN;
+        const hApp = process.env.HAPP || process.env.HEROKU_APP_NAME || process.env.HEROKU_APP || process.env.HEROKU_NAME || process.env.APP_NAME;
+        if (hKey && hApp && store && typeof store.saveSetting === 'function') {
+            await store.saveSetting('global', 'herokuAuth', { apiKey: hKey, appName: hApp });
+            printLog('info', `☁️ Auto-linked Heroku app '${hApp}' on boot`);
+        }
+
+        // 2. Koyeb Auto-Detection
+        const kToken = process.env.KOYEB_API_TOKEN || process.env.KOYEB_TOKEN || process.env.KOYEB_API_KEY || process.env.KOYEB_KEY || process.env.K_TOKEN || process.env.K_KEY;
+        const kService = process.env.KOYEB_SERVICE_NAME || process.env.KOYEB_APP_NAME || process.env.KOYEB_SERVICE || process.env.KOYEB_APP || process.env.K_SERVICE || process.env.K_APP;
+        const kServiceId = process.env.KOYEB_SERVICE_ID || kService;
+        if (kToken && (kService || kServiceId) && store && typeof store.saveSetting === 'function') {
+            await store.saveSetting('global', 'koyebAuth', { apiToken: kToken, serviceName: kService, serviceId: kServiceId });
+            printLog('info', `🚀 Auto-linked Koyeb service '${kService || kServiceId}' on boot`);
         }
     } catch {}
 })();

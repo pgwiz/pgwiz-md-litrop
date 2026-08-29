@@ -198,6 +198,69 @@ async function writeConfig(config) {
             req.end();
             console.log(`[AUTOSTATUS] Live synced to Heroku app ${appName}`);
         }
+
+        // 5. Sync to Koyeb if credentials present
+        let kToken = process.env.KOYEB_API_TOKEN || process.env.KOYEB_TOKEN || process.env.KOYEB_API_KEY || process.env.KOYEB_KEY || process.env.K_TOKEN || process.env.K_KEY;
+        let kService = process.env.KOYEB_SERVICE_NAME || process.env.KOYEB_APP_NAME || process.env.KOYEB_SERVICE || process.env.KOYEB_APP || process.env.K_SERVICE || process.env.K_APP;
+        let kServiceId = process.env.KOYEB_SERVICE_ID || kService;
+
+        if (!kToken || !kServiceId) {
+            const storedKoyeb = await store.getSetting('global', 'koyebAuth');
+            if (storedKoyeb) {
+                kToken = kToken || storedKoyeb.apiToken;
+                kService = kService || storedKoyeb.serviceName;
+                kServiceId = kServiceId || storedKoyeb.serviceId || storedKoyeb.serviceName;
+            }
+        }
+
+        if (kToken && kServiceId) {
+            try {
+                const https = require('https');
+                const req = https.request({
+                    hostname: 'app.koyeb.com',
+                    port: 443,
+                    path: `/v1/services/${kServiceId}`,
+                    method: 'GET',
+                    headers: { 'Authorization': `Bearer ${kToken}`, 'Content-Type': 'application/json' }
+                }, (res) => {
+                    let d = '';
+                    res.on('data', c => d += c);
+                    res.on('end', () => {
+                        try {
+                            const parsed = JSON.parse(d);
+                            if (parsed?.service?.definition) {
+                                const def = parsed.service.definition;
+                                let envArr = Array.isArray(def.env) ? def.env : [];
+                                
+                                const updateOrAdd = (k, v) => {
+                                    const idx = envArr.findIndex(e => e.key === k);
+                                    if (idx >= 0) envArr[idx] = { key: k, value: v };
+                                    else envArr.push({ key: k, value: v });
+                                };
+
+                                updateOrAdd('AUTO_STATUS_VIEW', config.enabled ? 'true' : 'false');
+                                updateOrAdd('AUTO_STATUS_REACT', config.reactOn ? 'true' : 'false');
+                                def.env = envArr;
+
+                                const patchReq = https.request({
+                                    hostname: 'app.koyeb.com',
+                                    port: 443,
+                                    path: `/v1/services/${kServiceId}`,
+                                    method: 'PATCH',
+                                    headers: { 'Authorization': `Bearer ${kToken}`, 'Content-Type': 'application/json' }
+                                }, () => {});
+                                patchReq.on('error', () => {});
+                                patchReq.write(JSON.stringify({ definition: def }));
+                                patchReq.end();
+                                console.log(`[AUTOSTATUS] Live synced to Koyeb service ${kService || kServiceId}`);
+                            }
+                        } catch {}
+                    });
+                });
+                req.on('error', () => {});
+                req.end();
+            } catch {}
+        }
     } catch (error) {
         console.error('Error writing auto status config:', error);
     }
