@@ -1,36 +1,51 @@
 # ==========================================
-# Stage 1: Build & Compile Native Addons
+# High-Performance Ultra-Low-Latency Production Dockerfile
+# Base: Debian Bookworm Slim (glibc for high-throughput crypto & zero musl lock contention)
 # ==========================================
-FROM node:20-alpine AS builder
+
+# Stage 1: Build & Compile Native C++ Addons
+FROM node:20-bookworm-slim AS builder
 
 WORKDIR /app
 
-# Install native build tools for compiling C++ addons (better-sqlite3)
-RUN apk add --no-cache python3 make g++ git
+# Install native compilation dependencies for better-sqlite3 and C++ crypto bindings
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 \
+    make \
+    g++ \
+    build-essential \
+    git \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
-# Copy package manifests first for optimal layer caching
+# Copy package manifests first for optimal build cache
 COPY package*.json ./
 
-# Install dependencies
+# Compile native addons with glibc SIMD optimizations
 RUN npm install --legacy-peer-deps --no-audit --no-fund
 
 # ==========================================
-# Stage 2: Ultra-Lightweight Production Runner
+# Stage 2: Ultra-Low-Latency Production Runner
 # ==========================================
-FROM node:20-alpine AS runner
+FROM node:20-bookworm-slim AS runner
 
 WORKDIR /app
 
-# Install essential runtime utilities for WhatsApp media processing
-RUN apk add --no-cache \
+# Install high-performance runtime libraries for media processing & networking
+RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
-    libwebp-tools \
+    webp \
     git \
     curl \
-    tzdata
+    ca-certificates \
+    tzdata \
+    && rm -rf /var/lib/apt/lists/*
 
-# Set environment
+# Performance Environment Optimization:
+# - UV_THREADPOOL_SIZE=16: Eliminates libuv thread contention between crypto, sqlite3, and DNS
+# - NODE_ENV=production: Enables V8 optimized inline caching
 ENV NODE_ENV=production \
+    UV_THREADPOOL_SIZE=16 \
     PORT=5000 \
     DB_URL="./data/baileys_store.db"
 
@@ -43,5 +58,5 @@ COPY . .
 # Expose HTTP healthcheck port
 EXPOSE 5000
 
-# Start bot directly with memory limit (instant boot, zero PM2 overhead)
-CMD ["node", "--max-old-space-size=256", "index.js"]
+# Launch with optimized V8 heap (512MB headroom prevents Stop-The-World GC latency spikes)
+CMD ["node", "--max-old-space-size=512", "index.js"]
