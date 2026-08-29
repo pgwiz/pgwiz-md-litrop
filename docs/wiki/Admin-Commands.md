@@ -1,14 +1,28 @@
 # 🛡️ Group Moderation & Administration
 
-PGWIZ-MD includes a comprehensive suite of group moderation tools.
+PGWIZ-MD includes a comprehensive suite of group moderation and security tools.
 
-### Key Commands:
-* `.tagall [message]`: Mention every member in the group.
-* `.hidetag [message]`: Send a hidden mention broadcast.
-* `.warn @user [reason]`: Issue a warning to a member.
-* `.warnings @user`: View infraction count.
-* `.resetwarn @user`: Clear infractions.
-* `.kick @user`: Remove a user from the group.
-* `.ban @user`: Blacklist a user from bot commands.
-* `.mute` / `.unmute`: Control group chat permissions.
-* `.autoclear [interval]`: Schedule automated chat clearing.
+---
+
+## 📢 Mention & Broadcast
+* `.tagall [message]` — Mention every member in the group.
+* `.hidetag [message]` — Send a broadcast with hidden mentions.
+* `.totag [reply]` — Forward a message to all members.
+
+---
+
+## 🚨 Infraction & User Control
+* `.warn @user [reason]` — Issue a warning infraction.
+* `.warnings @user` — Check user infraction count.
+* `.resetwarn @user` — Reset user warnings.
+* `.kick @user` — Remove a member from the group.
+* `.ban @user` — Blacklist a user from bot commands.
+* `.unban @user` — Remove user from blacklist.
+
+---
+
+## 🔒 Chat Management
+* `.mute` — Set group to admin-only messages.
+* `.unmute` — Allow all members to send messages.
+* `.clear` — Wipe message history while keeping the group in the chat list.
+* `.autoclear [interval]` — Schedule automated message cleanup.

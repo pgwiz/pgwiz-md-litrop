@@ -1,20 +1,46 @@
 # 🚀 Deployment Guide
 
-Choose your preferred deployment platform below:
+Deploy PGWIZ-MD or pgwiz-md-litrop across any hosting provider in minutes.
 
 ---
 
-## 1. Cloud Platforms (1-Click)
-* **Heroku**: Full web dyno with automatic restart.
-* **Koyeb**: Free container hosting with global edge routing.
-* **Render**: Free web service deployment.
-* **Railway**: Instant container provisioning.
-* **Fly.io**: Ultra-low latency micro-VM hosting.
-* **Pterodactyl / Wispbyte Panels**: Node.js and PNPM startup runners.
+## ☁️ 1. Heroku (1-Click Deployment)
+1. Fork or clone the repository.
+2. In your Heroku App Dashboard $ightarrow$ **Settings** $ightarrow$ **Config Vars**, add:
+   * `SESSION_ID` = Your session token
+   * `AUTO_STATUS_VIEW` = `true`
+   * `AUTO_STATUS_REACT` = `true`
+   * `STATUS_EMOJIS` = `❤️,🔥,✨,💯,🌟,⚡`
+   * `ALWAYS_ONLINE` = `false`
+   * `HKEY` = *(Optional)* Your Heroku API Key for dynamic `.pgvars` sync
+   * `HAPP` = *(Optional)* Your Heroku App Name
+3. Deploy and start the `web` dyno.
 
 ---
 
-## 2. Termux (Android)
+## 🚀 2. Koyeb (Free Container Edge Hosting)
+1. Connect your GitHub repository to Koyeb.
+2. Under **Environment Variables**, configure:
+   * `SESSION_ID` = Your session token
+   * `KOYEB_API_TOKEN` = *(Optional)* Your Koyeb API Token
+   * `KOYEB_SERVICE_NAME` = *(Optional)* Your Koyeb Service Name
+3. Deploy with build command `npm start` or Dockerfile.
+
+---
+
+## 💻 3. Linux VPS (PM2 Production Runner)
+```bash
+git clone https://github.com/pgwiz/PGWIZ-MD.git
+cd PGWIZ-MD
+npm install
+npm install -g pm2
+pm2 start index.js --name "pgwiz-bot"
+pm2 save && pm2 startup
+```
+
+---
+
+## 📱 4. Termux (Android)
 ```bash
 pkg update && pkg upgrade -y
 pkg install proot-distro -y
@@ -27,20 +53,4 @@ git clone https://github.com/pgwiz/PGWIZ-MD.git
 cd PGWIZ-MD
 npm install
 npm start
-```
-
----
-
-## 3. Ubuntu / Linux VPS (PM2)
-```bash
-sudo apt update && sudo apt upgrade -y
-sudo apt install -y git ffmpeg curl imagemagick webp
-curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-sudo apt install -y nodejs
-git clone https://github.com/pgwiz/PGWIZ-MD.git
-cd PGWIZ-MD
-npm install
-npm install -g pm2
-pm2 start index.js --name "pgwiz-bot"
-pm2 save && pm2 startup
 ```
