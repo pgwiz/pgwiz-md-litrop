@@ -226,47 +226,53 @@ async function reactToStatus(sock, statusKey) {
 
         const emoji = getRandomStatusEmoji();
 
-        // 1. Primary: Proven relayMessage stanza with statusJidList
+        // 1. WhatsApp status reaction key: remoteJid MUST point to the status owner's JID
+        const reactionKey = {
+            remoteJid: participant,
+            id: statusKey.id,
+            fromMe: false,
+            participant: participant
+        };
+
+        // 2. Primary: Send reaction to status@broadcast with statusJidList
+        let reacted = false;
         try {
-            await sock.relayMessage(
-                'status@broadcast',
-                {
-                    reactionMessage: {
-                        key: {
-                            remoteJid: 'status@broadcast',
-                            id: statusKey.id,
-                            participant: participant,
-                            fromMe: false
-                        },
-                        text: emoji
-                    }
-                },
-                {
-                    messageId: statusKey.id,
-                    statusJidList: [statusKey.remoteJid || 'status@broadcast', participant]
-                }
-            );
-            console.log(`[AUTOSTATUS] ✅ Reacted ${emoji} to status from ${participant.split('@')[0]}`);
-            return;
-        } catch (e1) {
-            // Fallback via sendMessage react
             await sock.sendMessage(
                 'status@broadcast',
                 {
                     react: {
                         text: emoji,
-                        key: {
-                            remoteJid: 'status@broadcast',
-                            id: statusKey.id,
-                            participant: participant
-                        }
+                        key: reactionKey
                     }
                 },
                 {
                     statusJidList: [participant]
                 }
             );
-            console.log(`[AUTOSTATUS] ✅ Reacted ${emoji} (fallback) to status from ${participant.split('@')[0]}`);
+            reacted = true;
+        } catch (e1) {
+            // Fallback via relayMessage
+            try {
+                await sock.relayMessage(
+                    'status@broadcast',
+                    {
+                        reactionMessage: {
+                            key: reactionKey,
+                            text: emoji
+                        }
+                    },
+                    {
+                        statusJidList: [participant]
+                    }
+                );
+                reacted = true;
+            } catch (e2) {
+                console.error('[AUTOSTATUS] ❌ Relay reaction error:', e2.message);
+            }
+        }
+
+        if (reacted) {
+            console.log(`[AUTOSTATUS] ✅ Reacted ${emoji} to status from ${participant.split('@')[0]}`);
         }
     } catch (error) {
         console.error('[AUTOSTATUS] ❌ Error reacting to status:', error.message);
