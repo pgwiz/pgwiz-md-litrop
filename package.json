@@ -100,7 +100,7 @@
     "jimp": "^1.6.0"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": "20.x || 22.x"
   },
   "contributors": [
     {
