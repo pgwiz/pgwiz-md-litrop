@@ -30,15 +30,46 @@ function readEnv() {
 
 // Helper to write to .env
 function writeEnv(env) {
-    let content = '';
-    for (const [key, value] of Object.entries(env)) {
-        let data = String(value);
-        if (!data.startsWith('"') && (data.includes(' ') || data.includes('=') || data.includes('#') || data.includes(','))) {
-            data = '"' + data + '"';
+    try {
+        let content = '';
+        for (const [key, value] of Object.entries(env)) {
+            let data = String(value);
+            if (!data.startsWith('"') && (data.includes(' ') || data.includes('=') || data.includes('#') || data.includes(','))) {
+                data = '"' + data + '"';
+            }
+            content += key + '=' + data + '\n';
         }
-        content += key + '=' + data + '\n';
-    }
-    fs.writeFileSync(envPath, content.trim() + '\n');
+        fs.writeFileSync(envPath, content.trim() + '\n');
+    } catch {}
+}
+
+// Get all runtime environment variables (process.env + .env)
+function getAllRuntimeEnv() {
+    const fileEnv = readEnv();
+    const runtimeEnv = { ...fileEnv };
+
+    // Standard bot keys to prioritize
+    const importantKeys = [
+        'SESSION_ID', 'BOT_NAME', 'OWNER_NUMBER', 'PREFIX', 'MODE', 'WORK_TYPE', 'ALWAYS_ONLINE',
+        'AUTO_STATUS_VIEW', 'AUTO_STATUS_REACT', 'STATUS_EMOJIS', 'AUTO_STATUS_SAVE', 'AUTO_STATUS_DOWNLOAD',
+        'MONGO_URL', 'POSTGRES_URL', 'MYSQL_URL', 'DB_URL',
+        'HKEY', 'HEROKU_API_KEY', 'HAPP', 'HEROKU_APP_NAME',
+        'KOYEB_API_TOKEN', 'KOYEB_SERVICE_NAME', 'KOYEB_SERVICE_ID',
+        'PORT', 'NODE_ENV', 'UV_THREADPOOL_SIZE'
+    ];
+
+    importantKeys.forEach(k => {
+        if (process.env[k] !== undefined) runtimeEnv[k] = process.env[k];
+    });
+
+    // Also include any user-set variables in process.env that don't look like internal OS vars
+    Object.keys(process.env).forEach(k => {
+        if (!k.startsWith('npm_') && !k.startsWith('NODE_') && !k.startsWith('PATH') && !k.startsWith('SHELL') && !k.startsWith('USER') && !k.startsWith('HOME') && !k.startsWith('PWD') && !k.startsWith('_')) {
+            if (runtimeEnv[k] === undefined) runtimeEnv[k] = process.env[k];
+        }
+    });
+
+    return runtimeEnv;
 }
 
 // ==================== HEROKU API ====================
@@ -157,7 +188,6 @@ async function getKoyebCredentials() {
         }
     }
 
-    // Auto-resolve service ID if only name was provided
     if (apiToken && !serviceId && serviceName) {
         try {
             const listRes = await koyebApiRequest('GET', '/services?limit=100', apiToken);
@@ -178,37 +208,42 @@ async function getKoyebCredentials() {
     return { apiToken, serviceName, serviceId: serviceId || serviceName };
 }
 
+// Background sync helper for other plugins
+async function syncCloudVars(varsToSync) {
+    try {
+        const heroku = await getHerokuCredentials();
+        if (heroku.apiKey && heroku.appName) {
+            await herokuApiRequest('PATCH', '/apps/' + heroku.appName + '/config-vars', heroku.apiKey, varsToSync).catch(() => {});
+        }
+
+        const koyeb = await getKoyebCredentials();
+        if (koyeb.apiToken && koyeb.serviceId) {
+            const svcRes = await koyebApiRequest('GET', '/services/' + koyeb.serviceId, koyeb.apiToken);
+            if (svcRes?.service?.definition) {
+                const def = svcRes.service.definition;
+                let envArr = Array.isArray(def.env) ? def.env : [];
+                for (const [key, value] of Object.entries(varsToSync)) {
+                    const idx = envArr.findIndex(e => e.key === key);
+                    if (idx >= 0) envArr[idx] = { key, value: String(value) };
+                    else envArr.push({ key, value: String(value) });
+                }
+                def.env = envArr;
+                await koyebApiRequest('PATCH', '/services/' + koyeb.serviceId, koyeb.apiToken, { definition: def }).catch(() => {});
+            }
+        }
+    } catch {}
+}
+
 module.exports = {
     command: 'pgvars',
-    aliases: ['setenv', 'getenv', 'pgvar', 'herokuvar', 'koyebvar', 'var', 'koyeb', 'heroku'],
+    aliases: ['setenv', 'getenv', 'pgvar', 'herokuvar', 'koyebvar', 'var', 'koyeb', 'heroku', 'env'],
     category: 'admin',
-    description: 'Manage environment variables dynamically (.env, Heroku, Koyeb)',
-    usage: '.pgvars [heroku|koyeb] <list|set|delete|auth> [KEY=VALUE]',
+    description: 'Manage runtime & cloud environment variables dynamically',
+    usage: '.pgvars [list|set KEY=VALUE|get KEY|delete KEY|heroku|koyeb]',
     ownerOnly: true,
 
     async handler(sock, message, args, context = {}) {
         const chatId = context.chatId || message.key.remoteJid;
-        if (!args || args.length === 0) {
-            let helpText = '🛠️ *PGVars - Dynamic Environment Manager*\n\n';
-            helpText += '*📁 Local .env Commands:*\n';
-            helpText += '• `.pgvars list` - List all local variables\n';
-            helpText += '• `.pgvars set KEY=VALUE` - Update variable live\n';
-            helpText += '• `.pgvars delete KEY` - Delete variable\n\n';
-            helpText += '*☁️ Heroku Platform Commands:*\n';
-            helpText += '• `.pgvars heroku auth <API_KEY> <APP_NAME>` - Save Heroku credentials\n';
-            helpText += '• `.pgvars heroku list` - List Heroku config vars\n';
-            helpText += '• `.pgvars heroku set KEY=VALUE` - Update Heroku variable\n';
-            helpText += '• `.pgvars heroku delete KEY` - Delete Heroku variable\n\n';
-            helpText += '*🚀 Koyeb Platform Commands:*\n';
-            helpText += '• `.pgvars koyeb auth <API_TOKEN> <SERVICE_NAME>` - Save Koyeb credentials\n';
-            helpText += '• `.pgvars koyeb list` - List Koyeb environment variables\n';
-            helpText += '• `.pgvars koyeb set KEY=VALUE` - Update Koyeb variable\n';
-            helpText += '• `.pgvars koyeb delete KEY` - Delete Koyeb variable\n\n';
-            helpText += '_💡 Live changes take effect instantly in-memory without reboot._';
-            await sock.sendMessage(chatId, { text: helpText }, { quoted: message });
-            return;
-        }
-
         const invokedCmd = (context.command || '').toLowerCase();
         const firstArg = (args[0] || '').toLowerCase();
 
@@ -217,12 +252,44 @@ module.exports = {
         const isExplicitPlatformArg = firstArg === 'heroku' || firstArg === 'hk' || firstArg === 'koyeb' || firstArg === 'ky';
 
         const subCmdIndex = isExplicitPlatformArg ? 1 : 0;
-        const subCmd = (args[subCmdIndex] || 'list').toLowerCase();
+        const subCmd = (args[subCmdIndex] || '').toLowerCase();
         const remainingArgs = args.slice(subCmdIndex + 1);
+
+        // If no args provided, show runtime overview & help
+        if (!args || args.length === 0 || (!isHerokuTarget && !isKoyebTarget && subCmd === 'help')) {
+            const allEnv = getAllRuntimeEnv();
+            const autoView = allEnv.AUTO_STATUS_VIEW ?? 'true';
+            const autoReact = allEnv.AUTO_STATUS_REACT ?? 'true';
+            const emojis = allEnv.STATUS_EMOJIS || '❤️,🔥,✨,💯,🌟,⚡';
+            const mode = allEnv.MODE || allEnv.WORK_TYPE || 'public';
+            const prefix = allEnv.PREFIX || '.';
+            const alwaysOn = allEnv.ALWAYS_ONLINE || 'false';
+
+            let text = '⚙️ *PGVars - Runtime Environment Manager*\n\n';
+            text += '*🟢 Active Bot Variables (In-Memory & Cloud):*\n';
+            text += '• *`MODE`*: `' + mode + '`\n';
+            text += '• *`PREFIX`*: `' + prefix + '`\n';
+            text += '• *`ALWAYS_ONLINE`*: `' + alwaysOn + '`\n';
+            text += '• *`AUTO_STATUS_VIEW`*: `' + autoView + '`\n';
+            text += '• *`AUTO_STATUS_REACT`*: `' + autoReact + '`\n';
+            text += '• *`STATUS_EMOJIS`*: `' + emojis + '`\n\n';
+            text += '*🛠️ Commands:*\n';
+            text += '• `.pgvars list` - Show all active variables\n';
+            text += '• `.pgvars set KEY=VALUE` - Change variable lively\n';
+            text += '• `.pgvars get KEY` - View specific variable\n';
+            text += '• `.pgvars delete KEY` - Remove variable\n\n';
+            text += '*☁️ Remote Cloud Dashboards (Optional):*\n';
+            text += '• `.pgvars heroku <list|set|delete|auth>`\n';
+            text += '• `.pgvars koyeb <list|set|delete|auth>`\n\n';
+            text += '_💡 All changes take effect in runtime memory immediately without restarting._';
+
+            await sock.sendMessage(chatId, { text }, { quoted: message });
+            return;
+        }
 
         try {
             // ==========================================
-            // HEROKU COMMAND HANDLING
+            // HEROKU REMOTE DASHBOARD HANDLING
             // ==========================================
             if (isHerokuTarget) {
                 if (subCmd === 'auth') {
@@ -245,7 +312,7 @@ module.exports = {
                     writeEnv(env);
 
                     await sock.sendMessage(chatId, {
-                        text: '✅ *Heroku Authenticated!*\n\n📱 *App:* `' + appName + '`\n🔑 *API Key:* `' + apiKey.slice(0, 6) + '...***`\n\nYou can now use `.pgvars heroku list` and `.pgvars heroku set KEY=VALUE`.'
+                        text: '✅ *Heroku Authenticated!*\n\n📱 *App:* `' + appName + '`\n🔑 *API Key:* `' + apiKey.slice(0, 6) + '...***`'
                     }, { quoted: message });
                     return;
                 }
@@ -253,19 +320,18 @@ module.exports = {
                 const { apiKey, appName } = await getHerokuCredentials();
                 if (!apiKey || !appName) {
                     await sock.sendMessage(chatId, {
-                        text: '⚠️ *Heroku credentials not found!*\n\nPlease authenticate first using:\n`.pgvars heroku auth <HEROKU_API_KEY> <HEROKU_APP_NAME>`'
+                        text: '⚠️ *Heroku credentials not found!*\n\nAuthenticate using:\n`.pgvars heroku auth <API_KEY> <APP_NAME>`'
                     }, { quoted: message });
                     return;
                 }
 
-                if (subCmd === 'list' || subCmd === 'get') {
+                if (subCmd === 'list' || subCmd === 'get' || subCmd === '') {
                     await sock.sendMessage(chatId, { text: '🔄 Fetching Heroku config vars...' }, { quoted: message });
                     const configVars = await herokuApiRequest('GET', '/apps/' + appName + '/config-vars', apiKey);
-
                     let text = '☁️ *Heroku Config Vars (' + appName + ')*\n\n';
-                    const entries = Object.entries(configVars);
+                    const entries = Object.entries(configVars || {});
                     if (entries.length === 0) {
-                        text += '_No configuration variables set._';
+                        text += '_No config vars found._';
                     } else {
                         entries.sort(([a], [b]) => a.localeCompare(b)).forEach(([k, v]) => {
                             const valStr = String(v);
@@ -286,7 +352,6 @@ module.exports = {
                         await sock.sendMessage(chatId, { text: '❌ *Usage:* `.pgvars heroku set KEY=VALUE`' }, { quoted: message });
                         return;
                     }
-
                     const key = argStr.substring(0, eqIndex).trim();
                     let value = argStr.substring(eqIndex + 1).trim();
                     if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
@@ -301,34 +366,29 @@ module.exports = {
                     writeEnv(env);
 
                     await sock.sendMessage(chatId, {
-                        text: '✅ *Heroku Variable Updated!*\n\n🔹 *' + key + '*: `' + value + '`\n⚡ *Applied lively in-memory and synced to Heroku!*'
+                        text: '✅ *Heroku Config Var Updated!*\n\n🔹 *' + key + '*: `' + value + '`\n⚡ *Applied in-memory & synced to Heroku!*'
                     }, { quoted: message });
                     return;
                 }
 
-                if (subCmd === 'delete' || subCmd === 'del' || subCmd === 'remove') {
+                if (subCmd === 'delete' || subCmd === 'del') {
                     const key = remainingArgs[0];
                     if (!key) {
                         await sock.sendMessage(chatId, { text: '❌ *Usage:* `.pgvars heroku delete KEY`' }, { quoted: message });
                         return;
                     }
-
                     delete process.env[key];
                     await herokuApiRequest('PATCH', '/apps/' + appName + '/config-vars', apiKey, { [key]: null });
-
                     const env = readEnv();
                     delete env[key];
                     writeEnv(env);
-
-                    await sock.sendMessage(chatId, {
-                        text: '✅ *Deleted ' + key + ' from Heroku and local environment!*'
-                    }, { quoted: message });
+                    await sock.sendMessage(chatId, { text: '✅ *Deleted ' + key + ' from Heroku and runtime!*' }, { quoted: message });
                     return;
                 }
             }
 
             // ==========================================
-            // KOYEB COMMAND HANDLING
+            // KOYEB REMOTE DASHBOARD HANDLING
             // ==========================================
             if (isKoyebTarget) {
                 if (subCmd === 'auth') {
@@ -336,7 +396,7 @@ module.exports = {
                     const serviceName = remainingArgs[1];
                     if (!apiToken || !serviceName) {
                         await sock.sendMessage(chatId, {
-                            text: '❌ *Usage:* `.pgvars koyeb auth <API_TOKEN> <SERVICE_NAME_OR_ID>`'
+                            text: '❌ *Usage:* `.pgvars koyeb auth <API_TOKEN> <SERVICE_NAME>`'
                         }, { quoted: message });
                         return;
                     }
@@ -362,7 +422,7 @@ module.exports = {
                     writeEnv(env);
 
                     await sock.sendMessage(chatId, {
-                        text: '✅ *Koyeb Authenticated!*\n\n🚀 *Service:* `' + serviceName + '` (ID: `' + serviceId + '`)\n🔑 *API Token:* `' + apiToken.slice(0, 6) + '...***`\n\nYou can now use `.pgvars koyeb list` and `.pgvars koyeb set KEY=VALUE`.'
+                        text: '✅ *Koyeb Authenticated!*\n\n🚀 *Service:* `' + serviceName + '` (ID: `' + serviceId + '`)\n🔑 *API Token:* `' + apiToken.slice(0, 6) + '...***`'
                     }, { quoted: message });
                     return;
                 }
@@ -370,12 +430,12 @@ module.exports = {
                 const { apiToken, serviceName, serviceId } = await getKoyebCredentials();
                 if (!apiToken || !serviceId) {
                     await sock.sendMessage(chatId, {
-                        text: '⚠️ *Koyeb credentials not found!*\n\nPlease authenticate first using:\n`.pgvars koyeb auth <KOYEB_API_TOKEN> <SERVICE_NAME>`'
+                        text: '⚠️ *Koyeb API token not found!*\n\nAuthenticate using:\n`.pgvars koyeb auth <KOYEB_API_TOKEN> <SERVICE_NAME>`\n\n_💡 Tip: When running directly on Koyeb, simply use `.pgvars set KEY=VALUE` to update environment variables instantly without API keys._'
                     }, { quoted: message });
                     return;
                 }
 
-                if (subCmd === 'list' || subCmd === 'get') {
+                if (subCmd === 'list' || subCmd === 'get' || subCmd === '') {
                     await sock.sendMessage(chatId, { text: '🔄 Fetching Koyeb environment variables...' }, { quoted: message });
                     const svcRes = await koyebApiRequest('GET', '/services/' + serviceId, apiToken);
                     const envList = svcRes?.service?.definition?.env || [];
@@ -404,7 +464,6 @@ module.exports = {
                         await sock.sendMessage(chatId, { text: '❌ *Usage:* `.pgvars koyeb set KEY=VALUE`' }, { quoted: message });
                         return;
                     }
-
                     const key = argStr.substring(0, eqIndex).trim();
                     let value = argStr.substring(eqIndex + 1).trim();
                     if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
@@ -413,43 +472,34 @@ module.exports = {
 
                     process.env[key] = value;
 
-                    // Fetch existing definition, update env array, and patch
                     const svcRes = await koyebApiRequest('GET', '/services/' + serviceId, apiToken);
-                    if (!svcRes?.service?.definition) {
-                        throw new Error('Failed to retrieve Koyeb service definition');
+                    if (svcRes?.service?.definition) {
+                        const definition = svcRes.service.definition;
+                        let envArr = Array.isArray(definition.env) ? definition.env : [];
+                        const existingIndex = envArr.findIndex(e => e.key === key);
+                        if (existingIndex >= 0) envArr[existingIndex] = { key, value };
+                        else envArr.push({ key, value });
+                        definition.env = envArr;
+                        await koyebApiRequest('PATCH', '/services/' + serviceId, apiToken, { definition });
                     }
-
-                    const definition = svcRes.service.definition;
-                    let envArr = Array.isArray(definition.env) ? definition.env : [];
-                    const existingIndex = envArr.findIndex(e => e.key === key);
-                    if (existingIndex >= 0) {
-                        envArr[existingIndex] = { key, value };
-                    } else {
-                        envArr.push({ key, value });
-                    }
-                    definition.env = envArr;
-
-                    await koyebApiRequest('PATCH', '/services/' + serviceId, apiToken, { definition });
 
                     const env = readEnv();
                     env[key] = value;
                     writeEnv(env);
 
                     await sock.sendMessage(chatId, {
-                        text: '✅ *Koyeb Variable Updated!*\n\n🔹 *' + key + '*: `' + value + '`\n⚡ *Applied lively in-memory and synced to Koyeb!*'
+                        text: '✅ *Koyeb Variable Updated!*\n\n🔹 *' + key + '*: `' + value + '`\n⚡ *Applied lively in-memory & synced to Koyeb!*'
                     }, { quoted: message });
                     return;
                 }
 
-                if (subCmd === 'delete' || subCmd === 'del' || subCmd === 'remove') {
+                if (subCmd === 'delete' || subCmd === 'del') {
                     const key = remainingArgs[0];
                     if (!key) {
                         await sock.sendMessage(chatId, { text: '❌ *Usage:* `.pgvars koyeb delete KEY`' }, { quoted: message });
                         return;
                     }
-
                     delete process.env[key];
-
                     const svcRes = await koyebApiRequest('GET', '/services/' + serviceId, apiToken);
                     if (svcRes?.service?.definition) {
                         const definition = svcRes.service.definition;
@@ -458,32 +508,29 @@ module.exports = {
                             await koyebApiRequest('PATCH', '/services/' + serviceId, apiToken, { definition });
                         }
                     }
-
                     const env = readEnv();
                     delete env[key];
                     writeEnv(env);
-
-                    await sock.sendMessage(chatId, {
-                        text: '✅ *Deleted ' + key + ' from Koyeb and local environment!*'
-                    }, { quoted: message });
+                    await sock.sendMessage(chatId, { text: '✅ *Deleted ' + key + ' from Koyeb and runtime!*' }, { quoted: message });
                     return;
                 }
             }
 
             // ==========================================
-            // LOCAL .ENV COMMAND HANDLING & AUTO-SYNC
+            // UNIVERSAL RUNTIME ENVIRONMENT HANDLING
             // ==========================================
-            if (subCmd === 'list' || subCmd === 'get') {
-                const env = readEnv();
-                let text = '📁 *Local Environment Variables (.env)*\n\n';
-                const entries = Object.entries(env);
+            if (subCmd === 'list' || subCmd === 'show' || subCmd === 'all' || subCmd === 'env') {
+                const allEnv = getAllRuntimeEnv();
+                let text = '🌐 *Active Runtime Environment Variables*\n\n';
+
+                const entries = Object.entries(allEnv);
                 if (entries.length === 0) {
-                    text += '_No environment variables found in .env._';
+                    text += '_No active variables found._';
                 } else {
                     entries.sort(([a], [b]) => a.localeCompare(b)).forEach(([k, v]) => {
                         const valStr = String(v);
-                        const masked = (k.includes('KEY') || k.includes('TOKEN') || k.includes('PASS') || k.includes('SECRET') || k.includes('SESSION'))
-                            ? (valStr.length > 8 ? valStr.slice(0, 4) + '...' + valStr.slice(-4) : '********')
+                        const masked = (k.includes('KEY') || k.includes('TOKEN') || k.includes('PASS') || k.includes('SECRET') || k.includes('SESSION') || k.includes('URL') || k.includes('URI'))
+                            ? (valStr.length > 10 ? valStr.slice(0, 5) + '...' + valStr.slice(-4) : '********')
                             : valStr;
                         text += '• *`' + k + '`*: `' + masked + '`\n';
                     });
@@ -491,15 +538,33 @@ module.exports = {
 
                 const herokuCreds = await getHerokuCredentials();
                 if (herokuCreds.apiKey && herokuCreds.appName) {
-                    text += '\n☁️ *Heroku Linked:* `' + herokuCreds.appName + '` (use `.pgvars heroku list`)';
+                    text += '\n☁️ *Heroku Linked:* `' + herokuCreds.appName + '`';
                 }
 
                 const koyebCreds = await getKoyebCredentials();
                 if (koyebCreds.apiToken && koyebCreds.serviceId) {
-                    text += '\n🚀 *Koyeb Linked:* `' + (koyebCreds.serviceName || koyebCreds.serviceId) + '` (use `.pgvars koyeb list`)';
+                    text += '\n🚀 *Koyeb Linked:* `' + (koyebCreds.serviceName || koyebCreds.serviceId) + '`';
                 }
 
                 await sock.sendMessage(chatId, { text: text.trim() }, { quoted: message });
+                return;
+            }
+
+            if (subCmd === 'get') {
+                const key = (remainingArgs[0] || '').trim();
+                if (!key) {
+                    await sock.sendMessage(chatId, { text: '❌ *Usage:* `.pgvars get KEY`' }, { quoted: message });
+                    return;
+                }
+                const val = process.env[key] ?? readEnv()[key];
+                if (val === undefined) {
+                    await sock.sendMessage(chatId, { text: 'ℹ️ *`' + key + '`* is not set.' }, { quoted: message });
+                    return;
+                }
+                const masked = (key.includes('KEY') || key.includes('TOKEN') || key.includes('PASS') || key.includes('SECRET') || key.includes('SESSION'))
+                    ? (val.length > 8 ? val.slice(0, 4) + '...' + val.slice(-4) : '********')
+                    : val;
+                await sock.sendMessage(chatId, { text: '🔹 *`' + key + '`*: `' + masked + '`' }, { quoted: message });
                 return;
             }
 
@@ -520,25 +585,42 @@ module.exports = {
                 // 1. In-memory live update
                 process.env[key] = value;
 
-                // 2. Local .env update
+                // 2. Plugin-specific runtime updates
+                if (key === 'AUTO_STATUS_VIEW' || key === 'AUTO_STATUS_READ' || key === 'AUTO_READ_STATUS') {
+                    const parsed = parseEnvBool(value, true);
+                    const cur = await store.getSetting('global', 'autoStatus') || {};
+                    cur.enabled = parsed;
+                    await store.saveSetting('global', 'autoStatus', cur).catch(() => {});
+                } else if (key === 'AUTO_STATUS_REACT' || key === 'STATUS_REACT') {
+                    const parsed = parseEnvBool(value, true);
+                    const cur = await store.getSetting('global', 'autoStatus') || {};
+                    cur.reactOn = parsed;
+                    await store.saveSetting('global', 'autoStatus', cur).catch(() => {});
+                } else if (key === 'STATUS_EMOJIS') {
+                    await store.saveSetting('global', 'statusEmojis', value).catch(() => {});
+                } else if (key === 'ALWAYS_ONLINE') {
+                    await store.saveSetting('global', 'alwaysOnline', parseEnvBool(value, false)).catch(() => {});
+                }
+
+                // 3. Local .env file update
                 const env = readEnv();
                 env[key] = value;
                 writeEnv(env);
 
-                let reply = '✅ *Environment Variable Updated!*\n\n🔹 *' + key + '*: `' + value + '`\n⚡ *Applied in-memory and saved to .env*';
+                let reply = '✅ *Environment Variable Updated!*\n\n🔹 *' + key + '*: `' + value + '`\n⚡ *Applied lively in runtime memory!*';
 
-                // 3. Auto-sync to Heroku if configured
+                // 4. Auto-sync to Heroku if linked
                 const herokuCreds = await getHerokuCredentials();
                 if (herokuCreds.apiKey && herokuCreds.appName) {
                     try {
                         await herokuApiRequest('PATCH', '/apps/' + herokuCreds.appName + '/config-vars', herokuCreds.apiKey, { [key]: value });
-                        reply += '\n☁️ *Synced to Heroku app ' + herokuCreds.appName + '*';
+                        reply += '\n☁️ *Synced to Heroku (' + herokuCreds.appName + ')*';
                     } catch (e) {
-                        reply += '\n⚠️ *Heroku sync notice:* ' + e.message;
+                        reply += '\n⚠️ *Heroku sync note:* ' + e.message;
                     }
                 }
 
-                // 4. Auto-sync to Koyeb if configured
+                // 5. Auto-sync to Koyeb if linked
                 const koyebCreds = await getKoyebCredentials();
                 if (koyebCreds.apiToken && koyebCreds.serviceId) {
                     try {
@@ -551,10 +633,10 @@ module.exports = {
                             else envArr.push({ key, value });
                             def.env = envArr;
                             await koyebApiRequest('PATCH', '/services/' + koyebCreds.serviceId, koyebCreds.apiToken, { definition: def });
-                            reply += '\n🚀 *Synced to Koyeb service ' + (koyebCreds.serviceName || koyebCreds.serviceId) + '*';
+                            reply += '\n🚀 *Synced to Koyeb (' + (koyebCreds.serviceName || koyebCreds.serviceId) + ')*';
                         }
                     } catch (e) {
-                        reply += '\n⚠️ *Koyeb sync notice:* ' + e.message;
+                        reply += '\n⚠️ *Koyeb sync note:* ' + e.message;
                     }
                 }
 
@@ -562,26 +644,25 @@ module.exports = {
                 return;
             }
 
-            if (subCmd === 'delete' || subCmd === 'del' || subCmd === 'remove') {
-                const key = remainingArgs[0];
+            if (subCmd === 'delete' || subCmd === 'del') {
+                const key = (remainingArgs[0] || '').trim();
                 if (!key) {
                     await sock.sendMessage(chatId, { text: '❌ *Usage:* `.pgvars delete KEY`' }, { quoted: message });
                     return;
                 }
 
                 delete process.env[key];
-
                 const env = readEnv();
                 delete env[key];
                 writeEnv(env);
 
-                let reply = '✅ *Deleted ' + key + ' from environment and .env*';
+                let reply = '✅ *Deleted ' + key + ' from runtime environment!*';
 
                 const herokuCreds = await getHerokuCredentials();
                 if (herokuCreds.apiKey && herokuCreds.appName) {
                     try {
                         await herokuApiRequest('PATCH', '/apps/' + herokuCreds.appName + '/config-vars', herokuCreds.apiKey, { [key]: null });
-                        reply += '\n☁️ *Removed from Heroku app ' + herokuCreds.appName + '*';
+                        reply += '\n☁️ *Deleted from Heroku*';
                     } catch {}
                 }
 
@@ -589,11 +670,13 @@ module.exports = {
                 if (koyebCreds.apiToken && koyebCreds.serviceId) {
                     try {
                         const svcRes = await koyebApiRequest('GET', '/services/' + koyebCreds.serviceId, koyebCreds.apiToken);
-                        if (svcRes?.service?.definition?.env) {
+                        if (svcRes?.service?.definition) {
                             const def = svcRes.service.definition;
-                            def.env = def.env.filter(e => e.key !== key);
-                            await koyebApiRequest('PATCH', '/services/' + koyebCreds.serviceId, koyebCreds.apiToken, { definition: def });
-                            reply += '\n🚀 *Removed from Koyeb service ' + (koyebCreds.serviceName || koyebCreds.serviceId) + '*';
+                            if (Array.isArray(def.env)) {
+                                def.env = def.env.filter(e => e.key !== key);
+                                await koyebApiRequest('PATCH', '/services/' + koyebCreds.serviceId, koyebCreds.apiToken, { definition: def });
+                                reply += '\n🚀 *Deleted from Koyeb*';
+                            }
                         }
                     } catch {}
                 }
@@ -602,9 +685,23 @@ module.exports = {
                 return;
             }
 
+            // Fallback help
+            await sock.sendMessage(chatId, {
+                text: '❌ *Invalid .pgvars command!*\n\nType `.pgvars` for available options.'
+            }, { quoted: message });
+
         } catch (error) {
             console.error('Error in pgvars command:', error);
-            await sock.sendMessage(chatId, { text: '❌ *Error managing variables:* ' + error.message }, { quoted: message });
+            await sock.sendMessage(chatId, {
+                text: '❌ *Error managing variables:* ' + error.message
+            }, { quoted: message });
         }
-    }
+    },
+
+    syncCloudVars,
+    getHerokuCredentials,
+    getKoyebCredentials,
+    readEnv,
+    writeEnv,
+    getAllRuntimeEnv
 };
