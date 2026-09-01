@@ -1,113 +1,88 @@
-const store = require('../lib/lightweight_store');
-
-const autoEmojis = [
-  '💘','💝','💖','💗','💓','💞','💕','💟','❣️','❤️',
-  '🧡','💛','💚','💙','💜','🤎','🖤','🤍','♥️',
-  '🎈','🎁','💌','💐','😘','🤗',
-  '🌸','🌹','🥀','🌺','🌼','🌷',
-  '🍁','⭐️','🌟','😊','🥰','😍',
-  '🤩','☺️'
-];
-
-let AUTO_REACT_MESSAGES = false;
-let lastReactedTime = 0;
-
-function parseEnvBoolean(value, fallback) {
-  if (value === undefined || value === null || String(value).trim() === '') return fallback;
-  return String(value).toLowerCase() === 'true';
-}
-
-async function getDefaultAutoreactEnabled() {
-  const rawValue = await store.getEnvBackedSetting('AUTOREACT', 'false');
-  return parseEnvBoolean(rawValue, false);
-}
-
-async function loadAutoreactState() {
-  const fallback = await getDefaultAutoreactEnabled();
-  const config = await store.getSetting('global', 'autoreact');
-  if (!config || typeof config.enabled !== 'boolean') {
-    const initial = { enabled: fallback };
-    await store.saveSetting('global', 'autoreact', initial);
-    return initial;
-  }
-  return { enabled: !!config.enabled };
-}
-
-async function saveAutoreactState(enabled) {
-  await store.saveSetting('global', 'autoreact', { enabled: !!enabled });
-}
-
-function initAutoReact(sock) {
-  if (sock.__autoReactAttached) return;
-
-  sock.ev.on('messages.upsert', async ({ messages }) => {
-    const state = await loadAutoreactState();
-    if (!state.enabled) return;
-
-    for (const m of messages) {
-      if (!m?.message) continue;
-      if (m.key.fromMe) continue;
-
-      const text =
-        m.message.conversation ||
-        m.message.extendedTextMessage?.text ||
-        '';
-
-      if (!text) continue;
-      if (/^[!#.$%^&*+=?<>]/.test(text)) continue;
-
-      const now = Date.now();
-      if (now - lastReactedTime < 2000) continue;
-
-      await sock.sendMessage(m.key.remoteJid, {
-        react: {
-          text: random(autoEmojis),
-          key: m.key
-        }
-      });
-
-      lastReactedTime = now;
-    }
-  });
-
-  sock.__autoReactAttached = true;
-}
-
-function random(arr) {
-  return arr[Math.floor(Math.random() * arr.length)];
-}
+const { getAutoReactConfig, setAutoReactConfig, findSuitableEmoji } = require('../lib/reactions');
 
 module.exports = {
   command: 'autoreact',
-  aliases: ['areact'],
+  aliases: ['areact', 'autoreaction'],
   category: 'owner',
-  description: 'Toggle auto-react to messages',
-  usage: '.autoreact on/off',
+  description: 'Toggle smart auto-reaction to incoming messages with suitable emojis',
+  usage: '.autoreact on/off/dm/group/status [test <text>]',
   ownerOnly: true,
-  
-  async handler(sock, message, args, context) {
-    const { chatId, channelInfo } = context;
-    const current = await loadAutoreactState();
-    AUTO_REACT_MESSAGES = current.enabled;
-    
-    if (!args[0] || !['on', 'off'].includes(args[0])) {
-      await sock.sendMessage(chatId, {
-        text: '*Usage:*\n.autoreact on/off',
+
+  async handler(sock, message, args, context = {}) {
+    const chatId = context.chatId || message.key.remoteJid;
+    const channelInfo = context.channelInfo || {};
+    const subCmd = (args[0] || '').toLowerCase().trim();
+
+    // Current config
+    const currentConfig = await getAutoReactConfig();
+
+    if (!subCmd || subCmd === 'status') {
+      const modeText = currentConfig.enabled
+        ? `*ENABLED* (${currentConfig.mode.toUpperCase()})`
+        : '*DISABLED*';
+
+      return await sock.sendMessage(chatId, {
+        text: `⚡ *Smart Auto-Reaction Settings*\n\n` +
+          `• *Status:* ${modeText}\n` +
+          `• *Active Scope:* ${currentConfig.mode || 'all'}\n\n` +
+          `*Commands:*\n` +
+          `• \`.autoreact on\` (React to all chats)\n` +
+          `• \`.autoreact dm\` (React to Private/Inbox chats only)\n` +
+          `• \`.autoreact group\` (React to Groups only)\n` +
+          `• \`.autoreact off\` (Disable auto-react)\n` +
+          `• \`.autoreact test <text>\` (Test suitable emoji preview)\n\n` +
+          `_Smart AI-style sentiment matching is active!_`,
         ...channelInfo
       }, { quoted: message });
-      return;
     }
 
-    AUTO_REACT_MESSAGES = args[0] === 'on';
-    await saveAutoreactState(AUTO_REACT_MESSAGES);
+    if (subCmd === 'test') {
+      const sampleText = args.slice(1).join(' ').trim() || 'Hello friend, how are you?';
+      const previewEmoji = findSuitableEmoji(sampleText);
 
-    await sock.sendMessage(chatId, {
-      text: AUTO_REACT_MESSAGES ? '*✅ Auto-react enabled*' : '*❌ Auto-react disabled*',
+      return await sock.sendMessage(chatId, {
+        text: `🎯 *Reaction Preview*\n\n` +
+          `• *Input:* "${sampleText}"\n` +
+          `• *Matched Emoji:* ${previewEmoji}`,
+        ...channelInfo
+      }, { quoted: message });
+    }
+
+    if (['on', 'enable', 'all', '1', 'true'].includes(subCmd)) {
+      await setAutoReactConfig({ enabled: true, mode: 'all' });
+      return await sock.sendMessage(chatId, {
+        text: `✅ *Auto-React ENABLED* (All Chats - DMs & Groups)\n\nThe bot will now react to incoming messages with contextually suitable emojis!`,
+        ...channelInfo
+      }, { quoted: message });
+    }
+
+    if (['dm', 'inbox', 'pm'].includes(subCmd)) {
+      await setAutoReactConfig({ enabled: true, mode: 'dm' });
+      return await sock.sendMessage(chatId, {
+        text: `✅ *Auto-React ENABLED* (Private DMs / Inbox Only)\n\nThe bot will react to direct messages only.`,
+        ...channelInfo
+      }, { quoted: message });
+    }
+
+    if (['group', 'groups', 'gc'].includes(subCmd)) {
+      await setAutoReactConfig({ enabled: true, mode: 'group' });
+      return await sock.sendMessage(chatId, {
+        text: `✅ *Auto-React ENABLED* (Groups Only)\n\nThe bot will react to group messages only.`,
+        ...channelInfo
+      }, { quoted: message });
+    }
+
+    if (['off', 'disable', '0', 'false'].includes(subCmd)) {
+      await setAutoReactConfig({ enabled: false, mode: 'all' });
+      return await sock.sendMessage(chatId, {
+        text: `❌ *Auto-React DISABLED*\n\nThe bot will no longer auto-react to chat messages.`,
+        ...channelInfo
+      }, { quoted: message });
+    }
+
+    return await sock.sendMessage(chatId, {
+      text: `*Usage:*\n.autoreact on / off / dm / group / status / test <text>`,
       ...channelInfo
     }, { quoted: message });
-
-    initAutoReact(sock);
-  },
-
-  initAutoReact
+  }
 };

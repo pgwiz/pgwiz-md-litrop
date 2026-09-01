@@ -51,6 +51,7 @@ function getAllRuntimeEnv() {
     // Standard bot keys to prioritize
     const importantKeys = [
         'SESSION_ID', 'BOT_NAME', 'OWNER_NUMBER', 'PREFIX', 'MODE', 'WORK_TYPE', 'ALWAYS_ONLINE',
+        'AUTO_REACT', 'AUTOREACT', 'AUTO_REACTION',
         'AUTO_STATUS_VIEW', 'AUTO_STATUS_REACT', 'STATUS_EMOJIS', 'AUTO_STATUS_SAVE', 'AUTO_STATUS_DOWNLOAD',
         'MONGO_URL', 'POSTGRES_URL', 'MYSQL_URL', 'DB_URL',
         'HKEY', 'HEROKU_API_KEY', 'HAPP', 'HEROKU_APP_NAME',
