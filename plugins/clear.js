@@ -4,7 +4,7 @@ module.exports = {
     command: 'clear',
     aliases: ['clearchat', 'clr', 'clean'],
     category: 'owner',
-    description: 'Clear messages from the current chat or group (keeps the chat, deletes messages)',
+    description: 'Clear all messages in current chat or group (keeps chat thread, wipes message history)',
     usage: '.clear',
     ownerOnly: true,
 
@@ -16,11 +16,11 @@ module.exports = {
 
         try {
             const statusMsg = await sock.sendMessage(chatId, {
-                text: `🧹 *Clearing ${targetName} messages...*`,
+                text: `🧹 *Clearing whole ${targetName}...*`,
                 ...channelInfo
             }, { quoted: message });
 
-            // 1. Fetch genuine messages from store
+            // 1. Fetch real messages from store
             let chatMessages = [];
             if (store && typeof store.loadMessages === 'function') {
                 chatMessages = await store.loadMessages(chatId, 100);
@@ -30,38 +30,67 @@ module.exports = {
                     : Object.values(store.messages[chatId]);
             }
 
-            // Always include current command message so at least 1 real key is present
-            if (chatMessages.length === 0 && message?.key?.id) {
-                chatMessages.push(message);
-            }
-
-            // 2. Perform accurate chatModify clear (wipe messages, KEEP the chat conversation)
+            // 2. Prepare valid lastMessages list for Baileys clearChatAction
+            let lastMessages = [];
             if (chatMessages && chatMessages.length > 0) {
-                const messagesToClear = chatMessages.map(m => ({
-                    id: m.key?.id || m.id,
-                    fromMe: Boolean(m.key?.fromMe ?? m.fromMe),
-                    timestamp: String(m.messageTimestamp || m.timestamp || Math.floor(Date.now() / 1000))
-                })).filter(m => m.id);
+                lastMessages = chatMessages.map(m => {
+                    const id = m.key?.id || m.id;
+                    const fromMe = Boolean(m.key?.fromMe ?? m.fromMe);
+                    const timestamp = Number(m.messageTimestamp || m.timestamp) || Math.floor(Date.now() / 1000);
+                    const participant = (isGroup && !fromMe)
+                        ? (m.key?.participant || m.participant || (sock.user?.id ? sock.user.id.split(':')[0] + '@s.whatsapp.net' : undefined))
+                        : undefined;
 
-                if (messagesToClear.length > 0) {
-                    await sock.chatModify({
-                        clear: { messages: messagesToClear }
-                    }, chatId).catch(err => {
-                        console.warn(`[CLEAR] chatModify clear notice for ${chatId}:`, err.message);
-                    });
-                }
+                    return {
+                        key: {
+                            id,
+                            remoteJid: chatId,
+                            fromMe,
+                            ...(participant ? { participant } : {})
+                        },
+                        messageTimestamp: timestamp
+                    };
+                }).filter(m => m.key.id);
             }
 
-            // 3. Clean local store messages
+            // Always ensure at least the current command message is present
+            if (lastMessages.length === 0 && message?.key?.id) {
+                const isFromMe = Boolean(message.key.fromMe);
+                const participant = (isGroup && !isFromMe)
+                    ? (message.key.participant || (sock.user?.id ? sock.user.id.split(':')[0] + '@s.whatsapp.net' : undefined))
+                    : undefined;
+
+                lastMessages.push({
+                    key: {
+                        id: message.key.id,
+                        remoteJid: chatId,
+                        fromMe: isFromMe,
+                        ...(participant ? { participant } : {})
+                    },
+                    messageTimestamp: Number(message.messageTimestamp) || Math.floor(Date.now() / 1000)
+                });
+            }
+
+            // 3. Perform official WhatsApp Web app-state clearChat mutation
+            if (lastMessages.length > 0) {
+                await sock.chatModify({
+                    clear: true,
+                    lastMessages: lastMessages
+                }, chatId).catch(err => {
+                    console.warn(`[CLEAR] chatModify clear error for ${chatId}:`, err.message);
+                });
+            }
+
+            // 4. Wipe local message database / store cache
             if (store && typeof store.deleteChat === 'function') {
                 await store.deleteChat(chatId).catch(() => {});
             }
 
-            // 4. Delete status confirmation message after 2.5s
+            // 5. Delete confirmation status bubble after 2 seconds
             if (statusMsg && statusMsg.key) {
                 setTimeout(async () => {
                     await sock.sendMessage(chatId, { delete: statusMsg.key }).catch(() => {});
-                }, 2500);
+                }, 2000);
             }
 
         } catch (error) {

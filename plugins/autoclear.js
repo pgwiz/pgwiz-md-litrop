@@ -56,6 +56,7 @@ async function runAutoClearCheck(sock) {
                 console.log(`[AUTOCLEAR] Running scheduled clear for ${chatId} (interval: ${data.intervalLabel || '24h'})...`);
                 
                 try {
+                    const isGroup = chatId.endsWith('@g.us');
                     // 1. Fetch real messages from store
                     let chatMessages = [];
                     if (store && typeof store.loadMessages === 'function') {
@@ -66,33 +67,56 @@ async function runAutoClearCheck(sock) {
                             : Object.values(store.messages[chatId]);
                     }
 
-                    // 2. Perform accurate chatModify clear using valid message keys
+                    // 2. Prepare valid lastMessages list for Baileys clearChatAction
+                    let lastMessages = [];
                     if (chatMessages && chatMessages.length > 0) {
-                        const messagesToClear = chatMessages.map(m => ({
-                            id: m.key?.id || m.id,
-                            fromMe: Boolean(m.key?.fromMe ?? m.fromMe),
-                            timestamp: String(m.messageTimestamp || m.timestamp || Math.floor(now / 1000))
-                        })).filter(m => m.id);
+                        lastMessages = chatMessages.map(m => {
+                            const id = m.key?.id || m.id;
+                            const fromMe = Boolean(m.key?.fromMe ?? m.fromMe);
+                            const timestamp = Number(m.messageTimestamp || m.timestamp) || Math.floor(now / 1000);
+                            const participant = (isGroup && !fromMe)
+                                ? (m.key?.participant || m.participant || (sock.user?.id ? sock.user.id.split(':')[0] + '@s.whatsapp.net' : undefined))
+                                : undefined;
 
-                        if (messagesToClear.length > 0) {
-                            await sock.chatModify({
-                                clear: { messages: messagesToClear }
-                            }, chatId).catch(err => {
-                                console.warn(`[AUTOCLEAR] chatModify clear notice for ${chatId}:`, err.message);
-                            });
-                        }
-
-                        // Messages cleared successfully (chat retained in inbox)
+                            return {
+                                key: {
+                                    id,
+                                    remoteJid: chatId,
+                                    fromMe,
+                                    ...(participant ? { participant } : {})
+                                },
+                                messageTimestamp: timestamp
+                            };
+                        }).filter(m => m.key.id);
                     }
 
-                    // 3. Clean local store cache
+                    if (lastMessages.length === 0) {
+                        lastMessages.push({
+                            key: {
+                                id: 'AUTOCLEAR_' + Date.now(),
+                                remoteJid: chatId,
+                                fromMe: true
+                            },
+                            messageTimestamp: Math.floor(now / 1000)
+                        });
+                    }
+
+                    // 3. Perform official clearChat mutation
+                    await sock.chatModify({
+                        clear: true,
+                        lastMessages: lastMessages
+                    }, chatId).catch(err => {
+                        console.warn(`[AUTOCLEAR] chatModify clear error for ${chatId}:`, err.message);
+                    });
+
+                    // 4. Clean local store cache
                     if (store && typeof store.deleteChat === 'function') {
                         await store.deleteChat(chatId).catch(() => {});
                     }
 
                     data.lastClearedAt = now;
                     changed = true;
-                    console.log(`✅ [AUTOCLEAR] Cleared ${chatId} successfully!`);
+                    console.log(`✅ [AUTOCLEAR] Cleared whole ${chatId} successfully!`);
                 } catch (e) {
                     console.error(`❌ [AUTOCLEAR] Error clearing ${chatId}:`, e.message);
                 }
