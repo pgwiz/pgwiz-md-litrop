@@ -193,128 +193,75 @@ async function handleAutoDownloadStatus(sock, msg) {
     }
 }
 
-// In-memory deduplication set & queue
+// Track reacted statuses to prevent duplicates & infinite loops
 const reactedStatuses = new Set();
-let statusQueue = [];
-let isProcessingQueue = false;
+setInterval(() => reactedStatuses.clear(), 2 * 60 * 60 * 1000);
 
-async function processStatusQueue(sock) {
-    if (isProcessingQueue || statusQueue.length === 0) return;
-    isProcessingQueue = true;
-
-    while (statusQueue.length > 0) {
-        const item = statusQueue.shift();
-        try {
-            await item.handler();
-        } catch (err) {
-            console.error('[AUTOSTATUS] Queue processing error:', err.message);
-        }
-    }
-
-    isProcessingQueue = false;
-}
-
-// Core reaction sender with complete 4-vector delivery
+// Proven Relay Status Reaction Engine (Based on working d836a31 / dc33cc3 architecture)
 async function reactToStatus(sock, statusKey) {
     try {
         if (!sock || !statusKey?.id) return;
-        const rawParticipant = statusKey.participant;
-        if (!rawParticipant || rawParticipant === 'status@broadcast') return;
+        const enabled = await isStatusReactionEnabled();
+        if (!enabled) return;
+
+        const participant = statusKey.participant || statusKey.remoteJid;
+        if (!participant || participant === 'status@broadcast') return;
 
         const normParticipant = (typeof jidNormalizedUser === 'function')
-            ? jidNormalizedUser(rawParticipant)
-            : rawParticipant.split(':')[0] + '@s.whatsapp.net';
+            ? jidNormalizedUser(participant)
+            : participant.split(':')[0] + '@s.whatsapp.net';
 
         const emoji = getRandomStatusEmoji();
-        const statusReactionKey = {
+
+        const reactionKey = {
             remoteJid: 'status@broadcast',
             id: statusKey.id,
-            participant: rawParticipant,
+            participant: participant,
             fromMe: false
         };
 
-        const targetList = Array.from(new Set([rawParticipant, normParticipant])).filter(Boolean);
+        const statusJidList = Array.from(new Set([
+            'status@broadcast',
+            participant,
+            normParticipant
+        ])).filter(Boolean);
 
-        // Vector 1: RelayMessage to status@broadcast (Standard Multi-Device Status Reaction Stanza)
-        try {
-            await sock.relayMessage(
-                'status@broadcast',
-                {
-                    reactionMessage: {
-                        key: statusReactionKey,
-                        text: emoji,
-                        senderTimestampMs: Date.now()
-                    }
-                },
-                {
-                    statusJidList: targetList
+        // Multi-Device Status Reaction Relay Stanza
+        await sock.relayMessage(
+            'status@broadcast',
+            {
+                reactionMessage: {
+                    key: reactionKey,
+                    text: emoji
                 }
-            );
-            console.log(`[AUTOSTATUS] ⚡ [1/4] relayMessage status reaction (${emoji}) sent for ${statusKey.id}`);
-        } catch (e1) {
-            console.log(`[AUTOSTATUS] Vector 1 notice: ${e1.message}`);
-        }
+            },
+            {
+                messageId: statusKey.id,
+                statusJidList: statusJidList
+            }
+        );
 
-        // Vector 2: SendMessage to status@broadcast with react content
-        try {
-            await sock.sendMessage(
-                'status@broadcast',
-                {
-                    react: {
-                        text: emoji,
-                        key: statusReactionKey
-                    }
-                },
-                {
-                    statusJidList: targetList
+        // Native React Message Stanza
+        await sock.sendMessage(
+            'status@broadcast',
+            {
+                react: {
+                    text: emoji,
+                    key: reactionKey
                 }
-            );
-            console.log(`[AUTOSTATUS] ⚡ [2/4] sendMessage status reaction (${emoji}) sent for ${statusKey.id}`);
-        } catch (e2) {
-            console.log(`[AUTOSTATUS] Vector 2 notice: ${e2.message}`);
-        }
+            },
+            {
+                statusJidList: statusJidList
+            }
+        ).catch(() => {});
 
-        // Vector 3: RelayMessage reaction directly to the participant's user chat
-        try {
-            await sock.relayMessage(
-                normParticipant,
-                {
-                    reactionMessage: {
-                        key: statusReactionKey,
-                        text: emoji,
-                        senderTimestampMs: Date.now()
-                    }
-                },
-                {}
-            );
-            console.log(`[AUTOSTATUS] ⚡ [3/4] direct user relay reaction (${emoji}) sent to ${normParticipant}`);
-        } catch (e3) {
-            console.log(`[AUTOSTATUS] Vector 3 notice: ${e3.message}`);
-        }
-
-        // Vector 4: SendMessage reaction directly to the participant's user chat
-        try {
-            await sock.sendMessage(
-                normParticipant,
-                {
-                    react: {
-                        text: emoji,
-                        key: statusReactionKey
-                    }
-                }
-            );
-            console.log(`[AUTOSTATUS] ⚡ [4/4] direct user sendMessage reaction (${emoji}) sent to ${normParticipant}`);
-        } catch (e4) {
-            console.log(`[AUTOSTATUS] Vector 4 notice: ${e4.message}`);
-        }
-
-        console.log(`[AUTOSTATUS] ✅ All 4 reaction vectors completed for status ${statusKey.id} from ${normParticipant} (${emoji})`);
+        console.log(`[AUTOSTATUS] ✅ Reacted to status ${statusKey.id} from ${normParticipant} with ${emoji}`);
     } catch (error) {
-        console.error('[AUTOSTATUS] Error in reactToStatus:', error.message);
+        console.error('[AUTOSTATUS] ❌ Error reacting to status:', error.message);
     }
 }
 
-// Full status update listener
+// Full status update listener (Non-blocking & Loop-safe)
 async function handleStatusUpdate(sock, status) {
     try {
         if (!sock) return;
@@ -331,22 +278,26 @@ async function handleStatusUpdate(sock, status) {
             const isStatus = key.remoteJid === 'status@broadcast' || msg.remoteJid === 'status@broadcast';
             if (!isStatus) continue;
 
-            // Skip own statuses and reaction echoes
+            // Strict loop prevention: Ignore own statuses & reaction message echoes
             if (key.fromMe || msg.fromMe) continue;
-
-            // Skip reaction message events to prevent loops
             if (msg.message?.reactionMessage) continue;
 
-            // 1. Age Guard: Allow up to 24 hours (86400s) for WhatsApp statuses
-            let ts = msg.messageTimestamp || key.messageTimestamp || 0;
-            if (typeof ts === 'object' && ts !== null) ts = ts.low || (ts.toNumber ? ts.toNumber() : 0);
-            ts = Number(ts) || 0;
-            const nowSec = Math.floor(Date.now() / 1000);
-            if (ts > 0 && (nowSec - ts > 86400)) {
-                console.log(`[AUTOSTATUS] ⏩ Skipping status older than 24h: ${key.id}`);
-                continue;
+            // Deduplication: Never process the same status ID twice
+            if (reactedStatuses.has(key.id)) continue;
+            if (HAS_DB) {
+                const alreadyHandled = await store.getSetting('status_history', key.id);
+                if (alreadyHandled) {
+                    reactedStatuses.add(key.id);
+                    continue;
+                }
             }
 
+            reactedStatuses.add(key.id);
+            if (HAS_DB) {
+                await store.saveSetting('status_history', key.id, true).catch(() => {});
+            }
+
+            // Extract participant
             const unnormParticipant = key.participant 
                 || msg.participant 
                 || msg.message?.extendedTextMessage?.contextInfo?.participant
@@ -356,10 +307,9 @@ async function handleStatusUpdate(sock, status) {
 
             if (!unnormParticipant || unnormParticipant === 'status@broadcast') continue;
 
-            const rawParticipant = unnormParticipant;
             const normParticipant = (typeof jidNormalizedUser === 'function') 
                 ? jidNormalizedUser(unnormParticipant) 
-                : unnormParticipant.split(':')[0] + (unnormParticipant.includes('@lid') ? '@lid' : '@s.whatsapp.net');
+                : unnormParticipant.split(':')[0] + '@s.whatsapp.net';
 
             const senderNum = normParticipant.split('@')[0];
 
@@ -372,63 +322,32 @@ async function handleStatusUpdate(sock, status) {
                 }
             }
 
-            // 2. Deduplication check
-            if (reactedStatuses.has(key.id)) continue;
-            if (HAS_DB) {
-                const alreadyHandled = await store.getSetting('status_history', key.id);
-                if (alreadyHandled) {
-                    reactedStatuses.add(key.id);
-                    continue;
+            const targetKey = {
+                remoteJid: 'status@broadcast',
+                id: key.id,
+                participant: unnormParticipant,
+                fromMe: false
+            };
+
+            // 1. Mark as Read / Viewed (if view is enabled)
+            if (config.enabled !== false) {
+                sock.readMessages([targetKey]).catch(() => {});
+                if (typeof sock.sendReceipt === 'function') {
+                    sock.sendReceipt('status@broadcast', unnormParticipant, [key.id], 'read-self').catch(() => {});
+                    sock.sendReceipt('status@broadcast', unnormParticipant, [key.id], 'read').catch(() => {});
                 }
+                console.log(`[AUTOSTATUS] 👀 [Viewed] Status ${key.id} from ${normParticipant}`);
             }
 
-            reactedStatuses.add(key.id);
+            // 2. React to Status (if reaction is enabled)
+            if (config.reactOn !== false) {
+                reactToStatus(sock, targetKey).catch(() => {});
+            }
 
-            // 3. Process status viewing and/or reacting
-            statusQueue.push({
-                handler: async () => {
-                    console.log(`[AUTOSTATUS] 📢 Processing status ${key.id} from ${normParticipant}`);
-
-                    const targetKey = {
-                        remoteJid: 'status@broadcast',
-                        id: key.id,
-                        participant: rawParticipant,
-                        fromMe: false
-                    };
-
-                    // Step A: Mark Read / Seen Receipt (if view is enabled)
-                    if (config.enabled !== false) {
-                        try {
-                            await sock.readMessages([targetKey]);
-                            if (typeof sock.sendReceipt === 'function') {
-                                await sock.sendReceipt('status@broadcast', rawParticipant, [key.id], 'read-self').catch(() => {});
-                                await sock.sendReceipt('status@broadcast', rawParticipant, [key.id], 'read').catch(() => {});
-                                await sock.sendReceipt('status@broadcast', normParticipant, [key.id], 'read').catch(() => {});
-                            }
-                            console.log(`[AUTOSTATUS] 👀 [Viewed] Status ${key.id} marked as seen for ${normParticipant}`);
-                        } catch (viewErr) {
-                            console.log(`[AUTOSTATUS] View receipt note: ${viewErr.message}`);
-                        }
-                    }
-
-                    // Step B: React to Status (reacting ALSO marks status seen on WhatsApp)
-                    if (config.reactOn !== false) {
-                        await reactToStatus(sock, targetKey);
-                    }
-
-                    // Save to persistent database history
-                    if (HAS_DB) {
-                        await store.saveSetting('status_history', key.id, true).catch(() => {});
-                    }
-
-                    // Step C: Auto-Download Media (if enabled)
-                    if (msg.message) {
-                        handleAutoDownloadStatus(sock, msg).catch(() => {});
-                    }
-                }
-            });
-
-            processStatusQueue(sock).catch(() => {});
+            // 3. Auto-Download Media (if enabled)
+            if (msg.message) {
+                handleAutoDownloadStatus(sock, msg).catch(() => {});
+            }
         }
     } catch (error) {
         console.error('[AUTOSTATUS] Error in handleStatusUpdate:', error.message);
