@@ -32,18 +32,22 @@ function parseEnvBool(val, fallback = true) {
     return fallback;
 }
 
+// Hardcoded default status reaction emojis
+const DEFAULT_STATUS_EMOJIS = ['❤️', '🔥', '✨', '💯', '🌟', '⚡', '😍', '👏', '💖', '🥰', '👍', '🎉'];
+
 function getStatusEmojis() {
     const envEmojis = process.env.STATUS_EMOJIS || process.env.AUTO_STATUS_EMOJIS || process.env.STATUS_REACTION_EMOJIS;
     if (envEmojis && typeof envEmojis === 'string' && envEmojis.trim() !== '') {
         const parsed = envEmojis.split(',').map(e => e.trim()).filter(Boolean);
         if (parsed.length > 0) return parsed;
     }
-    return ['❤️', '🔥', '✨', '💯', '🌟', '⚡', '😍', '👏', '💖', '🥰'];
+    return DEFAULT_STATUS_EMOJIS;
 }
 
 function getRandomStatusEmoji() {
     const emojis = getStatusEmojis();
-    return emojis[Math.floor(Math.random() * emojis.length)];
+    if (!Array.isArray(emojis) || emojis.length === 0) return '❤️';
+    return emojis[Math.floor(Math.random() * emojis.length)] || '❤️';
 }
 
 async function readConfig() {
