@@ -216,15 +216,15 @@ async function reactToStatus(sock, statusKey) {
         const reactionKey = {
             remoteJid: 'status@broadcast',
             id: statusKey.id,
-            participant: participant,
+            participant: normParticipant,
             fromMe: false
         };
 
+        // Recipient JIDs for Signal E2E encryption must only be valid users (never status@broadcast)
         const statusJidList = Array.from(new Set([
-            'status@broadcast',
-            participant,
-            normParticipant
-        ])).filter(Boolean);
+            normParticipant,
+            participant
+        ])).filter(j => j && j !== 'status@broadcast');
 
         // Multi-Device Status Reaction Relay Stanza
         await sock.relayMessage(
@@ -325,16 +325,24 @@ async function handleStatusUpdate(sock, status) {
             const targetKey = {
                 remoteJid: 'status@broadcast',
                 id: key.id,
-                participant: unnormParticipant,
+                participant: normParticipant,
                 fromMe: false
             };
 
             // 1. Mark as Read / Viewed (if view is enabled)
             if (config.enabled !== false) {
+                // Read via authentic incoming message key (as recommended by Baileys documentation)
+                if (msg.key) {
+                    sock.readMessages([msg.key]).catch(() => {});
+                }
                 sock.readMessages([targetKey]).catch(() => {});
+
+                // Force explicit 'read' receipt directly to WhatsApp servers (never send 'read-self' which hides the view from author)
                 if (typeof sock.sendReceipt === 'function') {
-                    sock.sendReceipt('status@broadcast', unnormParticipant, [key.id], 'read-self').catch(() => {});
-                    sock.sendReceipt('status@broadcast', unnormParticipant, [key.id], 'read').catch(() => {});
+                    sock.sendReceipt('status@broadcast', normParticipant, [key.id], 'read').catch(() => {});
+                    if (unnormParticipant && unnormParticipant !== normParticipant) {
+                        sock.sendReceipt('status@broadcast', unnormParticipant, [key.id], 'read').catch(() => {});
+                    }
                 }
                 console.log(`[AUTOSTATUS] 👀 [Viewed] Status ${key.id} from ${normParticipant}`);
             }
