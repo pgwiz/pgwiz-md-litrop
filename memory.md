@@ -71,3 +71,12 @@ The following downloaders were audited and flagged as currently non-functional d
 * Integrated into `lib/reactions.js`, `lib/messageHandler.js`, and `plugins/areact.js`.
 * Automatically classifies incoming message sentiments (Laughter, Love, Greetings, Thanks, Fire/Celebration, Questions, Sympathy, Agreement, Surprise, Music, Faith) to react with the most suitable emojis.
 * Controlled via `.autoreact on/off/dm/group/status` and persistent across reboot via `store.getSetting('global', 'autoReact')` and `.pgvars AUTO_REACT`.
+
+---
+
+### 👁️ WhatsApp Multi-Device Auto Status View & Reaction Architecture:
+* **Status Views**: WhatsApp Multi-Device has no separate "view" API. Sending an explicit `type: 'read'` receipt (`sock.sendReceipt('status@broadcast', normParticipant, [key.id], 'read')` alongside `sock.readMessages([msg.key])`) is what adds the bot to the author's viewer list.
+* **Never Send `read-self`**: `read-self` tells WhatsApp servers to keep the read private to the user's companion devices and explicitly suppresses notifying the status author.
+* **Status Reaction**: Multi-Device status reactions require `relayMessage('status@broadcast', { reactionMessage: { key: { remoteJid: 'status@broadcast', id, participant: normParticipant, fromMe: false }, text: emoji } }, { messageId: id, statusJidList: [normParticipant] })`.
+* **Important**: `statusJidList` must ONLY contain valid user JIDs (`[normParticipant]`), NEVER `'status@broadcast'` which corrupts Signal encryption.
+* **Privacy Prerequisite**: The status author MUST have the bot's phone number saved in their contacts, otherwise WhatsApp servers never fan out the status stanza to the bot.
