@@ -1284,46 +1284,50 @@ async function startBot() {
                     broadcastPresenceOffline(botSocket);
                 }
 
-                try {
-                    const botNumber = botSocket.user.id.split(':')[0] + '@s.whatsapp.net';
-                    const ghostStatus = (ghostMode && ghostMode.enabled) ? '\n👻 Stealth Mode: ACTIVE' : '';
-
-                    await botSocket.sendMessage(botNumber, {
-                        text: `🤖 ${settings.botName || 'PGWIZ-MD'} Connected Successfully!\n\n⏰ Time: ${new Date().toLocaleString()}\n✅ Status: Online and Ready!${ghostStatus}\n\n✅Make sure to join below channel`,
-                        contextInfo: {
-                            forwardingScore: 1,
-                            isForwarded: true,
-                            forwardedNewsletterMessageInfo: {
-                                newsletterJid: '120363179639202475@newsletter',
-                                newsletterName: settings.newsletterName || settings.botName || 'PGWIZ-MD',
-                                serverMessageId: -1
-                            }
-                        }
-                    });
-
+                const sendStartupMsg = process.env.STARTUP_MESSAGE !== 'false' && process.env.SEND_STARTUP_MESSAGE !== 'false';
+                if (sendStartupMsg && !global.hasSentStartupNotification) {
+                    global.hasSentStartupNotification = true;
                     try {
-                        if (Array.isArray(owner) && owner.length) {
-                            const primary = owner[0];
-                            const ownerJid = primary.includes('@') ? primary : `${primary}@s.whatsapp.net`;
+                        const botNumber = botSocket.user.id.split(':')[0] + '@s.whatsapp.net';
+                        const ghostStatus = (ghostMode && ghostMode.enabled) ? '\n👻 Stealth Mode: ACTIVE' : '';
 
-                            global.startupDebug = {
-                                pending: true,
-                                ownerJids: [ownerJid],
-                                startedAt: Date.now(),
-                                expiresAt: Date.now() + 10 * 60 * 1000
-                            };
+                        await botSocket.sendMessage(botNumber, {
+                            text: `🤖 ${settings.botName || 'PGWIZ-MD'} Connected Successfully!\n\n⏰ Time: ${new Date().toLocaleString()}\n✅ Status: Online and Ready!${ghostStatus}\n\n✅Make sure to join below channel`,
+                            contextInfo: {
+                                forwardingScore: 1,
+                                isForwarded: true,
+                                forwardedNewsletterMessageInfo: {
+                                    newsletterJid: '120363179639202475@newsletter',
+                                    newsletterName: settings.newsletterName || settings.botName || 'PGWIZ-MD',
+                                    serverMessageId: -1
+                                }
+                            }
+                        });
 
-                            await botSocket.sendMessage(ownerJid, {
-                                text: '🤖 Startup check — reply to this message to confirm bot status.\n\nReply with `.menu` to verify the bot is responding.',
-                            });
+                        try {
+                            if (Array.isArray(owner) && owner.length) {
+                                const primary = owner[0];
+                                const ownerJid = primary.includes('@') ? primary : `${primary}@s.whatsapp.net`;
 
-                            printLog('info', `Startup debug message sent to ${ownerJid.split('@')[0]}`);
+                                global.startupDebug = {
+                                    pending: true,
+                                    ownerJids: [ownerJid],
+                                    startedAt: Date.now(),
+                                    expiresAt: Date.now() + 10 * 60 * 1000
+                                };
+
+                                await botSocket.sendMessage(ownerJid, {
+                                    text: '🤖 Startup check — reply to this message to confirm bot status.\n\nReply with `.menu` to verify the bot is responding.',
+                                });
+
+                                printLog('info', `Startup debug message sent to ${ownerJid.split('@')[0]}`);
+                            }
+                        } catch (e) {
+                            printLog('error', `Startup debug send failed: ${e.message}`);
                         }
-                    } catch (e) {
-                        printLog('error', `Startup debug send failed: ${e.message}`);
+                    } catch (error) {
+                        printLog('error', `Failed to send connection message: ${error.message}`);
                     }
-                } catch (error) {
-                    printLog('error', `Failed to send connection message: ${error.message}`);
                 }
 
                 return;

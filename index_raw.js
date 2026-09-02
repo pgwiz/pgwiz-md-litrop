@@ -1,3 +1,7 @@
+// High-Performance Engine Tuning for Heroku / Cloud Dynos
+if (!process.env.UV_THREADPOOL_SIZE) process.env.UV_THREADPOOL_SIZE = '16';
+if (!process.env.NODE_ENV) process.env.NODE_ENV = 'production';
+
 // Zero-dependency environment loader with safe dotenv fallback (compatible with all panels & environments)
 (function loadEnvironment() {
     try {
@@ -53,6 +57,49 @@ try {
 }
 
 global.alwaysOnlineState = undefined;
+
+// ==================== ENVIRONMENT AUTO-DETECTION ON BOOT ====================
+(function logBootEnvironment() {
+    try {
+        const autoView = process.env.AUTO_STATUS_VIEW ?? process.env.AUTO_STATUS_READ ?? process.env.AUTO_READ_STATUS ?? 'true';
+        const autoReact = process.env.AUTO_STATUS_REACT ?? process.env.AUTO_REACT_STATUS ?? process.env.STATUS_REACT ?? 'true';
+        const alwaysOn = process.env.ALWAYS_ONLINE ?? process.env.ALWAYS_ONLINE_PRESENCE ?? 'false';
+        const botMode = process.env.MODE ?? process.env.WORK_TYPE ?? settings.commandMode ?? 'public';
+        const prefix = process.env.PREFIX ?? '.';
+        
+        console.log('[BOOT-ENV] ⚙️ Active Runtime Environment Variables:');
+        console.log(`   • AUTO_STATUS_VIEW : ${autoView}`);
+        console.log(`   • AUTO_STATUS_REACT: ${autoReact}`);
+        console.log(`   • ALWAYS_ONLINE    : ${alwaysOn}`);
+        console.log(`   • MODE             : ${botMode}`);
+        console.log(`   • PREFIX           : ${prefix}`);
+    } catch {}
+})();
+
+
+
+// Auto-authenticate Heroku & Koyeb on boot if credentials exist in environment
+(async function initCloudPlatformAuth() {
+    try {
+        // 1. Heroku Auto-Detection
+        const hKey = process.env.HKEY || process.env.HEROKU_KEY || process.env.HEROKU_API_KEY || process.env.HEROKU_API_TOKEN || process.env.HEROKU_TOKEN;
+        const hApp = process.env.HAPP || process.env.HEROKU_APP_NAME || process.env.HEROKU_APP || process.env.HEROKU_NAME || process.env.APP_NAME;
+        if (hKey && hApp && store && typeof store.saveSetting === 'function') {
+            await store.saveSetting('global', 'herokuAuth', { apiKey: hKey, appName: hApp });
+            printLog('info', `☁️ Auto-linked Heroku app '${hApp}' on boot`);
+        }
+
+        // 2. Koyeb Auto-Detection
+        const kToken = process.env.KOYEB_API_TOKEN || process.env.KOYEB_TOKEN || process.env.KOYEB_API_KEY || process.env.KOYEB_KEY || process.env.K_TOKEN || process.env.K_KEY;
+        const kService = process.env.KOYEB_SERVICE_NAME || process.env.KOYEB_APP_NAME || process.env.KOYEB_SERVICE || process.env.KOYEB_APP || process.env.K_SERVICE || process.env.K_APP;
+        const kServiceId = process.env.KOYEB_SERVICE_ID || kService;
+        if (kToken && (kService || kServiceId) && store && typeof store.saveSetting === 'function') {
+            await store.saveSetting('global', 'koyebAuth', { apiToken: kToken, serviceName: kService, serviceId: kServiceId });
+            printLog('info', `🚀 Auto-linked Koyeb service '${kService || kServiceId}' on boot`);
+        }
+    } catch {}
+})();
+
 global.botLaunchTimestamp = Math.floor(Date.now() / 1000);
 /* process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'; */
 
@@ -376,34 +423,7 @@ function parseBoolean(value, fallback = false) {
     return String(value).toLowerCase() === 'true';
 }
 
-async function getPresenceConfig() {
-    if (typeof global.alwaysOnlineState === 'boolean') {
-        return { alwaysOnline: global.alwaysOnlineState };
-    }
-    try {
-        const existing = await store.getSetting('global', 'presenceConfig');
-        if (existing && typeof existing.alwaysOnline === 'boolean') {
-            global.alwaysOnlineState = existing.alwaysOnline;
-            return { alwaysOnline: existing.alwaysOnline };
-        }
-    } catch (e) {}
 
-    const envVal = process.env.ALWAYS_ONLINE || process.env.ALWAYS_ONLINE_PRESENCE;
-    const isEn = (envVal !== undefined && String(envVal).trim() !== '')
-        ? (String(envVal).toLowerCase() === 'true' || String(envVal) === '1' || String(envVal).toLowerCase() === 'on')
-        : (settings.alwaysOnline ?? false);
-    global.alwaysOnlineState = isEn;
-    return { alwaysOnline: isEn };
-}
-
-async function isAlwaysOnlineEnabled() {
-    try {
-        const config = await getPresenceConfig();
-        return !!config.alwaysOnline;
-    } catch {
-        return false;
-    }
-}
 
 async function bootstrapStoreSchemaAndFallbacks() {
     try {
@@ -722,6 +742,9 @@ if (!server.listening) {
 }
 
 
+
+
+
 // ==================== PRESENCE ENGINE ====================
 async function getPresenceConfig() {
     try {
@@ -1036,6 +1059,7 @@ async function startBot() {
                         : mek.message;
 
                     if (mek.key && mek.key.remoteJid === 'status@broadcast') {
+                        if (mek.key.fromMe) continue; // Ignore own statuses & outbound reaction echoes
                         handleStatus(botSocket, { type: upsertType, messages: [mek] }).catch(err => printLog('error', `AutoStatus Error: ${err.message}`));
                         continue;
                     }
@@ -1055,6 +1079,10 @@ async function startBot() {
                     }
 
                     const messageId = mek.key?.id || '';
+                    if (messageId && isDuplicateMessage(messageId)) {
+                        continue;
+                    }
+        
                     if (mek.key?.fromMe && messageId.startsWith('BAE5') && messageId.length === 16) continue;
 
                     const botMode = await store.getBotMode();
@@ -1223,6 +1251,14 @@ async function startBot() {
 
                 global.botConnectedTime = Date.now();
                 printLog('success', 'Bot connected successfully!');
+                try {
+                    const { isAlwaysOnlineEnabled, startAlwaysOnlineLoop } = require('./plugins/alwaysonline');
+                    if (typeof isAlwaysOnlineEnabled === 'function') {
+                        isAlwaysOnlineEnabled().then(enabled => {
+                            if (enabled) startAlwaysOnlineLoop(pgwizSocket);
+                        }).catch(() => {});
+                    }
+                } catch (e) {}
 
                 const { startAutoBio } = require('./plugins/a-setbio');
                 startAutoBio(botSocket);
@@ -1236,51 +1272,62 @@ async function startBot() {
 
                 const presenceConfig = await getPresenceConfig();
                 // 🟢 Ultra-Reliable Always-Online Presence Engine
-                broadcastPresenceAvailable(botSocket);
-                registerBotInterval(setInterval(() => {
+                const isAlwaysOn = await isAlwaysOnlineEnabled();
+                if (isAlwaysOn) {
                     broadcastPresenceAvailable(botSocket);
-                }, 10 * 1000));
-
-                try {
-                    const botNumber = botSocket.user.id.split(':')[0] + '@s.whatsapp.net';
-                    const ghostStatus = (ghostMode && ghostMode.enabled) ? '\n👻 Stealth Mode: ACTIVE' : '';
-
-                    await botSocket.sendMessage(botNumber, {
-                        text: `🤖 ${settings.botName || 'PGWIZ-MD'} Connected Successfully!\n\n⏰ Time: ${new Date().toLocaleString()}\n✅ Status: Online and Ready!${ghostStatus}\n\n✅Make sure to join below channel`,
-                        contextInfo: {
-                            forwardingScore: 1,
-                            isForwarded: true,
-                            forwardedNewsletterMessageInfo: {
-                                newsletterJid: '120363179639202475@newsletter',
-                                newsletterName: settings.newsletterName || settings.botName || 'PGWIZ-MD',
-                                serverMessageId: -1
-                            }
+                    registerBotInterval(setInterval(async () => {
+                        if (await isAlwaysOnlineEnabled()) {
+                            broadcastPresenceAvailable(botSocket);
                         }
-                    });
+                    }, 10 * 1000));
+                } else {
+                    broadcastPresenceOffline(botSocket);
+                }
 
+                const sendStartupMsg = process.env.STARTUP_MESSAGE !== 'false' && process.env.SEND_STARTUP_MESSAGE !== 'false';
+                if (sendStartupMsg && !global.hasSentStartupNotification) {
+                    global.hasSentStartupNotification = true;
                     try {
-                        if (Array.isArray(owner) && owner.length) {
-                            const primary = owner[0];
-                            const ownerJid = primary.includes('@') ? primary : `${primary}@s.whatsapp.net`;
+                        const botNumber = botSocket.user.id.split(':')[0] + '@s.whatsapp.net';
+                        const ghostStatus = (ghostMode && ghostMode.enabled) ? '\n👻 Stealth Mode: ACTIVE' : '';
 
-                            global.startupDebug = {
-                                pending: true,
-                                ownerJids: [ownerJid],
-                                startedAt: Date.now(),
-                                expiresAt: Date.now() + 10 * 60 * 1000
-                            };
+                        await botSocket.sendMessage(botNumber, {
+                            text: `🤖 ${settings.botName || 'PGWIZ-MD'} Connected Successfully!\n\n⏰ Time: ${new Date().toLocaleString()}\n✅ Status: Online and Ready!${ghostStatus}\n\n✅Make sure to join below channel`,
+                            contextInfo: {
+                                forwardingScore: 1,
+                                isForwarded: true,
+                                forwardedNewsletterMessageInfo: {
+                                    newsletterJid: '120363179639202475@newsletter',
+                                    newsletterName: settings.newsletterName || settings.botName || 'PGWIZ-MD',
+                                    serverMessageId: -1
+                                }
+                            }
+                        });
 
-                            await botSocket.sendMessage(ownerJid, {
-                                text: '🤖 Startup check — reply to this message to confirm bot status.\n\nReply with `.menu` to verify the bot is responding.',
-                            });
+                        try {
+                            if (Array.isArray(owner) && owner.length) {
+                                const primary = owner[0];
+                                const ownerJid = primary.includes('@') ? primary : `${primary}@s.whatsapp.net`;
 
-                            printLog('info', `Startup debug message sent to ${ownerJid.split('@')[0]}`);
+                                global.startupDebug = {
+                                    pending: true,
+                                    ownerJids: [ownerJid],
+                                    startedAt: Date.now(),
+                                    expiresAt: Date.now() + 10 * 60 * 1000
+                                };
+
+                                await botSocket.sendMessage(ownerJid, {
+                                    text: '🤖 Startup check — reply to this message to confirm bot status.\n\nReply with `.menu` to verify the bot is responding.',
+                                });
+
+                                printLog('info', `Startup debug message sent to ${ownerJid.split('@')[0]}`);
+                            }
+                        } catch (e) {
+                            printLog('error', `Startup debug send failed: ${e.message}`);
                         }
-                    } catch (e) {
-                        printLog('error', `Startup debug send failed: ${e.message}`);
+                    } catch (error) {
+                        printLog('error', `Failed to send connection message: ${error.message}`);
                     }
-                } catch (error) {
-                    printLog('error', `Failed to send connection message: ${error.message}`);
                 }
 
                 return;
@@ -1572,6 +1619,7 @@ folders.forEach(folder => {
             }
         });
 });
+                    
 
 /**
 * console.log(chalk.greenBright(`✅ OK files: ${okFiles}`));
