@@ -1279,7 +1279,7 @@ async function startBot() {
                         if (await isAlwaysOnlineEnabled()) {
                             broadcastPresenceAvailable(botSocket);
                         }
-                    }, 10 * 1000));
+                    }, 60 * 1000));
                 } else {
                     broadcastPresenceOffline(botSocket);
                 }
