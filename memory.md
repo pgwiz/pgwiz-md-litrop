@@ -18,20 +18,11 @@ The following downloaders were audited and flagged as currently non-functional d
    - **Issue**: Hardcoded to `discardapi.dpdns.org` (`HTTP 503 Service Unavailable`).
    - **Planned Fix**: Integrate Twitsave / Twitter APIv2 / direct CDN syndication parser.
 
-3. **Spotify Music Downloader (`.spotify`)**
-   - **Target File**: `plugins/spotify.js`
-   - **Issue**: `okatsu-rolezapiiz.vercel.app` returns `HTTP 402 Payment Required` (quota exhausted).
-   - **Planned Fix**: Bridge Spotify search metadata to `https://ytsp-api.pgwiz.cloud` audio streamer or direct Spotify-dl stream.
 
 4. **SoundCloud Downloader (`.scloud` / `.soundcloud`)**
    - **Target File**: `plugins/scloud.js`
    - **Issue**: `discardapi.dpdns.org` returns `HTTP 503`.
    - **Planned Fix**: Integrate direct SoundCloud v2 API / client_id resolver or alternative streaming endpoints.
-
-5. **Lyrics Finder (`.lyrics`)**
-   - **Target File**: `plugins/lyrics.js`
-   - **Issue**: `discardapi.dpdns.org` returns `HTTP 503`.
-   - **Planned Fix**: Integrate Genius / Musixmatch / AZLyrics direct parser or Lyrics.ovh API.
 
 6. **APK Downloaders (`.apkmirror` / `.apkpure`)**
    - **Target File**: `plugins/apkmirror.js`, `plugins/apkpure.js`
@@ -56,8 +47,10 @@ The following downloaders were audited and flagged as currently non-functional d
 ---
 
 ### 🟢 Fully Functional & Verified Downloaders:
-* **`.song` / `.mp3`**: Powered by `https://ytsp-api.pgwiz.cloud` (Dual playable audio + MP3 document).
-* **`.play` / `.music`**: Instant YouTube audio player via `https://ytsp-api.pgwiz.cloud`.
+* **`.lyrics` / `.lyric` / `.songlyrics`**: Multi-provider high-speed lyrics engine (LRCLIB + iTunes 600x600 HD artwork + Lyrics.ovh fallback).
+* **`.spotify` / `.sp` / `.spotifydl`**: Powered by `https://ytsp-api.pgwiz.cloud` with 100% keyless Spotify metadata embed extraction, YouTube audio stream bridge, playlist/album tracklist overview, and dual playable voice audio + downloadable MP3 document.
+* **`.song` / `.mp3`**: Powered by `https://ytsp-api.pgwiz.cloud` (Dual playable audio + MP3 document, seamless YouTube & Spotify link detection).
+* **`.play` / `.music`**: Instant YouTube and Spotify audio player via `https://ytsp-api.pgwiz.cloud`.
 * **`.video` / `.ytmp4`**: High-speed YouTube video downloader (360p & 720p HD).
 * **`.tiktok` / `.tt`**: Multi-Engine HD TikTok downloader (`TikWM` + `SaveTik.co` + `MusicalDown` scrapers with canonical unshortener, No Watermark, Photo Slideshows, and MP3 audio extraction).
 * **`.mediafire`**: Direct Cheerio HTML stream parser.
