@@ -32,14 +32,11 @@ module.exports = {
     if (numLatency > 800) statusEmoji = '🔴';
     
     const botName = settings.botName || process.env.BOT_NAME || 'PGWIZ-MD';
-    const version = settings.version || '5.2.0';
     
     const text = `${statusEmoji} *${botName.toUpperCase()} PING*
 
 ⚡ *Latency:* ${displayLatency}
 ⚙️ *Exec Speed:* ${execSpeed}ms
-🤖 *Bot:* ${botName}
-📦 *Version:* v${version}
 ⏰ *Time:* ${new Date().toLocaleTimeString()}`;
     
     await sock.sendMessage(chatId, {
