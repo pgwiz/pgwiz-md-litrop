@@ -85,30 +85,6 @@ function autoSessionClear() {
     const now = Date.now();
     if (now - lastSessionClear < 120000) return; // Rate limit: once per 2 minutes
     lastSessionClear = now;
-
-    const sessionDir = path.join(__dirname, 'session');
-    if (!fs.existsSync(sessionDir)) return;
-
-    try {
-        const files = fs.readdirSync(sessionDir);
-        let cleared = 0;
-        for (const file of files) {
-            // Only keep creds.json - clear everything else including auth files
-            if (file === 'creds.json') continue;
-            try {
-                fs.unlinkSync(path.join(sessionDir, file));
-                cleared++;
-            } catch { }
-        }
-        if (cleared > 0) {
-            console.log(`[AUTO-REPAIR] Cleared ${cleared} corrupted session files - Session will re-initialize on next connection`);
-            // Force exit so PM2/systemd can restart with clean state
-            console.log(`[AUTO-REPAIR] Restarting bot in 3 seconds for clean recovery...`);
-            setTimeout(() => {
-                process.exit(0);
-            }, 3000);
-        }
-    } catch { }
 }
 
 // Stream-level suppression disabled on Koyeb/container platforms to prevent log duplication

@@ -48,7 +48,7 @@ const settings = {
   prefixes: ['.', '!', '/', '#', '_'],
   packname: process.env.PACKNAME || process.env.PACK_NAME || process.env.BOT_NAME || "PGWIZ-MD",
   author: process.env.AUTHOR || process.env.PACK_AUTHOR || '‎pgwiz',
-  timeZone: process.env.TIMEZONE || 'Asia/Karachi',
+  timeZone: process.env.TZ || process.env.TIMEZONE || 'Africa/Nairobi',
   botName: process.env.BOT_NAME || process.env.BOTNAME || "PGWIZ-MD",
   botOwner: process.env.BOT_OWNER || 'pgwiz',
   ownerNumber: (() => {
@@ -71,6 +71,10 @@ const settings = {
   newsletterJid: '120363179639202475@newsletter',
   newsletterName: process.env.BOT_NAME || process.env.BOTNAME || process.env.NEWSLETTER_NAME || "PGWIZ-MD"
 };
+
+if (!process.env.TZ) {
+  process.env.TZ = settings.timeZone;
+}
 
 module.exports = settings;
 
