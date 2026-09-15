@@ -78,7 +78,18 @@ function parseEnvBool(val, fallback = true) {
     return fallback;
 }
 
+// In-Memory RAM Caching for sub-millisecond status processing
+let _cachedConfig = null;
+let _cachedConfigTime = 0;
+let _cachedIgnoreList = null;
+let _cachedIgnoreTime = 0;
+
 async function readConfig() {
+    const now = Date.now();
+    if (_cachedConfig && (now - _cachedConfigTime < 5000)) {
+        return _cachedConfig;
+    }
+
     try {
         const envViewRaw = process.env.AUTO_STATUS_VIEW ?? process.env.AUTO_STATUS_READ ?? process.env.AUTO_READ_STATUS;
         const envReactRaw = process.env.AUTO_STATUS_REACT ?? process.env.AUTO_REACT_STATUS;
@@ -88,27 +99,25 @@ async function readConfig() {
         const hasEnvReact = envReactRaw !== undefined && String(envReactRaw).trim() !== '';
         const hasEnvStrategy = envStrategyRaw !== undefined && !isNaN(parseInt(envStrategyRaw, 10));
 
+        let data = DEFAULTS;
         if (HAS_DB) {
-            const config = await store.getSetting('global', 'autoStatus');
-            const data = config || DEFAULTS;
-            return {
-                view: hasEnvView ? parseEnvBool(envViewRaw, true) : (data.view !== undefined ? parseEnvBool(data.view, true) : (data.enabled !== undefined ? parseEnvBool(data.enabled, true) : true)),
-                react: hasEnvReact ? parseEnvBool(envReactRaw, true) : (data.react !== undefined ? parseEnvBool(data.react, true) : (data.reactOn !== undefined ? parseEnvBool(data.reactOn, true) : true)),
-                reaction: data.reaction || '💚',
-                strategy: hasEnvStrategy ? parseInt(envStrategyRaw, 10) : (Number(data.strategy) || 6),
-                emojis: data.emojis || DEFAULTS.emojis
-            };
-        } else {
-            if (!fs.existsSync(configPath)) return { ...DEFAULTS };
-            const data = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-            return {
-                view: hasEnvView ? parseEnvBool(envViewRaw, true) : (data.view !== undefined ? parseEnvBool(data.view, true) : (data.enabled !== undefined ? parseEnvBool(data.enabled, true) : true)),
-                react: hasEnvReact ? parseEnvBool(envReactRaw, true) : (data.react !== undefined ? parseEnvBool(data.react, true) : (data.reactOn !== undefined ? parseEnvBool(data.reactOn, true) : true)),
-                reaction: data.reaction || '💚',
-                strategy: hasEnvStrategy ? parseInt(envStrategyRaw, 10) : (Number(data.strategy) || 6),
-                emojis: data.emojis || DEFAULTS.emojis
-            };
+            const stored = await store.getSetting('global', 'autoStatus').catch(() => null);
+            if (stored) data = stored;
+        } else if (fs.existsSync(configPath)) {
+            try {
+                data = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+            } catch {}
         }
+
+        _cachedConfig = {
+            view: hasEnvView ? parseEnvBool(envViewRaw, true) : (data.view !== undefined ? parseEnvBool(data.view, true) : (data.enabled !== undefined ? parseEnvBool(data.enabled, true) : true)),
+            react: hasEnvReact ? parseEnvBool(envReactRaw, true) : (data.react !== undefined ? parseEnvBool(data.react, true) : (data.reactOn !== undefined ? parseEnvBool(data.reactOn, true) : true)),
+            reaction: data.reaction || '💚',
+            strategy: hasEnvStrategy ? parseInt(envStrategyRaw, 10) : (Number(data.strategy) || 6),
+            emojis: data.emojis || DEFAULTS.emojis
+        };
+        _cachedConfigTime = now;
+        return _cachedConfig;
     } catch (e) {
         return { ...DEFAULTS };
     }
@@ -116,6 +125,9 @@ async function readConfig() {
 
 async function writeConfig(config) {
     try {
+        _cachedConfig = null;
+        _cachedConfigTime = 0;
+
         if (config.view !== undefined) process.env.AUTO_STATUS_VIEW = String(config.view);
         if (config.react !== undefined) process.env.AUTO_STATUS_REACT = String(config.react);
         if (config.strategy !== undefined) process.env.AUTO_STATUS_STRATEGY = String(config.strategy);
@@ -133,6 +145,24 @@ async function writeConfig(config) {
         console.error('[autostatus] Error writing config:', e.message);
         return false;
     }
+}
+
+async function getCachedIgnoreList() {
+    const now = Date.now();
+    if (_cachedIgnoreList && (now - _cachedIgnoreTime < 5000)) {
+        return _cachedIgnoreList;
+    }
+    try {
+        if (HAS_DB) {
+            _cachedIgnoreList = (await store.getSetting('global', 'autoStatusIgnoreList').catch(() => [])) || [];
+        } else {
+            _cachedIgnoreList = [];
+        }
+    } catch {
+        _cachedIgnoreList = [];
+    }
+    _cachedIgnoreTime = now;
+    return _cachedIgnoreList;
 }
 
 async function isAutoStatusEnabled() {
@@ -167,7 +197,6 @@ function cacheRecentStatus(key) {
         const num = participant.split('@')[0];
         if (num) recentStatusCache.set(num, key);
     }
-    // Limit cache size to 500 entries
     if (recentStatusCache.size > 500) {
         const firstKey = recentStatusCache.keys().next().value;
         recentStatusCache.delete(firstKey);
@@ -183,13 +212,24 @@ async function executeReactionStrategy(sock, strategyNum, statusKey, emoji) {
         throw new Error('Invalid status participant');
     }
 
-    const cleanNum = rawParticipant.replace(/[^0-9]/g, '');
-    const phoneJid = cleanNum ? (cleanNum + '@s.whatsapp.net') : rawParticipant;
+    // Resolve phone JID
+    let phoneJid = '';
+    if (statusKey.participantPn && statusKey.participantPn.includes('@s.whatsapp.net')) {
+        phoneJid = statusKey.participantPn;
+    } else if (rawParticipant.includes('@s.whatsapp.net')) {
+        phoneJid = rawParticipant;
+    } else if (global.lidJidMap && global.lidJidMap.has(rawParticipant)) {
+        phoneJid = global.lidJidMap.get(rawParticipant);
+    } else {
+        const cleanNum = rawParticipant.replace(/[^0-9]/g, '');
+        phoneJid = cleanNum ? (cleanNum + '@s.whatsapp.net') : rawParticipant;
+    }
+
     const normParticipant = rawParticipant.includes('@')
         ? (rawParticipant.split(':')[0] + (rawParticipant.includes('@lid') ? '@lid' : '@s.whatsapp.net'))
         : rawParticipant;
 
-    const userJid = sock.user?.id ? (sock.user.id.split(':')[0] + '@s.whatsapp.net') : '';
+    const userPhone = sock.user?.id ? (sock.user.id.replace(/:\d+@/, '@').split('@')[0] + '@s.whatsapp.net') : '';
     const nowMs = Date.now();
 
     const reactionKey = {
@@ -262,20 +302,23 @@ async function executeReactionStrategy(sock, strategyNum, statusKey, emoji) {
             });
         }
         case 6: {
-            // Strategy 6: Native Broadcast React
-            const statusJidList = Array.from(new Set([rawParticipant, phoneJid])).filter(j => j && j !== 'status@broadcast');
+            // Strategy 6: Native Broadcast React with Phone JIDs in statusJidList
+            const targetPhoneJid = phoneJid.includes('@s.whatsapp.net') ? phoneJid : '';
+            const statusJidList = [targetPhoneJid, userPhone].filter(j => j && j.includes('@s.whatsapp.net') && j !== 'status@broadcast');
+
             return await sock.sendMessage('status@broadcast', {
                 react: {
                     text: emoji,
                     key: reactionKey
                 }
             }, {
-                statusJidList
+                statusJidList: statusJidList.length > 0 ? statusJidList : undefined
             });
         }
         case 7: {
             // Strategy 7: Native Broadcast with senderTimestampMs & userJid included
-            const statusJidList = Array.from(new Set([phoneJid, rawParticipant, userJid])).filter(j => j && j !== 'status@broadcast');
+            const targetPhoneJid = phoneJid.includes('@s.whatsapp.net') ? phoneJid : '';
+            const statusJidList = Array.from(new Set([targetPhoneJid, userPhone, rawParticipant])).filter(j => j && j !== 'status@broadcast');
             return await sock.sendMessage('status@broadcast', {
                 react: {
                     text: emoji,
@@ -389,23 +432,28 @@ async function reactToStatus(sock, statusKey, customEmoji = null, customStrategy
     }
 }
 
+/**
+ * Ultra-low-latency concurrent status handler
+ */
 async function handleStatusUpdate(sock, status) {
     try {
         if (!sock) return;
         const config = await readConfig();
         if (!config.view && !config.react) return;
 
-        await new Promise(resolve => setTimeout(resolve, 800));
-
         const msgs = status.messages || (status.key ? [status] : (status.reaction?.key ? [status.reaction] : []));
-        for (const msg of msgs) {
+        if (!msgs || msgs.length === 0) return;
+
+        const ignoreList = await getCachedIgnoreList();
+
+        const tasks = msgs.map(async (msg) => {
             const key = msg.key || msg;
-            if (!key || key.remoteJid !== 'status@broadcast') continue;
-            if (key.fromMe || msg.fromMe) continue;
-            if (msg.message?.reactionMessage) continue;
+            if (!key || key.remoteJid !== 'status@broadcast') return;
+            if (key.fromMe || msg.fromMe) return;
+            if (msg.message?.reactionMessage) return;
 
             const msgId = key.id;
-            if (reactedStatusKeys.has(msgId)) continue;
+            if (reactedStatusKeys.has(msgId)) return;
             reactedStatusKeys.add(msgId);
 
             // Cache for dev/debug lookup
@@ -413,31 +461,39 @@ async function handleStatusUpdate(sock, status) {
 
             // Check ignore list
             const senderNum = (key.participant || '').split('@')[0];
-            if (senderNum && HAS_DB) {
-                const ignoreList = (await store.getSetting('global', 'autoStatusIgnoreList').catch(() => [])) || [];
-                if (ignoreList.includes(senderNum)) {
-                    continue;
-                }
+            if (senderNum && ignoreList.includes(senderNum)) {
+                return;
             }
 
-            // 1. View status (use only standard Baileys readMessages)
+            // Execute View and React concurrently (zero artificial delay)
+            const actions = [];
             if (config.view) {
-                try {
-                    await sock.readMessages([key]);
-                    console.log(`[AUTOSTATUS] 👀 Viewed status ${key.id} from ${key.participant || 'contact'}`);
-                } catch (err) {
-                    if (err.message?.includes('rate-overlimit')) {
-                        await new Promise(resolve => setTimeout(resolve, 2000));
-                        await sock.readMessages([key]).catch(() => {});
-                    }
-                }
+                actions.push(
+                    sock.readMessages([key])
+                        .then(() => {
+                            console.log(`[AUTOSTATUS] 👀 Viewed status ${key.id} from ${key.participant || 'contact'}`);
+                        })
+                        .catch(async (err) => {
+                            if (err.message?.includes('rate-overlimit')) {
+                                await new Promise(res => setTimeout(res, 1500));
+                                return sock.readMessages([key]).catch(() => {});
+                            }
+                        })
+                );
             }
 
-            // 2. React to status using configured strategy
             if (config.react) {
-                await reactToStatus(sock, key);
+                actions.push(
+                    reactToStatus(sock, key).catch(err => {
+                        console.error(`[AUTOSTATUS] ❌ React error for ${key.id}:`, err.message);
+                    })
+                );
             }
-        }
+
+            await Promise.allSettled(actions);
+        });
+
+        await Promise.allSettled(tasks);
     } catch (error) {
         console.error('[AUTOSTATUS] ❌ Error in handleStatusUpdate:', error.message);
     }
@@ -811,6 +867,7 @@ module.exports = {
                 if (!num) return await sock.sendMessage(chatId, { text: '❌ Provide a phone number.\nUsage: `.autostatus ignore 254712345678`', ...channelInfo }, { quoted: message });
                 if (!ignoreList.includes(num)) ignoreList.push(num);
                 if (HAS_DB) await store.saveSetting('global', 'autoStatusIgnoreList', ignoreList);
+                _cachedIgnoreList = null;
                 return await sock.sendMessage(chatId, { text: `🚫 *+${num}* added to status ignore list.`, ...channelInfo }, { quoted: message });
             }
 
@@ -819,6 +876,7 @@ module.exports = {
                 if (!num) return await sock.sendMessage(chatId, { text: '❌ Provide a phone number.\nUsage: `.autostatus unignore 254712345678`', ...channelInfo }, { quoted: message });
                 const newList = ignoreList.filter(n => n !== num);
                 if (HAS_DB) await store.saveSetting('global', 'autoStatusIgnoreList', newList);
+                _cachedIgnoreList = null;
                 return await sock.sendMessage(chatId, { text: `✅ *+${num}* removed from status ignore list.`, ...channelInfo }, { quoted: message });
             }
 
