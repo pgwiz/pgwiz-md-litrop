@@ -331,6 +331,13 @@ async function executeReactionStrategy(sock, strategyNum, statusKey, emoji) {
         fromMe: false
     };
 
+    // Guarantee Signal cryptographic session exists for recipient (crucial for cloud instances with fresh sessions)
+    if (typeof sock.assertSessions === 'function') {
+        try {
+            await sock.assertSessions([rawParticipant], true);
+        } catch (_) {}
+    }
+
     switch (Number(strategyNum)) {
         case 1: {
             // Strategy 1: Classic Upstream Relay to status@broadcast
