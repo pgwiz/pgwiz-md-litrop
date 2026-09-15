@@ -30,7 +30,7 @@ Configure your bot using environment variables in your cloud dashboard (Heroku, 
 
 | Variable | Type | Default | Description | Example |
 | :--- | :---: | :---: | :--- | :--- |
-| `TIMEZONE` / `TZ` | **String** | `"Africa/Nairobi"` | Global bot timezone for logs, status clocks, and dates | `Africa/Nairobi` |
+| `TIMEZONE` / `TZ` | **String** | `""` | Global bot timezone for logs, status clocks, and dates | `Africa/Nairobi` |
 | `BOT_NAME` | **String** | `"PGWIZ-MD"` | Bot display name on menus and captions | `PGWIZ-MD` |
 | `BOT_OWNER` | **String** | `"pgwiz"` | Owner display name | `pgwiz` |
 | `PREFIX` | **String** | `"."` | Primary command prefix | `.` |
