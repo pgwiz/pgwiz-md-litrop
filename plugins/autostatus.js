@@ -445,9 +445,18 @@ async function executeReactionStrategy(sock, strategyNum, statusKey, emoji) {
             });
         }
         case 10: {
-            // Strategy 10: Broadcast Relay with groupingKey & senderTimestampMs
+            // Strategy 10: Hybrid Multi-Layer Relay (Broadcast Relay with messageId + Direct Author LID Relay)
             const statusJidList = Array.from(new Set([rawParticipant, phoneJid])).filter(j => j && j !== 'status@broadcast');
-            return await sock.relayMessage('status@broadcast', {
+            
+            // Explicit read receipt
+            try {
+                if (typeof sock.sendReceipt === 'function') {
+                    sock.sendReceipt('status@broadcast', rawParticipant, [statusKey.id], 'read').catch(() => {});
+                }
+            } catch (_) {}
+
+            // Tier 1: Broadcast Relay with status messageId & groupingKey (updates viewer tray)
+            const broadcastRelay = sock.relayMessage('status@broadcast', {
                 reactionMessage: {
                     key: reactionKey,
                     text: emoji,
@@ -455,8 +464,20 @@ async function executeReactionStrategy(sock, strategyNum, statusKey, emoji) {
                     senderTimestampMs: nowMs
                 }
             }, {
+                messageId: statusKey.id,
                 statusJidList
             });
+
+            // Tier 2: Direct 1:1 Author Relay (pushes reaction notification directly to recipient)
+            sock.relayMessage(rawParticipant, {
+                reactionMessage: {
+                    key: reactionKey,
+                    text: emoji,
+                    senderTimestampMs: nowMs
+                }
+            }, {}).catch(() => {});
+
+            return await broadcastRelay;
         }
         case 11: {
             // Strategy 11: Direct LID Relay (targeted directly to author's LID with senderTimestampMs)
@@ -563,6 +584,12 @@ async function handleStatusUpdate(sock, status) {
                             if (historyEntry) historyEntry.viewStatus = 'failed';
                         })
                 );
+
+                if (typeof sock.sendReceipt === 'function') {
+                    actions.push(
+                        sock.sendReceipt('status@broadcast', key.participant || key.remoteJid, [key.id], 'read').catch(() => {})
+                    );
+                }
             } else {
                 if (historyEntry) historyEntry.viewStatus = 'disabled';
             }
