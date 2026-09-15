@@ -112,8 +112,8 @@ async function readConfig() {
         _cachedConfig = {
             view: hasEnvView ? parseEnvBool(envViewRaw, true) : (data.view !== undefined ? parseEnvBool(data.view, true) : (data.enabled !== undefined ? parseEnvBool(data.enabled, true) : true)),
             react: hasEnvReact ? parseEnvBool(envReactRaw, true) : (data.react !== undefined ? parseEnvBool(data.react, true) : (data.reactOn !== undefined ? parseEnvBool(data.reactOn, true) : true)),
-            reaction: data.reaction || '💚',
-            strategy: hasEnvStrategy ? parseInt(envStrategyRaw, 10) : (Number(data.strategy) || 6),
+            reaction: data.reaction || '💯',
+            strategy: hasEnvStrategy ? parseInt(envStrategyRaw, 10) : (Number(data.strategy) || 10),
             emojis: data.emojis || DEFAULTS.emojis
         };
         _cachedConfigTime = now;
