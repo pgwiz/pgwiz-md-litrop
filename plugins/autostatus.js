@@ -212,7 +212,9 @@ async function executeReactionStrategy(sock, strategyNum, statusKey, emoji) {
         throw new Error('Invalid status participant');
     }
 
-    // Resolve phone JID
+    const isLid = rawParticipant.includes('@lid');
+
+    // Resolve phone JID ONLY if genuine @s.whatsapp.net is available (never fabricate fake @s.whatsapp.net from LID numbers)
     let phoneJid = '';
     if (statusKey.participantPn && statusKey.participantPn.includes('@s.whatsapp.net')) {
         phoneJid = statusKey.participantPn;
@@ -220,16 +222,10 @@ async function executeReactionStrategy(sock, strategyNum, statusKey, emoji) {
         phoneJid = rawParticipant;
     } else if (global.lidJidMap && global.lidJidMap.has(rawParticipant)) {
         phoneJid = global.lidJidMap.get(rawParticipant);
-    } else {
-        const cleanNum = rawParticipant.replace(/[^0-9]/g, '');
-        phoneJid = cleanNum ? (cleanNum + '@s.whatsapp.net') : rawParticipant;
     }
 
-    const normParticipant = rawParticipant.includes('@')
-        ? (rawParticipant.split(':')[0] + (rawParticipant.includes('@lid') ? '@lid' : '@s.whatsapp.net'))
-        : rawParticipant;
-
     const userPhone = sock.user?.id ? (sock.user.id.replace(/:\d+@/, '@').split('@')[0] + '@s.whatsapp.net') : '';
+    const userLid = sock.user?.lid ? sock.user.lid.replace(/:\d+@/, '@') : '';
     const nowMs = Date.now();
 
     const reactionKey = {
@@ -254,8 +250,8 @@ async function executeReactionStrategy(sock, strategyNum, statusKey, emoji) {
             });
         }
         case 2: {
-            // Strategy 2: Fresh generated Message ID Relay to status@broadcast with multi-device list
-            const statusJidList = Array.from(new Set([rawParticipant, phoneJid, normParticipant])).filter(j => j && j !== 'status@broadcast');
+            // Strategy 2: Fresh generated Message ID Relay to status@broadcast with multi-identifier list
+            const statusJidList = Array.from(new Set([rawParticipant, phoneJid, userPhone, userLid])).filter(j => j && j !== 'status@broadcast');
             return await sock.relayMessage('status@broadcast', {
                 reactionMessage: {
                     key: reactionKey,
@@ -285,13 +281,14 @@ async function executeReactionStrategy(sock, strategyNum, statusKey, emoji) {
         }
         case 5: {
             // Strategy 5: Normalized Phone Broadcast Relay
-            const statusJidList = [phoneJid].filter(j => j && j !== 'status@broadcast');
+            const targetJid = phoneJid || rawParticipant;
+            const statusJidList = [targetJid].filter(j => j && j !== 'status@broadcast');
             return await sock.relayMessage('status@broadcast', {
                 reactionMessage: {
                     key: {
                         remoteJid: 'status@broadcast',
                         id: statusKey.id,
-                        participant: phoneJid,
+                        participant: targetJid,
                         fromMe: false
                     },
                     text: emoji
@@ -302,9 +299,8 @@ async function executeReactionStrategy(sock, strategyNum, statusKey, emoji) {
             });
         }
         case 6: {
-            // Strategy 6: Native Broadcast React with Phone JIDs in statusJidList
-            const targetPhoneJid = phoneJid.includes('@s.whatsapp.net') ? phoneJid : '';
-            const statusJidList = [targetPhoneJid, userPhone].filter(j => j && j.includes('@s.whatsapp.net') && j !== 'status@broadcast');
+            // Strategy 6: Native Broadcast React with valid participant in statusJidList
+            const statusJidList = Array.from(new Set([rawParticipant, phoneJid, userPhone, userLid])).filter(j => j && j !== 'status@broadcast');
 
             return await sock.sendMessage('status@broadcast', {
                 react: {
@@ -316,18 +312,12 @@ async function executeReactionStrategy(sock, strategyNum, statusKey, emoji) {
             });
         }
         case 7: {
-            // Strategy 7: Native Broadcast with senderTimestampMs & userJid included
-            const targetPhoneJid = phoneJid.includes('@s.whatsapp.net') ? phoneJid : '';
-            const statusJidList = Array.from(new Set([targetPhoneJid, userPhone, rawParticipant])).filter(j => j && j !== 'status@broadcast');
+            // Strategy 7: Native Broadcast with senderTimestampMs & multi-target list
+            const statusJidList = Array.from(new Set([rawParticipant, phoneJid, userPhone, userLid])).filter(j => j && j !== 'status@broadcast');
             return await sock.sendMessage('status@broadcast', {
                 react: {
                     text: emoji,
-                    key: {
-                        remoteJid: 'status@broadcast',
-                        id: statusKey.id,
-                        participant: rawParticipant,
-                        fromMe: false
-                    }
+                    key: reactionKey
                 }
             }, {
                 statusJidList,
@@ -336,14 +326,10 @@ async function executeReactionStrategy(sock, strategyNum, statusKey, emoji) {
         }
         case 8: {
             // Strategy 8: Direct 1:1 Relay to Phone JID with senderTimestampMs & fresh messageId
-            return await sock.relayMessage(phoneJid, {
+            const target = phoneJid || rawParticipant;
+            return await sock.relayMessage(target, {
                 reactionMessage: {
-                    key: {
-                        remoteJid: 'status@broadcast',
-                        id: statusKey.id,
-                        participant: phoneJid,
-                        fromMe: false
-                    },
+                    key: reactionKey,
                     text: emoji,
                     senderTimestampMs: nowMs
                 }
@@ -351,7 +337,8 @@ async function executeReactionStrategy(sock, strategyNum, statusKey, emoji) {
         }
         case 9: {
             // Strategy 9: Direct 1:1 Quote-Status Context Message (Fallback reply to status in DM)
-            return await sock.sendMessage(phoneJid, {
+            const target = phoneJid || rawParticipant;
+            return await sock.sendMessage(target, {
                 text: emoji,
                 contextInfo: {
                     stanzaId: statusKey.id,
@@ -363,12 +350,12 @@ async function executeReactionStrategy(sock, strategyNum, statusKey, emoji) {
         }
         case 10: {
             // Strategy 10: Broadcast Relay with groupingKey & senderTimestampMs
-            const statusJidList = Array.from(new Set([phoneJid, rawParticipant])).filter(j => j && j !== 'status@broadcast');
+            const statusJidList = Array.from(new Set([rawParticipant, phoneJid])).filter(j => j && j !== 'status@broadcast');
             return await sock.relayMessage('status@broadcast', {
                 reactionMessage: {
                     key: reactionKey,
                     text: emoji,
-                    groupingKey: phoneJid,
+                    groupingKey: rawParticipant,
                     senderTimestampMs: nowMs
                 }
             }, {
@@ -377,16 +364,9 @@ async function executeReactionStrategy(sock, strategyNum, statusKey, emoji) {
         }
         case 11: {
             // Strategy 11: Direct LID Relay (targeted directly to author's LID with senderTimestampMs)
-            const isLid = rawParticipant.includes('@lid');
-            const targetDest = isLid ? rawParticipant : phoneJid;
-            return await sock.relayMessage(targetDest, {
+            return await sock.relayMessage(rawParticipant, {
                 reactionMessage: {
-                    key: {
-                        remoteJid: 'status@broadcast',
-                        id: statusKey.id,
-                        participant: rawParticipant,
-                        fromMe: false
-                    },
+                    key: reactionKey,
                     text: emoji,
                     senderTimestampMs: nowMs
                 }
@@ -394,17 +374,10 @@ async function executeReactionStrategy(sock, strategyNum, statusKey, emoji) {
         }
         case 12: {
             // Strategy 12: Direct LID Native React (sendMessage to author LID with status key)
-            const isLid = rawParticipant.includes('@lid');
-            const targetDest = isLid ? rawParticipant : phoneJid;
-            return await sock.sendMessage(targetDest, {
+            return await sock.sendMessage(rawParticipant, {
                 react: {
                     text: emoji,
-                    key: {
-                        remoteJid: 'status@broadcast',
-                        id: statusKey.id,
-                        participant: rawParticipant,
-                        fromMe: false
-                    }
+                    key: reactionKey
                 }
             });
         }
@@ -905,5 +878,6 @@ module.exports = {
     reactToStatus,
     readConfig,
     writeConfig,
-    STRATEGY_DESCRIPTIONS
+    STRATEGY_DESCRIPTIONS,
+    STRATEGY_DEFAULT_EMOJIS
 };
