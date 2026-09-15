@@ -1,6 +1,9 @@
-// High-Performance Engine Tuning for Heroku / Cloud Dynos
-if (!process.env.UV_THREADPOOL_SIZE) process.env.UV_THREADPOOL_SIZE = '16';
-if (!process.env.NODE_ENV) process.env.NODE_ENV = 'production';
+try {
+    const dns = require('dns');
+    if (dns && typeof dns.setDefaultResultOrder === 'function') {
+        dns.setDefaultResultOrder('ipv4first');
+    }
+} catch (_) {}
 
 // Zero-dependency environment loader with safe dotenv fallback (compatible with all panels & environments)
 (function loadEnvironment() {
@@ -57,82 +60,55 @@ try {
 }
 
 global.alwaysOnlineState = undefined;
-
-// ==================== ENVIRONMENT AUTO-DETECTION ON BOOT ====================
-(function logBootEnvironment() {
-    try {
-        const autoView = process.env.AUTO_STATUS_VIEW ?? process.env.AUTO_STATUS_READ ?? process.env.AUTO_READ_STATUS ?? 'true';
-        const autoReact = process.env.AUTO_STATUS_REACT ?? process.env.AUTO_REACT_STATUS ?? process.env.STATUS_REACT ?? 'true';
-        const alwaysOn = process.env.ALWAYS_ONLINE ?? process.env.ALWAYS_ONLINE_PRESENCE ?? 'false';
-        const botMode = process.env.MODE ?? process.env.WORK_TYPE ?? settings.commandMode ?? 'public';
-        const prefix = process.env.PREFIX ?? '.';
-        
-        console.log('[BOOT-ENV] ⚙️ Active Runtime Environment Variables:');
-        console.log(`   • AUTO_STATUS_VIEW : ${autoView}`);
-        console.log(`   • AUTO_STATUS_REACT: ${autoReact}`);
-        console.log(`   • ALWAYS_ONLINE    : ${alwaysOn}`);
-        console.log(`   • MODE             : ${botMode}`);
-        console.log(`   • PREFIX           : ${prefix}`);
-    } catch {}
-})();
-
-
-
-// Auto-authenticate Heroku & Koyeb on boot if credentials exist in environment
-(async function initCloudPlatformAuth() {
-    try {
-        // 1. Heroku Auto-Detection
-        const hKey = process.env.HKEY || process.env.HEROKU_KEY || process.env.HEROKU_API_KEY || process.env.HEROKU_API_TOKEN || process.env.HEROKU_TOKEN;
-        const hApp = process.env.HAPP || process.env.HEROKU_APP_NAME || process.env.HEROKU_APP || process.env.HEROKU_NAME || process.env.APP_NAME;
-        if (hKey && hApp && store && typeof store.saveSetting === 'function') {
-            await store.saveSetting('global', 'herokuAuth', { apiKey: hKey, appName: hApp });
-            printLog('info', `☁️ Auto-linked Heroku app '${hApp}' on boot`);
-        }
-
-        // 2. Koyeb Auto-Detection
-        const kToken = process.env.KOYEB_API_TOKEN || process.env.KOYEB_TOKEN || process.env.KOYEB_API_KEY || process.env.KOYEB_KEY || process.env.K_TOKEN || process.env.K_KEY;
-        const kService = process.env.KOYEB_SERVICE_NAME || process.env.KOYEB_APP_NAME || process.env.KOYEB_SERVICE || process.env.KOYEB_APP || process.env.K_SERVICE || process.env.K_APP;
-        const kServiceId = process.env.KOYEB_SERVICE_ID || kService;
-        if (kToken && (kService || kServiceId) && store && typeof store.saveSetting === 'function') {
-            await store.saveSetting('global', 'koyebAuth', { apiToken: kToken, serviceName: kService, serviceId: kServiceId });
-            printLog('info', `🚀 Auto-linked Koyeb service '${kService || kServiceId}' on boot`);
-        }
-    } catch {}
-})();
-
 global.botLaunchTimestamp = Math.floor(Date.now() / 1000);
 /* process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'; */
+
+// Auto self-healing dependency installer for panels (Wispbyte, Pterodactyl, Replit, Koyeb, etc.)
+try {
+    require.resolve('@hapi/boom');
+} catch (e) {
+    console.log('⚠️ Missing dependencies detected in environment! Running automatic npm install...');
+    try {
+        require('child_process').execSync('npm install --legacy-peer-deps', { stdio: 'inherit', cwd: __dirname });
+        console.log('✅ Dependencies successfully installed!');
+    } catch (installErr) {
+        console.error('❌ Failed to run automatic npm install:', installErr.message);
+    }
+}
 
 const fs = require('fs');
 const path = require('path');
 
-// Track Bad MAC events and trigger controlled session recovery.
-let lastBadMacWarning = 0;
-let lastBadMacRecoveryRequest = 0;
-let pendingBadMacRecovery = false;
-let triggerBadMacRecovery = null;
-let badMacRecoveryCount = 0;
-let lastBadMacRecoveryCompletedAt = 0;
-
-function requestBadMacRecovery(reason = 'bad-mac-detected') {
+// Auto-clear session files on Bad MAC (keeps creds.json)
+let lastSessionClear = 0;
+function autoSessionClear() {
     const now = Date.now();
+    if (now - lastSessionClear < 120000) return; // Rate limit: once per 2 minutes
+    lastSessionClear = now;
 
-    const fromConnectionClose = reason === 'connection-close-corrupted-auth';
-    if (!fromConnectionClose && badMacRecoveryCount >= 1) {
-        const cooldownMs = 30 * 60 * 1000;
-        if (now - lastBadMacRecoveryCompletedAt < cooldownMs) {
-            return;
+    const sessionDir = path.join(__dirname, 'session');
+    if (!fs.existsSync(sessionDir)) return;
+
+    try {
+        const files = fs.readdirSync(sessionDir);
+        let cleared = 0;
+        for (const file of files) {
+            // Only keep creds.json - clear everything else including auth files
+            if (file === 'creds.json') continue;
+            try {
+                fs.unlinkSync(path.join(sessionDir, file));
+                cleared++;
+            } catch { }
         }
-    }
-
-    if (now - lastBadMacRecoveryRequest < 60000) return;
-    lastBadMacRecoveryRequest = now;
-
-    if (typeof triggerBadMacRecovery === 'function') {
-        triggerBadMacRecovery(reason);
-    } else {
-        pendingBadMacRecovery = true;
-    }
+        if (cleared > 0) {
+            console.log(`[AUTO-REPAIR] Cleared ${cleared} corrupted session files - Session will re-initialize on next connection`);
+            // Force exit so PM2/systemd can restart with clean state
+            console.log(`[AUTO-REPAIR] Restarting bot in 3 seconds for clean recovery...`);
+            setTimeout(() => {
+                process.exit(0);
+            }, 3000);
+        }
+    } catch { }
 }
 
 // Stream-level suppression disabled on Koyeb/container platforms to prevent log duplication
@@ -143,8 +119,6 @@ function requestBadMacRecovery(reason = 'bad-mac-detected') {
 const originalConsoleLog = console.log;
 const originalConsoleError = console.error;
 const originalConsoleWarn = console.warn;
-const originalConsoleInfo = console.info;
-const originalConsoleDebug = console.debug;
 
 // Keywords that should be completely suppressed (as Set for faster lookup)
 const SUPPRESS_KEYWORDS = new Set([
@@ -156,56 +130,6 @@ const SUPPRESS_KEYWORDS = new Set([
     'prekey', 'signedprekey', 'identity key', 'ratchet', 'rootkey', 'noisekey',
     'signedbundle', 'xmppframing', 'sending presence', 'message counter'
 ]);
-
-const BAD_MAC_SIGNAL_KEYWORDS = [
-    'bad mac',
-    'failed to decrypt',
-    'decrypt error',
-    'messagecountererror',
-    'incorrect private key length',
-    'invalid key'
-];
-
-const hasBadMacSignal = (args) => {
-    for (const arg of args) {
-        if (typeof arg === 'string') {
-            const lower = arg.toLowerCase();
-            if (BAD_MAC_SIGNAL_KEYWORDS.some((keyword) => lower.includes(keyword))) {
-                return true;
-            }
-        }
-
-        if (arg && typeof arg === 'object' && typeof arg.message === 'string') {
-            const lower = arg.message.toLowerCase();
-            if (BAD_MAC_SIGNAL_KEYWORDS.some((keyword) => lower.includes(keyword))) {
-                return true;
-            }
-        }
-    }
-
-    return false;
-};
-
-const handleBadMacSignal = (args) => {
-    if (!hasBadMacSignal(args)) return;
-
-    const hasAuthenticatedSocket = !!(activeSocket && activeSocket.user && activeSocket.user.id);
-    const wsState = activeSocket?.ws?.readyState;
-    const socketLooksHealthy = hasAuthenticatedSocket || wsState === 1;
-
-    // Ignore passive bad-mac log noise while the socket is already connected.
-    if (socketLooksHealthy) {
-        return;
-    }
-
-    const now = Date.now();
-    if (now - lastBadMacWarning > 120000) {
-        originalConsoleWarn('[AUTO-REPAIR] Bad MAC/decrypt error detected. Clearing auth state and restarting session recovery...');
-        lastBadMacWarning = now;
-    }
-
-    requestBadMacRecovery('bad-mac-log-detected');
-};
 
 const shouldSuppress = (args) => {
     // First, check if any argument is a SessionEntry-like object or Buffer key
@@ -256,48 +180,29 @@ const shouldSuppress = (args) => {
 };
 
 console.log = (...args) => {
-    handleBadMacSignal(args);
     if (shouldSuppress(args)) return;
     originalConsoleLog.apply(console, args);
 };
 
 console.error = (...args) => {
-    handleBadMacSignal(args);
-    if (shouldSuppress(args)) return;
+    if (shouldSuppress(args)) {
+        // Auto-repair on Bad MAC errors
+        const badMacFound = args.some(arg =>
+            typeof arg === 'string' && arg.toLowerCase().includes('bad mac')
+        );
+        if (badMacFound) {
+            autoSessionClear();
+        }
+        return;
+    }
     originalConsoleError.apply(console, args);
 };
 
 console.warn = (...args) => {
-    handleBadMacSignal(args);
     if (shouldSuppress(args)) return;
     originalConsoleWarn.apply(console, args);
 };
 
-console.info = (...args) => {
-    handleBadMacSignal(args);
-    if (shouldSuppress(args)) return;
-    originalConsoleInfo.apply(console, args);
-};
-
-console.debug = (...args) => {
-    handleBadMacSignal(args);
-    if (shouldSuppress(args)) return;
-    originalConsoleDebug.apply(console, args);
-};
-
-
-// Auto self-healing dependency installer for panels (Wispbyte, Pterodactyl, Replit, Koyeb, etc.)
-try {
-    require.resolve('@hapi/boom');
-} catch (e) {
-    console.log('⚠️ Missing dependencies detected in environment! Running automatic npm install...');
-    try {
-        require('child_process').execSync('npm install --legacy-peer-deps', { stdio: 'inherit', cwd: __dirname });
-        console.log('✅ Dependencies successfully installed!');
-    } catch (installErr) {
-        console.error('❌ Failed to run automatic npm install:', installErr.message);
-    }
-}
 
 require('./config');
 require('./settings');
@@ -344,8 +249,6 @@ const { join } = require('path');
 
 const store = require('./lib/lightweight_store');
 const SaveCreds = require('./lib/session');
-const { useSQLiteAuthState, resetSQLiteAuthState } = require('./lib/sqliteAuthState');
-const { createDBRouter } = require('./lib/db-router');
 const { app, server, PORT } = require('./lib/server');
 const { printLog } = require('./lib/print');
 const isOwnerOrSudo = require('./lib/isOwner');
@@ -358,113 +261,6 @@ const {
 
 const settings = require('./settings');
 const commandHandler = require('./lib/commandHandler');
-
-let reconnectAttempts = 0;
-let reconnectTimer = null;
-let activeSocket = null;
-let botStartInProgress = false;
-let authAutoRepairAttempted = false;
-let badMacRecoveryInProgress = false;
-let socketGeneration = 0;
-const botRuntimeIntervals = new Set();
-
-function registerBotInterval(intervalId) {
-    botRuntimeIntervals.add(intervalId);
-    return intervalId;
-}
-
-function clearBotIntervals() {
-    for (const intervalId of botRuntimeIntervals) {
-        clearInterval(intervalId);
-    }
-    botRuntimeIntervals.clear();
-}
-
-function scheduleReconnect(reason = 'unknown', delayOverrideMs = null) {
-    if (reconnectTimer) {
-        printLog('connection', `Reconnect already scheduled. Latest reason: ${reason}`);
-        return;
-    }
-
-    reconnectAttempts += 1;
-    const baseDelayMs = Math.min(1000 * (2 ** (reconnectAttempts - 1)), 30000);
-    const jitterMs = Math.floor(Math.random() * 500);
-    const waitTime = typeof delayOverrideMs === 'number' ? delayOverrideMs : baseDelayMs + jitterMs;
-
-    printLog('connection', `Reconnecting in ${Math.round(waitTime / 1000)}s (attempt ${reconnectAttempts}) due to ${reason}`);
-
-    reconnectTimer = setTimeout(() => {
-        reconnectTimer = null;
-        startBot().catch((error) => {
-            printLog('error', `Reconnect attempt failed: ${error.message}`);
-        });
-    }, waitTime);
-}
-
-function normalizeToJid(value) {
-    if (!value) return '';
-    const cleaned = String(value).trim();
-    if (!cleaned) return '';
-    if (cleaned.includes('@')) return cleaned;
-    const digits = cleaned.replace(/\D/g, '');
-    return digits ? `${digits}@s.whatsapp.net` : '';
-}
-
-function csvToList(value) {
-    if (!value) return [];
-    return String(value)
-        .split(',')
-        .map((item) => item.trim())
-        .filter(Boolean);
-}
-
-function parseBoolean(value, fallback = false) {
-    if (value === undefined || value === null || String(value).trim() === '') return fallback;
-    return String(value).toLowerCase() === 'true';
-}
-
-
-
-async function bootstrapStoreSchemaAndFallbacks() {
-    try {
-        const ownerFromSettings = Array.isArray(settings.ownerNumber)
-            ? settings.ownerNumber
-            : (settings.ownerNumber ? [settings.ownerNumber] : []);
-        const ownerFromFile = Array.isArray(owner) ? owner : [];
-
-        const ownerJids = [...new Set([...ownerFromSettings, ...ownerFromFile]
-            .map(normalizeToJid)
-            .filter(Boolean))];
-
-        await store.bootstrapInitialSchema({
-            ownerJids,
-            disabledPlugins: csvToList(process.env.DISABLED_PLUGINS || ''),
-            envDefaults: {
-                AUTO_STATUS_VIEW: 'true',
-                AUTO_STATUS_REACT: 'true',
-                STATUS_EMOJIS: '💙,🖤,⭐',
-                AUTOREAD: 'false',
-                AUTOTYPING: 'false',
-                ANTICALL: 'false',
-                ANTIDELETE: 'false',
-                AUTOREACT: 'false',
-                ALWAYS_ONLINE: 'false',
-                FORCE_SESSION_RESET: 'false',
-                SUDO_USERS: ''
-            }
-        });
-
-        const dbOwners = await store.getOwnerJids();
-        if (dbOwners.length > 0) {
-            printLog('store', `Owner JIDs loaded into schema: ${dbOwners.length}`);
-            if (!Array.isArray(owner) || owner.length === 0) {
-                owner = dbOwners;
-            }
-        }
-    } catch (error) {
-        printLog('error', `Schema bootstrap failed: ${error.message}`);
-    }
-}
 
 store.readFromFile();
 setInterval(() => store.writeToFile(), settings.storeWriteInterval || 10000);
@@ -534,39 +330,6 @@ function ensureSessionDirectory() {
     return sessionPath;
 }
 
-function startupSessionCleanup() {
-    try {
-        const sessionPath = ensureSessionDirectory();
-        const files = fs.readdirSync(sessionPath);
-        let clearedCount = 0;
-
-        for (const file of files) {
-            if (file === 'creds.json') continue;
-
-            const fullPath = path.join(sessionPath, file);
-            try {
-                const stat = fs.lstatSync(fullPath);
-                if (stat.isDirectory()) {
-                    fs.rmSync(fullPath, { recursive: true, force: true });
-                } else {
-                    fs.unlinkSync(fullPath);
-                }
-                clearedCount++;
-            } catch {
-                // Skip files that can't be removed
-            }
-        }
-
-        if (clearedCount > 0) {
-            printLog('warning', `[AUTO-REPAIR] Startup session cleanup removed ${clearedCount} stale session files to prevent Bad MAC.`);
-        } else {
-            printLog('info', '[AUTO-REPAIR] Startup session cleanup found no stale session files.');
-        }
-    } catch (error) {
-        printLog('error', `Startup session cleanup failed: ${error.message}`);
-    }
-}
-
 function hasValidSession() {
     try {
         const credsPath = path.join(__dirname, 'session', 'creds.json');
@@ -612,6 +375,35 @@ function hasValidSession() {
     }
 }
 
+async function getPresenceConfig() {
+    if (typeof global.alwaysOnlineState === 'boolean') {
+        return { alwaysOnline: global.alwaysOnlineState };
+    }
+    try {
+        const existing = await store.getSetting('global', 'presenceConfig');
+        if (existing && typeof existing.alwaysOnline === 'boolean') {
+            global.alwaysOnlineState = existing.alwaysOnline;
+            return { alwaysOnline: existing.alwaysOnline };
+        }
+    } catch (e) {}
+
+    const envVal = process.env.ALWAYS_ONLINE || process.env.ALWAYS_ONLINE_PRESENCE;
+    const isEn = (envVal !== undefined && String(envVal).trim() !== '')
+        ? (String(envVal).toLowerCase() === 'true' || String(envVal) === '1' || String(envVal).toLowerCase() === 'on')
+        : (settings.alwaysOnline ?? false);
+    global.alwaysOnlineState = isEn;
+    return { alwaysOnline: isEn };
+}
+
+async function isAlwaysOnlineEnabled() {
+    try {
+        const config = await getPresenceConfig();
+        return !!config.alwaysOnline;
+    } catch {
+        return false;
+    }
+}
+
 async function initializeSession() {
     ensureSessionDirectory();
 
@@ -627,16 +419,9 @@ async function initializeSession() {
         return false;
     }
 
-    const shouldRefreshOnStart = String(process.env.REFRESH_SESSION_ON_START || '').toLowerCase() === 'true';
-
-    if (!shouldRefreshOnStart && hasValidSession()) {
-        printLog('success', 'Using local session credentials (refresh skipped)');
-        return true;
-    }
-
-    // Refresh only when forced or when no valid local session exists.
+    // Always refresh session from service to prevent staleness
     try {
-        printLog('info', `Refreshing session credentials from PGWIZ service (${shouldRefreshOnStart ? 'forced' : 'missing local session'})...`);
+        printLog('info', 'Refreshing session credentials from PGWIZ service...');
         await SaveCreds(txt);
         await delay(1500);
 
@@ -659,213 +444,26 @@ async function initializeSession() {
     }
 }
 
-async function runBadMacRecovery(reason = 'bad-mac-detected') {
-    if (badMacRecoveryInProgress) {
-        printLog('warning', `[AUTO-REPAIR] Bad MAC recovery already in progress (${reason})`);
-        return;
-    }
-
-    badMacRecoveryInProgress = true;
-    authAutoRepairAttempted = true;
-    printLog('warning', `[AUTO-REPAIR] Bad MAC detected. Clearing auth/session and restarting (${reason})...`);
-
-    try {
-        // Invalidate existing socket listeners immediately to prevent stale reconnect/open events.
-        socketGeneration += 1;
-
-        if (reconnectTimer) {
-            clearTimeout(reconnectTimer);
-            reconnectTimer = null;
-        }
-
-        try {
-            if (activeSocket?.ws?.readyState === 1) {
-                activeSocket.ws.close();
-            }
-        } catch {
-            // Ignore socket close errors during recovery.
-        }
-
-        clearBotIntervals();
-        botStartInProgress = false;
-        activeSocket = null;
-    } catch {
-        // Continue recovery even if runtime cleanup throws.
-    }
-
-    try {
-        if (typeof resetSQLiteAuthState === 'function') {
-            resetSQLiteAuthState('bad-mac-immediate-repair');
-        }
-    } catch (error) {
-        printLog('error', `Failed to reset SQLite auth state during Bad MAC recovery: ${error.message}`);
-    }
-
-    try {
-        rmSync('./session', { recursive: true, force: true });
-        ensureSessionDirectory();
-    } catch (error) {
-        printLog('error', `Failed to reset session directory during Bad MAC recovery: ${error.message}`);
-    }
-
-    try {
-        await initializeSession();
-    } catch (error) {
-        printLog('error', `Session refresh during Bad MAC recovery failed: ${error.message}`);
-    }
-
-    scheduleReconnect('bad-mac-immediate-repair', 1000);
-    badMacRecoveryCount += 1;
-    lastBadMacRecoveryCompletedAt = Date.now();
-
-    setTimeout(() => {
-        badMacRecoveryInProgress = false;
-    }, 15000);
-}
-
-triggerBadMacRecovery = (reason = 'bad-mac-detected') => {
-    runBadMacRecovery(reason).catch((error) => {
-        printLog('error', `Bad MAC recovery failed: ${error.message}`);
-        badMacRecoveryInProgress = false;
-    });
-};
-
-if (pendingBadMacRecovery) {
-    pendingBadMacRecovery = false;
-    triggerBadMacRecovery('bad-mac-pending-pre-init');
-}
-
 if (!server.listening) {
     server.listen(PORT, '0.0.0.0', () => {
         printLog('success', `Server listening on 0.0.0.0:${PORT}`);
     });
 }
 
-
-
-
-
-// ==================== PRESENCE ENGINE ====================
-async function getPresenceConfig() {
+async function startPgwizDev() {
     try {
-        const config = await store.getSetting('global', 'presenceConfig');
-        if (config && typeof config === 'object') {
-            return {
-                alwaysOnline: Boolean(config.alwaysOnline),
-                presenceType: config.presenceType || 'available',
-                chatPresence: config.chatPresence || {}
-            };
-        }
-    } catch {}
-    const envAlwaysOnline = process.env.ALWAYS_ONLINE || process.env.ALWAYS_ONLINE_PRESENCE;
-    const isAlwaysOnline = (envAlwaysOnline !== undefined && String(envAlwaysOnline).trim() !== '')
-        ? (String(envAlwaysOnline).toLowerCase() === 'true' || String(envAlwaysOnline) === '1' || String(envAlwaysOnline).toLowerCase() === 'on')
-        : (settings.alwaysOnline ?? false);
-    return {
-        alwaysOnline: isAlwaysOnline,
-        presenceType: isAlwaysOnline ? 'available' : 'unavailable',
-        chatPresence: {}
-    };
-}
-
-async function isAlwaysOnlineEnabled() {
-    if (typeof global.alwaysOnlineState === 'boolean') {
-        return global.alwaysOnlineState;
-    }
-    const config = await getPresenceConfig();
-    global.alwaysOnlineState = config.alwaysOnline;
-    return config.alwaysOnline;
-}
-
-async function broadcastPresenceAvailable(sock) {
-    if (!sock) return;
-    try {
-        const ghostMode = await store.getSetting('global', 'stealthMode');
-        if (ghostMode && ghostMode.enabled) return;
-
-        const alwaysOnline = await isAlwaysOnlineEnabled();
-        if (!alwaysOnline) return;
-
-        const me = sock?.authState?.creds?.me || sock?.user;
-        const name = String(me?.name || settings.botName || 'PGWIZ-MD').replace(/@/g, '');
-        if (me && !me.name) me.name = name;
-
-        await sock.sendPresenceUpdate('available').catch(() => {});
-        if (typeof sock.sendNode === 'function') {
-            await sock.sendNode({
-                tag: 'presence',
-                attrs: { name, type: 'available' }
-            }).catch(() => {});
-        }
-    } catch {}
-}
-
-async function broadcastPresenceOffline(sock) {
-    if (!sock) return;
-    try {
-        const me = sock?.authState?.creds?.me || sock?.user;
-        const name = String(me?.name || settings.botName || 'PGWIZ-MD').replace(/@/g, '');
-
-        await sock.sendPresenceUpdate('unavailable').catch(() => {});
-        if (typeof sock.sendNode === 'function') {
-            await sock.sendNode({
-                tag: 'presence',
-                attrs: { name, type: 'unavailable' }
-            }).catch(() => {});
-        }
-    } catch {}
-}
-// ========================================================
-
-async function startBot() {
-    if (botStartInProgress) {
-        return activeSocket;
-    }
-
-    const activeReadyState = activeSocket?.ws?.readyState;
-    if (activeReadyState === 0 || activeReadyState === 1) {
-        printLog('connection', `Start skipped: existing socket is active (state=${activeReadyState})`);
-        return activeSocket;
-    }
-
-    botStartInProgress = true;
-
-    try {
-        clearBotIntervals();
-
-        let { version } = await fetchLatestBaileysVersion();
+        let { version, isLatest } = await fetchLatestBaileysVersion();
 
         ensureSessionDirectory();
         await delay(1000);
 
-        const authStateBackend = String(process.env.AUTH_STATE_BACKEND || 'sqlite').toLowerCase();
-        let authState;
-
-        if (authStateBackend === 'files') {
-            authState = await useMultiFileAuthState('./session');
-            printLog('auth', 'Using file-based auth state backend');
-        } else {
-            try {
-                authState = await useSQLiteAuthState();
-                printLog('auth', 'Using SQLite auth state backend');
-            } catch (error) {
-                printLog('warning', `SQLite auth backend failed (${error.message}), falling back to file auth state`);
-                authState = await useMultiFileAuthState('./session');
-            }
-        }
-
-        const { state, saveCreds } = authState;
-        const dbRouter = createDBRouter(store, { normalizeJid: jidNormalizedUser });
-
+        const { useSQLiteAuthState } = require('./lib/sqliteAuthState');
+        const { state, saveCreds } = await useSQLiteAuthState();
         // Create retry counter cache with short TTL (10 seconds) so old messages don't stay cached
         const msgRetryCounterCache = new NodeCache({ stdTTL: 300, checkperiod: 60 });
 
+        const hasRegisteredCreds = state.creds && state.creds.registered !== undefined;
         printLog('info', `Credentials loaded. Registered: ${state.creds?.registered || false}`);
-
-        const statusViewerOnlyMode = String(process.env.STATUS_VIEWER_ONLY || '').toLowerCase() === 'true';
-        if (statusViewerOnlyMode) {
-            printLog('warning', 'STATUS_VIEWER_ONLY=true - normal incoming messages will be ignored. Set it to false for command replies.');
-        }
 
         const ghostMode = await store.getSetting('global', 'stealthMode');
         const isGhostActive = ghostMode && ghostMode.enabled;
@@ -874,11 +472,7 @@ async function startBot() {
             printLog('info', '👻 STEALTH MODE IS ACTIVE - Starting in stealth mode');
         }
 
-        if (state.creds?.me && !state.creds.me.name) {
-            state.creds.me.name = settings.botName || 'PGWIZ-MD';
-        }
-
-        const botSocket = makeWASocket({
+        const pgwizSocket = makeWASocket({
             version,
             logger: pino({ level: 'silent' }, nullStream), // Silent logger with null stream
             printQRInTerminal: !pairingCode,
@@ -888,28 +482,40 @@ async function startBot() {
                 keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "silent" }, nullStream)),
             },
             markOnlineOnConnect: false,
-            generateHighQualityLinkPreview: false,
+            generateHighQualityLinkPreview: true,
             syncFullHistory: false,
             shouldSyncHistoryMessage: () => false, // Disable history sync for real-time only
             retryRequestDelayMs: 2500,
             maxMsgRetryCount: 3, // Reduce retry delay from 5s to 2s
             fireInitQueries: false,
-            getMessage: async (key) => dbRouter.loadConversationMessage(key),
+            getMessage: async (key) => {
+                try {
+                    // Add a 3 second timeout so we don't get stuck waiting for old messages
+                    const timeoutPromise = new Promise((_, reject) =>
+                        setTimeout(() => reject(new Error('timeout')), 3000)
+                    );
+
+                    let jid = jidNormalizedUser(key.remoteJid);
+                    const loadPromise = store.loadMessage(jid, key.id);
+                    const msg = await Promise.race([loadPromise, timeoutPromise]);
+                    return msg?.message || "";
+                } catch (err) {
+                    // If timeout or error, return empty string - Baileys will skip this message
+                    return "";
+                }
+            },
             msgRetryCounterCache,
-            defaultQueryTimeoutMs: 30000,
+            defaultQueryTimeoutMs: 60000,
             connectTimeoutMs: 60000,
-            keepAliveIntervalMs: 15000,
+            keepAliveIntervalMs: 10000, // Aggressive keep-alive for stability
         });
 
         // Expose bot instance globally for /ping endpoint
-        global.botInstance = botSocket;
-        activeSocket = botSocket;
-        const thisSocketGeneration = ++socketGeneration;
-        const isStaleSocket = () => thisSocketGeneration !== socketGeneration || activeSocket !== botSocket;
+        global.botInstance = pgwizSocket;
 
         
-        const originalSendNode = (botSocket || pgwizSocket).sendNode;
-        (botSocket || pgwizSocket).sendNode = async function (node) {
+        const originalSendNode = pgwizSocket.sendNode;
+        pgwizSocket.sendNode = async function (node) {
             if (node && node.tag === 'presence') {
                 try {
                     const ghostMode = await store.getSetting('global', 'stealthMode');
@@ -926,12 +532,12 @@ async function startBot() {
             return originalSendNode.call(this, node);
         };
 
-        const originalSendPresenceUpdate = (botSocket || pgwizSocket).sendPresenceUpdate;
-        const originalReadMessages = botSocket.readMessages;
-        const originalSendReceipt = botSocket.sendReceipt;
-        const originalSendReadReceipt = botSocket.sendReadReceipt;
+        const originalSendPresenceUpdate = pgwizSocket.sendPresenceUpdate;
+        const originalReadMessages = pgwizSocket.readMessages;
+        const originalSendReceipt = pgwizSocket.sendReceipt;
+        const originalSendReadReceipt = pgwizSocket.sendReadReceipt;
 
-        (botSocket || pgwizSocket).sendPresenceUpdate = async function (...args) {
+        pgwizSocket.sendPresenceUpdate = async function (...args) {
             const [presenceType, jid] = args;
             const ghostMode = await store.getSetting('global', 'stealthMode');
             if (ghostMode && ghostMode.enabled) return;
@@ -957,7 +563,7 @@ async function startBot() {
             }
         };
 
-        botSocket.readMessages = async function (...args) {
+        pgwizSocket.readMessages = async function (...args) {
             const ghostMode = await store.getSetting('global', 'stealthMode');
             if (ghostMode && ghostMode.enabled) {
                 return;
@@ -966,7 +572,7 @@ async function startBot() {
         };
 
         if (originalSendReceipt) {
-            botSocket.sendReceipt = async function (...args) {
+            pgwizSocket.sendReceipt = async function (...args) {
                 const ghostMode = await store.getSetting('global', 'stealthMode');
                 if (ghostMode && ghostMode.enabled) {
                     return;
@@ -976,7 +582,7 @@ async function startBot() {
         }
 
         if (originalSendReadReceipt) {
-            botSocket.sendReadReceipt = async function (...args) {
+            pgwizSocket.sendReadReceipt = async function (...args) {
                 const ghostMode = await store.getSetting('global', 'stealthMode');
                 if (ghostMode && ghostMode.enabled) {
                     return;
@@ -985,8 +591,8 @@ async function startBot() {
             };
         }
 
-        const originalQuery = botSocket.query;
-        botSocket.query = async function (node, ...args) {
+        const originalQuery = pgwizSocket.query;
+        pgwizSocket.query = async function (node, ...args) {
             const ghostMode = await store.getSetting('global', 'stealthMode');
             if (ghostMode && ghostMode.enabled) {
                 if (node && node.tag === 'receipt') {
@@ -999,131 +605,86 @@ async function startBot() {
             return originalQuery.apply(this, [node, ...args]);
         };
 
-        botSocket.isGhostMode = async () => {
+        pgwizSocket.isGhostMode = async () => {
             const ghostMode = await store.getSetting('global', 'stealthMode');
             return ghostMode && ghostMode.enabled;
         };
 
-        botSocket.ev.on('creds.update', saveCreds);
-        store.bind(botSocket.ev);
+        pgwizSocket.ev.on('creds.update', saveCreds);
+        store.bind(pgwizSocket.ev);
 
-        try {
-            const { initAutoReact } = require('./plugins/areact');
-            if (typeof initAutoReact === 'function') {
-                initAutoReact(botSocket);
-            }
-        } catch (error) {
-            printLog('warning', `Auto-react startup init failed: ${error.message}`);
-        }
+        const processedMessageKeys = new Set();
+        setInterval(() => {
+            if (processedMessageKeys.size > 5000) processedMessageKeys.clear();
+        }, 60000);
 
-        try {
-            const { initAutoClear } = require('./plugins/autoclear');
-            if (typeof initAutoClear === 'function') {
-                initAutoClear(botSocket);
-            }
-        } catch (error) {
-            printLog('warning', `Auto-clear startup init failed: ${error.message}`);
-        }
-
-        botSocket.ev.on('messages.upsert', async (chatUpdate) => {
-            if (isStaleSocket()) return;
-
+        pgwizSocket.ev.on('messages.upsert', async (chatUpdate) => {
             try {
-                const statusViewerOnly = statusViewerOnlyMode;
-                const upsertType = chatUpdate?.type;
-                const msgs = Array.isArray(chatUpdate?.messages) ? chatUpdate.messages : [];
+                // Only process real-time messages, ignore history/append
+                if (chatUpdate.type !== 'notify' && chatUpdate.type !== 'append') return;
 
-                console.log(chalk.cyan(`\n📩 [RAW UPSERT] Type: ${upsertType} | Messages Count: ${msgs.length}`));
-                for (const mek of msgs) {
-                    const sender = mek.key?.participant || mek.key?.remoteJid;
-                    const fromMe = mek.key?.fromMe;
-                    const isGroup = mek.key?.remoteJid?.endsWith('@g.us');
-                    const hasMsg = !!mek.message;
-                    console.log(chalk.yellow(`   ➜ From: ${sender} (fromMe: ${fromMe}, isGroup: ${isGroup}, hasMsg: ${hasMsg})`));
+                // Process any status updates in the batch immediately (never drop batch/burst statuses)
+                const statusMessages = (chatUpdate.messages || []).filter(m => m?.key?.remoteJid === 'status@broadcast');
+                if (statusMessages.length > 0) {
+                    handleStatus(pgwizSocket, { type: chatUpdate.type, messages: statusMessages }).catch(err => printLog('error', `AutoStatus Error: ${err.message}`));
                 }
 
-                // Only process notify for command execution (append is used for local store updates)
-                if (upsertType !== 'notify') return;
+                // Filter out statuses from normal command processing
+                const normalMessages = (chatUpdate.messages || []).filter(m => m?.key?.remoteJid !== 'status@broadcast');
+                if (normalMessages.length === 0) return;
 
-                const upsertMessages = Array.isArray(chatUpdate?.messages) ? chatUpdate.messages : [];
-                if (upsertMessages.length === 0) return;
+                const mek = normalMessages[0];
+                if (!mek?.message || !mek.key?.id) return;
+
+                const msgDedupeKey = `${mek.key.remoteJid || ''}_${mek.key.id}_${mek.key.fromMe ? '1' : '0'}`;
+                if (processedMessageKeys.has(msgDedupeKey)) return;
+                processedMessageKeys.add(msgDedupeKey);
+
+                mek.message = (Object.keys(mek.message)[0] === 'ephemeralMessage')
+                    ? mek.message.ephemeralMessage.message
+                    : mek.message;
+
+                if (mek.key.id.startsWith('BAE5') && mek.key.id.length === 16) return;
+
+                const botMode = await store.getBotMode();
+                const isGroup = mek.key?.remoteJid?.endsWith('@g.us');
+                const senderJid = mek.key?.participant || mek.key?.remoteJid;
+                const checkOwnerOrSudo = isOwnerOrSudo;
+                const isOwnerMsg = mek.key?.fromMe || (senderJid && await checkOwnerOrSudo(senderJid, pgwizSocket, mek.key?.remoteJid).catch(() => false));
+
+                if (!isOwnerMsg) {
+                    if (botMode === 'private' || botMode === 'self') return;
+                    if (botMode === 'groups' && !isGroup) return;
+                    if (botMode === 'inbox' && isGroup) return;
+                }
 
                 // Preserved msgRetryCounterCache to prevent infinite message retry loops
 
-                for (const mek of upsertMessages) {
-                    if (isStaleSocket()) return;
-                    if (!mek?.message) continue;
-
-                    mek.message = (Object.keys(mek.message)[0] === 'ephemeralMessage')
-                        ? mek.message.ephemeralMessage.message
-                        : mek.message;
-
-                    if (mek.key && mek.key.remoteJid === 'status@broadcast') {
-                        if (mek.key.fromMe) continue; // Ignore own statuses & outbound reaction echoes
-                        handleStatus(botSocket, { type: upsertType, messages: [mek] }).catch(err => printLog('error', `AutoStatus Error: ${err.message}`));
-                        continue;
-                    }
-
-                    // PRE-BOOT / OLD MESSAGE FILTER: Ignore backlog commands from before bot startup
-                    let msgTs = mek.messageTimestamp;
-                    if (typeof msgTs === 'object' && msgTs !== null) msgTs = msgTs.low || (msgTs.toNumber ? msgTs.toNumber() : 0);
-                    const nowSec = Date.now() / 1000;
-                    const age = nowSec - (msgTs || 0);
-                    const bootTime = global.botLaunchTimestamp || (nowSec - 15);
-                    if ((age > 15 || (msgTs && msgTs < bootTime - 5)) && mek.key?.remoteJid !== 'status@broadcast') {
-                        continue;
-                    }
-
-                    if (statusViewerOnly) {
-                        continue;
-                    }
-
-                    const messageId = mek.key?.id || '';
-                    if (messageId && isDuplicateMessage(messageId)) {
-                        continue;
-                    }
-        
-                    if (mek.key?.fromMe && messageId.startsWith('BAE5') && messageId.length === 16) continue;
-
-                    const botMode = await store.getBotMode();
-                    const isGroup = mek.key?.remoteJid?.endsWith('@g.us');
-                    const senderJid = mek.key?.participant || mek.key?.remoteJid;
-                    const checkOwnerOrSudo = isOwnerOrSudo;
-                    const isOwnerMsg = mek.key?.fromMe || (senderJid && await checkOwnerOrSudo(senderJid, botSocket, mek.key?.remoteJid).catch(() => false));
-
-                    if (!isOwnerMsg) {
-                        if (botMode === 'private' || botMode === 'self') continue;
-                        if (botMode === 'groups' && !isGroup) continue;
-                        if (botMode === 'inbox' && isGroup) continue;
-                    }
-
-                    try {
-                        await handleMessages(botSocket, { type: upsertType, messages: [mek] });
-                    } catch (err) {
-                        printLog('error', `Error in handleMessages: ${err.message}`);
-                        if (mek.key && mek.key.remoteJid) {
-                            await botSocket.sendMessage(mek.key.remoteJid, {
-                                text: '❌ An error occurred while processing your message.',
-                                contextInfo: {
-                                    forwardingScore: 1,
-                                    isForwarded: true,
-                                    forwardedNewsletterMessageInfo: {
-                                        newsletterJid: settings.newsletterJid || '120363179639202475@newsletter',
-                                        newsletterName: settings.newsletterName || 'PGWIZ-MD',
-                                        serverMessageId: -1
-                                    }
+                try {
+                    await handleMessages(pgwizSocket, chatUpdate);
+                } catch (err) {
+                    printLog('error', `Error in handleMessages: ${err.message}`);
+                    if (mek.key && mek.key.remoteJid) {
+                        await pgwizSocket.sendMessage(mek.key.remoteJid, {
+                            text: '❌ An error occurred while processing your message.',
+                            contextInfo: {
+                                forwardingScore: 1,
+                                isForwarded: true,
+                                forwardedNewsletterMessageInfo: {
+                                    newsletterJid: settings.newsletterJid || '120363179639202475@newsletter',
+                                    newsletterName: settings.newsletterName || 'PGWIZ-MD',
+                                    serverMessageId: -1
                                 }
-                            }).catch(console.error);
-                        }
+                            }
+                        }).catch(console.error);
                     }
                 }
-
             } catch (err) {
                 printLog('error', `Error in messages.upsert: ${err.message}`);
             }
         });
 
-        botSocket.decodeJid = (jid) => {
+        pgwizSocket.decodeJid = (jid) => {
             if (!jid) return jid;
             if (/:\d+@/gi.test(jid)) {
                 let decode = jidDecode(jid) || {};
@@ -1131,35 +692,33 @@ async function startBot() {
             } else return jid;
         };
 
-        botSocket.ev.on('contacts.update', update => {
-            if (isStaleSocket()) return;
-
+        pgwizSocket.ev.on('contacts.update', update => {
             for (let contact of update) {
-                let id = botSocket.decodeJid(contact.id);
+                let id = pgwizSocket.decodeJid(contact.id);
                 if (store && store.contacts) store.contacts[id] = { id, name: contact.notify };
             }
         });
 
-        botSocket.getName = (jid, withoutContact = false) => {
-            id = botSocket.decodeJid(jid);
-            withoutContact = botSocket.withoutContact || withoutContact;
+        pgwizSocket.getName = (jid, withoutContact = false) => {
+            id = pgwizSocket.decodeJid(jid);
+            withoutContact = pgwizSocket.withoutContact || withoutContact;
             let v;
             if (id.endsWith("@g.us")) return new Promise(async (resolve) => {
                 v = store.contacts[id] || {};
-                if (!(v.name || v.subject)) v = botSocket.groupMetadata(id) || {};
+                if (!(v.name || v.subject)) v = pgwizSocket.groupMetadata(id) || {};
                 resolve(v.name || v.subject || PhoneNumber('+' + id.replace('@s.whatsapp.net', '')).getNumber('international'));
             });
             else v = id === '0@s.whatsapp.net' ? {
                 id,
                 name: 'WhatsApp'
-            } : id === botSocket.decodeJid(botSocket.user.id) ?
-                botSocket.user :
+            } : id === pgwizSocket.decodeJid(pgwizSocket.user.id) ?
+                pgwizSocket.user :
                 (store.contacts[id] || {});
             return (withoutContact ? '' : v.name) || v.subject || v.verifiedName || PhoneNumber('+' + jid.replace('@s.whatsapp.net', '')).getNumber('international');
         };
 
-        botSocket.public = true;
-        botSocket.serializeM = (m) => smsg(botSocket, m, store);
+        pgwizSocket.public = true;
+        pgwizSocket.serializeM = (m) => smsg(pgwizSocket, m, store);
 
         const isRegistered = state.creds?.registered === true;
         const hasValidMe = state.creds?.me?.id ? true : false;
@@ -1205,7 +764,7 @@ async function startBot() {
 
             setTimeout(async () => {
                 try {
-                    let code = await botSocket.requestPairingCode(phoneNumberInput);
+                    let code = await pgwizSocket.requestPairingCode(phoneNumberInput);
                     code = code?.match(/.{1,4}/g)?.join("-") || code;
                     console.log(chalk.black(chalk.bgGreen(`Your Pairing Code : `)), chalk.black(chalk.white(code)));
                     printLog('success', `Pairing code generated: ${code}`);
@@ -1226,9 +785,7 @@ async function startBot() {
             }
         }
 
-        botSocket.ev.on('connection.update', async (s) => {
-            if (isStaleSocket()) return;
-
+        pgwizSocket.ev.on('connection.update', async (s) => {
             const { connection, lastDisconnect, qr } = s;
 
             if (qr) {
@@ -1239,59 +796,57 @@ async function startBot() {
                 printLog('connection', 'Connecting to WhatsApp...');
             }
 
-            if (connection === 'open') {
-                reconnectAttempts = 0;
-                authAutoRepairAttempted = false;
-                badMacRecoveryInProgress = false;
-                botStartInProgress = false;
-                if (reconnectTimer) {
-                    clearTimeout(reconnectTimer);
-                    reconnectTimer = null;
-                }
 
-                global.botConnectedTime = Date.now();
+
+            if (connection == "open") {
+                global.botConnectedTime = Date.now(); // Track connection time for old message filtering
                 printLog('success', 'Bot connected successfully!');
-                try {
-                    const { isAlwaysOnlineEnabled, startAlwaysOnlineLoop } = require('./plugins/alwaysonline');
-                    if (typeof isAlwaysOnlineEnabled === 'function') {
-                        isAlwaysOnlineEnabled().then(enabled => {
-                            if (enabled) startAlwaysOnlineLoop(pgwizSocket);
-                        }).catch(() => {});
-                    }
-                } catch (e) {}
-
                 const { startAutoBio } = require('./plugins/a-setbio');
-                startAutoBio(botSocket);
-
-                const ghostMode = await store.getSetting('global', 'stealthMode');
-                if (ghostMode && ghostMode.enabled) {
-                    printLog('info', '👻 STEALTH MODE ACTIVE - Bot is in stealth mode');
-                    console.log(chalk.gray('• No online status'));
-                    console.log(chalk.gray('• No typing indicators'));
-                }
-
+                startAutoBio(pgwizSocket);
+                try {
+                    const { initAutoClear } = require('./plugins/autoclear');
+                    if (typeof initAutoClear === 'function') {
+                        initAutoClear(pgwizSocket);
+                    }
+                } catch (error) {}
                 const presenceConfig = await getPresenceConfig();
-                // 🟢 Ultra-Reliable Always-Online Presence Engine
-                const isAlwaysOn = await isAlwaysOnlineEnabled();
-                if (isAlwaysOn) {
-                    broadcastPresenceAvailable(botSocket);
-                    registerBotInterval(setInterval(async () => {
-                        if (await isAlwaysOnlineEnabled()) {
-                            broadcastPresenceAvailable(botSocket);
-                        }
-                    }, 60 * 1000));
-                } else {
-                    broadcastPresenceOffline(botSocket);
+                if (presenceConfig.alwaysOnline && !(ghostMode && ghostMode.enabled)) {
+                    try {
+                        await originalSendPresenceUpdate.call(pgwizSocket, 'available');
+                        printLog('presence', '🟢 Always-online presence activated');
+                    } catch (error) {
+                        printLog('warning', `Failed to set initial always-online presence: ${error.message}`);
+                    }
+                } else if (!ghostMode || !ghostMode.enabled) {
+                    try {
+                        await originalSendPresenceUpdate.call(pgwizSocket, 'unavailable');
+                    } catch (error) {}
                 }
+
+                // Single non-stacking presence heartbeat (60s interval to prevent WebSocket congestion)
+                if (global.presenceHeartbeatInterval) {
+                    clearInterval(global.presenceHeartbeatInterval);
+                }
+                global.presenceHeartbeatInterval = setInterval(async () => {
+                    try {
+                        const currentGhostMode = await store.getSetting('global', 'stealthMode');
+                        if (currentGhostMode && currentGhostMode.enabled) return;
+
+                        const currentPresenceConfig = await getPresenceConfig();
+                        if (currentPresenceConfig && currentPresenceConfig.alwaysOnline) {
+                            await originalSendPresenceUpdate.call(pgwizSocket, 'available').catch(() => {});
+                        }
+                    } catch {}
+                }, 60 * 1000);
 
                 const sendStartupMsg = process.env.STARTUP_MESSAGE !== 'false' && process.env.SEND_STARTUP_MESSAGE !== 'false';
                 if (sendStartupMsg && !global.hasSentStartupNotification) {
                     global.hasSentStartupNotification = true;
                     try {
-                        const botNumber = botSocket.user.id.split(':')[0] + '@s.whatsapp.net';
+                        const botNumber = pgwizSocket.user.id.split(':')[0] + '@s.whatsapp.net';
                         const ghostStatus = (ghostMode && ghostMode.enabled) ? '\n👻 Stealth Mode: ACTIVE' : '';
 
-                        await botSocket.sendMessage(botNumber, {
+                        await pgwizSocket.sendMessage(botNumber, {
                             text: `🤖 ${settings.botName || 'PGWIZ-MD'} Connected Successfully!\n\n⏰ Time: ${new Date().toLocaleString()}\n✅ Status: Online and Ready!${ghostStatus}\n\n✅Make sure to join below channel`,
                             contextInfo: {
                                 forwardingScore: 1,
@@ -1304,6 +859,7 @@ async function startBot() {
                             }
                         });
 
+                        // --- Startup debug: send quick health-check to primary owner once per boot ---
                         try {
                             if (Array.isArray(owner) && owner.length) {
                                 const primary = owner[0];
@@ -1316,8 +872,8 @@ async function startBot() {
                                     expiresAt: Date.now() + 10 * 60 * 1000
                                 };
 
-                                await botSocket.sendMessage(ownerJid, {
-                                    text: '🤖 Startup check — reply to this message to confirm bot status.\n\nReply with `.menu` to verify the bot is responding.',
+                                await pgwizSocket.sendMessage(ownerJid, {
+                                    text: '🤖 Startup check — reply to this message to confirm bot status.\n\nReply with `.menu` to receive the first menu (debug only).',
                                 });
 
                                 printLog('info', `Startup debug message sent to ${ownerJid.split('@')[0]}`);
@@ -1325,25 +881,34 @@ async function startBot() {
                         } catch (e) {
                             printLog('error', `Startup debug send failed: ${e.message}`);
                         }
+
                     } catch (error) {
                         printLog('error', `Failed to send connection message: ${error.message}`);
                     }
                 }
 
-                return;
+
+                // Verbose startup banner disabled
+                // await delay(1999);
+                // console.log(chalk.yellow(`\n\n                  ${chalk.bold.blue(`[ ${global.botname || 'PGWIZ-MD'} ]`)}\n\n`));
+                // console.log(chalk.cyan(`< ================================================== >`));
+                // console.log(chalk.magenta(`\n${global.themeemoji || '•'} YT CHANNEL: pgwiz`));
+                // console.log(chalk.magenta(`${global.themeemoji || '•'} GITHUB: pgwiz`));
+                // console.log(chalk.magenta(`${global.themeemoji || '•'} WA NUMBER: ${owner}`));
+                // console.log(chalk.magenta(`${global.themeemoji || '•'} CREDIT: pgwiz`));
+                // console.log(chalk.green(`${global.themeemoji || '•'} 🤖 ${settings.botName || 'PGWIZ-MD'} Connected Successfully! ✅`));
+                // console.log(chalk.blue(`Bot Version: ${settings.version}`));
+                // console.log(chalk.cyan(`Loaded Commands: ${commandHandler.commands.size}`));
+                // console.log(chalk.cyan(`Prefixes: ${settings.prefixes.join(', ')}`));
+                // console.log(chalk.gray(`Backend: ${store.getStats().backend}`));
+                // console.log();
             }
 
             if (connection === 'close') {
                 const statusCode = lastDisconnect?.error?.output?.statusCode;
-                const errorName = lastDisconnect?.error?.message || 'Unknown Error';
-                const reasonLabel = statusCode || 'unknown';
-                const errorNameLower = String(errorName).toLowerCase();
+                const errorMsg = String(lastDisconnect?.error?.message || '').toLowerCase();
 
-                activeSocket = null;
-                clearBotIntervals();
-                botStartInProgress = false;
-
-                printLog('error', `Connection closed - Status:${reasonLabel} (${errorName})`);
+                printLog('error', `Connection closed - Status: ${statusCode || 'unknown'} (${lastDisconnect?.error?.message || 'Unknown'})`);
 
                 if (statusCode === DisconnectReason.loggedOut || statusCode === 401) {
                     try {
@@ -1355,149 +920,62 @@ async function startBot() {
                     return;
                 }
 
-                const corruptedAuthState =
-                    errorNameLower.includes('incorrect private key length') ||
-                    (errorNameLower.includes('instance of object') && errorNameLower.includes('buffer')) ||
-                    errorNameLower.includes('bad mac') ||
-                    errorNameLower.includes('invalid key');
-
-                if (corruptedAuthState) {
-                    authAutoRepairAttempted = true;
-                    requestBadMacRecovery('connection-close-corrupted-auth');
-                    return;
+                if (errorMsg.includes('incorrect private key length') || errorMsg.includes('invalid key') || errorMsg.includes('bad mac')) {
+                    printLog('warning', '[AUTO-REPAIR] Corrupted private key detected. Clearing auth cache for clean recovery...');
+                    try {
+                        const { resetSQLiteAuthState } = require('./lib/sqliteAuthState');
+                        resetSQLiteAuthState('incorrect-key-length');
+                        rmSync('./session', { recursive: true, force: true });
+                    } catch {}
                 }
 
                 if (statusCode === 440) {
                     console.log(chalk.bold.redBright('⚠️  SESSION CONFLICT (Status 440)'));
                     console.log(chalk.red('   Another bot instance is currently connected with this SESSION_ID.'));
                     console.log(chalk.red('   Please ensure other running terminals or cloud instances are stopped.'));
-                    scheduleReconnect('session-conflict-440', 30000);
+                    printLog('connection', 'Reconnecting in 30 seconds...');
+                    await delay(30000);
+                    startPgwizDev();
                     return;
                 }
 
-                scheduleReconnect(`connection-close-${reasonLabel}`);
+                const waitTime = 8000;
+                printLog('connection', `Reconnecting in ${waitTime/1000} seconds...`);
+                await delay(waitTime);
+                startPgwizDev();
             }
         });
 
-        botSocket.ev.on('call', async (calls) => {
-            if (isStaleSocket()) return;
-            await handleCall(botSocket, calls);
+        pgwizSocket.ev.on('call', async (calls) => {
+            await handleCall(pgwizSocket, calls);
         });
 
-        botSocket.ev.on('group-participants.update', async (update) => {
-            if (isStaleSocket()) return;
-            await handleGroupParticipantUpdate(botSocket, update);
+        pgwizSocket.ev.on('group-participants.update', async (update) => {
+            await handleGroupParticipantUpdate(pgwizSocket, update);
         });
 
-        botSocket.ev.on('status.update', async (status) => {
-            if (isStaleSocket()) return;
-            await handleStatus(botSocket, status);
+        pgwizSocket.ev.on('status.update', async (status) => {
+            await handleStatus(pgwizSocket, status);
         });
 
-        botSocket.ev.on('messages.reaction', async (reaction) => {
-            // Message reactions handled by reaction plugins, not status handler
-        });
-
-        // ===== PERFORMANCE & HEALTH MONITORING =====
-        // Silent WebSocket health check - reconnects without sending messages
-        // In-memory processed message IDs for deduplication
-const processedMessageIds = new Map();
-function isDuplicateMessage(msgId) {
-    if (!msgId) return false;
-    const now = Date.now();
-    if (processedMessageIds.has(msgId)) return true;
-    processedMessageIds.set(msgId, now);
-    if (processedMessageIds.size > 1000) {
-        for (const [id, time] of processedMessageIds.entries()) {
-            if (now - time > 60000) processedMessageIds.delete(id);
-        }
-    }
-    return false;
-}
-        let lastActivityTime = Date.now();
-        const HEALTH_CHECK_INTERVAL = 5 * 60 * 1000; // 5 minutes
         
-        botSocket.ev.on('messages.upsert', () => {
-            if (isStaleSocket()) return;
-            lastActivityTime = Date.now();
-        });
-
-        botSocket.ev.on('messages.update', () => {
-            if (isStaleSocket()) return;
-            lastActivityTime = Date.now();
-        });
-
-        // Silent health check every 5 minutes (no messages to user)
-        const healthCheckInterval = registerBotInterval(setInterval(async () => {
-            try {
-                const ws = botSocket?.ws;
-                const isSocketOpen = ws?.isOpen || (ws?.socket?.readyState === 1) || (ws?.readyState === 1) || (botSocket?.user && ws?.isClosed === false);
-                const isConnected = botSocket?.user !== undefined;
-                
-                if (!isConnected || !isSocketOpen) {
-                    console.log(`[HEALTH] WebSocket unhealthy - attempting silent reconnect`);
-                    try {
-                        if (await isAlwaysOnlineEnabled()) {
-                            await botSocket.sendPresenceUpdate('available');
-                        }
-                    } catch (e) {
-                        // Fail silently, Baileys will handle reconnection
-                    }
-                }
-            } catch (err) {
-                // Silently ignore errors, don't interrupt the bot
-            }
-        }, HEALTH_CHECK_INTERVAL));
-
-        // Scheduled restart every 6 hours to prevent memory creep
-        const scheduledRestartInterval = registerBotInterval(setInterval(() => {
-            printLog('info', '🔄 Scheduled 6-hour restart to maintain stability...');
-            clearInterval(healthCheckInterval);
-            clearInterval(scheduledRestartInterval);
-            process.exit(0);
-        }, 6 * 60 * 60 * 1000)); // Every 6 hours
-
-        // Garbage collection every 30 minutes
-        const gcInterval = registerBotInterval(setInterval(() => {
-            if (global.gc) {
-                global.gc();
-                const memUsage = (process.memoryUsage().rss / 1024 / 1024).toFixed(2);
-                console.log(`[GC] Garbage collection completed (RAM: ${memUsage}MB)`);
-            }
-        }, 30 * 60 * 1000)); // Every 30 minutes
-
-        return botSocket;
+        return pgwizSocket;
     } catch (error) {
-        printLog('error', `Error in startBot: ${error.message}`);
-        activeSocket = null;
-        botStartInProgress = false;
+        printLog('error', `Error in startPgwizDev: ${error.message}`);
 
         if (rl && !rl.closed) {
             rl.close();
             rl = null;
         }
 
-        scheduleReconnect('startBot-exception');
+        await delay(5000);
+        startPgwizDev();
     }
 }
 
 
 async function main() {
     printLog('info', `Starting ${settings.botName || 'PGWIZ-MD'} BOT...`);
-    startupSessionCleanup();
-
-    await bootstrapStoreSchemaAndFallbacks();
-
-    if (typeof commandHandler.hydrateDisabledCommands === 'function') {
-        await commandHandler.hydrateDisabledCommands();
-    }
-
-    try {
-        const { applyStartupAutoStatusPolicy } = require('./plugins/autostatus');
-        await applyStartupAutoStatusPolicy();
-    } catch (error) {
-        printLog('error', `Auto status startup policy failed: ${error.message}`);
-    }
 
     const sessionReady = await initializeSession();
 
@@ -1509,7 +987,7 @@ async function main() {
 
     await delay(3000);
 
-    startBot().catch(error => {
+    startPgwizDev().catch(error => {
         printLog('error', `Fatal error: ${error.message}`);
 
         if (rl && !rl.closed) {
@@ -1543,6 +1021,31 @@ setInterval(() => {
     });
     //  console.log('🧹 Temp folder auto-cleaned');
 }, 1 * 60 * 60 * 1000);
+
+// Auto-clear session files every 3 minutes to prevent memory leaks and encryption conflicts
+setInterval(() => {
+    try {
+        const sessionDir = path.join(process.cwd(), 'session');
+        if (!fs.existsSync(sessionDir)) return;
+
+        const files = fs.readdirSync(sessionDir);
+        let clearedCount = 0;
+
+        for (const file of files) {
+            if (file === 'creds.json') continue; // Never delete creds
+            try {
+                fs.unlinkSync(path.join(sessionDir, file));
+                clearedCount++;
+            } catch { }
+        }
+
+        if (clearedCount > 0) {
+            console.log(chalk.gray(`🧹 Auto-cleared ${clearedCount} session files`));
+        }
+    } catch (err) {
+        // Silently fail, not critical
+    }
+}, 3 * 60 * 1000); // Every 3 minutes (2-4 minute range as requested)
 
 // CPU throttling detection and monitoring
 setInterval(() => {
@@ -1619,7 +1122,6 @@ folders.forEach(folder => {
             }
         });
 });
-                    
 
 /**
 * console.log(chalk.greenBright(`✅ OK files: ${okFiles}`));

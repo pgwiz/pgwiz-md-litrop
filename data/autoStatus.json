@@ -1,4 +1,6 @@
 {
-  "enabled": true,
-  "reactOn": true
+  "view": true,
+  "react": true,
+  "strategy": 10,
+  "reaction": "💯"
 }

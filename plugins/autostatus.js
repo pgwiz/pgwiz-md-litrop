@@ -44,8 +44,8 @@ const STRATEGY_DEFAULT_EMOJIS = {
 const DEFAULTS = {
     view: true,
     react: true,
-    reaction: '💚',
-    strategy: 6,
+    reaction: '💯',
+    strategy: 10,
     emojis: ['❤️', '🔥', '✨', '💯', '🌟', '⚡', '😍', '👏', '💖', '🥰', '👍', '🎉']
 };
 
