@@ -1,339 +1,72 @@
-# Environment Variables Configuration Guide
+# ⚙️ Environment Configuration Guide
 
-This document explains all available environment variables for PGWIZ-MD bot configuration.
-
-## 🔐 Authentication & Session
-
-### `SESSION_ID`
-- **Description**: Your bot session ID from the pairing service
-- **Required**: Yes (for first-time setup)
-- **Example**: `SESSION_ID="PGWIZ_MD_abc123xyz"`
-
-### `PAIRING_NUMBER`
-- **Description**: Phone number for pairing code generation (without + or spaces)
-- **Format**: Country code + number (e.g., `254789462334`)
-- **Example**: `PAIRING_NUMBER="254789462334"`
+Configure your bot using environment variables in your cloud dashboard (Heroku, Koyeb, Render, Docker) or in a local `.env` file.
 
 ---
 
-## 🗄️ Database Configuration
+## 🔑 1. Authentication & Session
 
-### `DB_URL`
-- **Description**: SQLite database file path
-- **Default**: `./baileys_store.db`
-- **Example**: `DB_URL="./baileys_store.db"`
-
-### `MONGO_URL`
-- **Description**: MongoDB connection string (for unlimited storage)
-- **Optional**: Yes
-- **Example**: `MONGO_URL="mongodb+srv://user:pass@cluster.mongodb.net/dbname"`
-
-### `POSTGRES_URL`
-- **Description**: PostgreSQL connection string (for unlimited storage)
-- **Optional**: Yes
-- **Example**: `POSTGRES_URL="postgresql://user:pass@host:5432/dbname"`
-
-### `MYSQL_URL`
-- **Description**: MySQL connection string (for unlimited storage)
-- **Optional**: Yes
-- **Example**: `MYSQL_URL="mysql://user:pass@host:3306/dbname"`
+| Variable | Type | Default | Description | Example |
+| :--- | :---: | :---: | :--- | :--- |
+| `SESSION_ID` | **String** | *Required* | Authentication session string from pairing scanner | `pgwiz_PGWIZ-MD_xxxx...` |
+| `PAIRING_NUMBER` | **String** | `""` | Phone number without `+` for terminal pairing code | `254718252555` |
+| `FORCE_SESSION_RESET` | **Boolean** | `false` | Wipe local session files on boot (recovery only) | `false` |
 
 ---
 
-## 🌐 Server Configuration
+## 🗄️ 2. Database & Server
 
-### `PORT`
-- **Description**: HTTP server port
-- **Default**: `5000`
-- **Example**: `PORT="5000"`
-
----
-
-## 📱 Auto Status Configuration
-
-### `AUTO_STATUS_VIEW`
-- **Description**: Automatically view all WhatsApp statuses
-- **Values**: `"true"` or `"false"`
-- **Default**: `"true"`
-- **Example**: `AUTO_STATUS_VIEW="true"`
-
-### `AUTO_STATUS_REACT`
-- **Description**: Automatically react to all WhatsApp statuses
-- **Values**: `"true"` or `"false"`
-- **Default**: `"true"`
-- **Example**: `AUTO_STATUS_REACT="true"`
-
-### `STATUS_EMOJIS`
-- **Description**: Comma-separated list of emojis for status reactions
-- **Default**: `"💙,🖤,⭐"`
-- **Example**: `STATUS_EMOJIS="💙,🖤,⭐,✨"`
-
-### `AUTOREAD`
-- **Description**: Automatically mark incoming messages as read
-- **Values**: `"true"` or `"false"`
-- **Default**: `"false"`
-- **Example**: `AUTOREAD="false"`
-
-### `AUTOTYPING`
-- **Description**: Automatically show typing indicator while processing messages
-- **Values**: `"true"` or `"false"`
-- **Default**: `"false"`
-- **Example**: `AUTOTYPING="false"`
-
-### `ANTICALL`
-- **Description**: Automatically reject incoming calls and block callers
-- **Values**: `"true"` or `"false"`
-- **Default**: `"false"`
-- **Example**: `ANTICALL="false"`
-
-### `ANTIDELETE`
-- **Description**: Restore deleted messages automatically
-- **Values**: `"true"` or `"false"`
-- **Default**: `"false"`
-- **Example**: `ANTIDELETE="false"`
-
-### `AUTOREACT`
-- **Description**: Automatically react to incoming chat messages
-- **Values**: `"true"` or `"false"`
-- **Default**: `"false"`
-- **Example**: `AUTOREACT="false"`
-
-### `ALWAYS_ONLINE`
-- **Description**: Keep bot presence online continuously
-- **Values**: `"true"` or `"false"`
-- **Default**: `"false"`
-- **Example**: `ALWAYS_ONLINE="true"`
-
-### `FORCE_SESSION_RESET`
-- **Description**: Force full session reset at startup
-- **Values**: `"true"` or `"false"`
-- **Default**: `"false"`
-- **Example**: `FORCE_SESSION_RESET="true"`
-- **Note**: Best used as a one-time recovery toggle, then switch back to `"false"`
+| Variable | Type | Default | Description | Example |
+| :--- | :---: | :---: | :--- | :--- |
+| `PORT` | **Number** | `5000` | HTTP server port for cloud health checks (`/healthz`, `/ping`) | `5000` |
+| `DB_URL` | **String** | `"./baileys_store.db"` | Database backend connection string or file path | `./baileys_store.db` |
+| `MONGO_URL` | **String** | `""` | Optional MongoDB connection URL for persistent cloud storage | `mongodb+srv://...` |
+| `POSTGRES_URL` | **String** | `""` | Optional PostgreSQL connection URL | `postgresql://...` |
+| `MYSQL_URL` | **String** | `""` | Optional MySQL connection URL | `mysql://...` |
 
 ---
 
-## 👑 Sudo Users Configuration
+## 🌐 3. Regional & Bot Identity
 
-### `SUDO_USERS`
-- **Description**: Comma-separated list of phone numbers with elevated privileges
-- **Format**: Country code + number (without + or spaces)
-- **Optional**: Yes
-- **Example**: `SUDO_USERS="254789462334,1234567890,9876543210"`
-
-**What Sudo Users Can Do:**
-- Use owner-only commands (except strict owner commands like `.sudo`)
-- Bypass private mode restrictions
-- Manage groups, settings, and features
-- Almost like being the owner
+| Variable | Type | Default | Description | Example |
+| :--- | :---: | :---: | :--- | :--- |
+| `TIMEZONE` / `TZ` | **String** | `"Africa/Nairobi"` | Global bot timezone for logs, status clocks, and dates | `Africa/Nairobi` |
+| `BOT_NAME` | **String** | `"PGWIZ-MD"` | Bot display name on menus and captions | `PGWIZ-MD` |
+| `BOT_OWNER` | **String** | `"pgwiz"` | Owner display name | `pgwiz` |
+| `PREFIX` | **String** | `"."` | Primary command prefix | `.` |
+| `OWNER_NUMBER` | **String** | `""` | Comma-separated list of owner numbers with country code | `254718252555,254789462334` |
+| `SUDO_USERS` | **String** | `""` | Comma-separated phone numbers with elevated privileges | `254718252555,62561080893516` |
 
 ---
 
-## 🔑 API Keys
+## 🤖 4. Automations & Feature Flags
 
-### `REMOVEBG_KEY`
-- **Description**: Remove.bg API key for background removal
-- **Optional**: Yes
-- **Example**: `REMOVEBG_KEY="your_api_key_here"`
-
----
-
-## 📝 Example `.env` File
-
-```env
-# Authentication
-SESSION_ID="PGWIZ_MD_abc123xyz"
-PAIRING_NUMBER="254789462334"
-
-# Database
-DB_URL="./baileys_store.db"
-# MONGO_URL="mongodb+srv://user:pass@cluster.mongodb.net/dbname"
-
-# Server
-PORT="5000"
-
-# Auto Status
-AUTO_STATUS_VIEW="true"
-AUTO_STATUS_REACT="true"
-STATUS_EMOJIS="💙,🖤,⭐"
-AUTOREAD="false"
-AUTOTYPING="false"
-ANTICALL="false"
-ANTIDELETE="false"
-AUTOREACT="false"
-ALWAYS_ONLINE="false"
-
-# Session recovery
-FORCE_SESSION_RESET="false"
-
-# Sudo Users
-SUDO_USERS="254789462334,1234567890"
-
-# API Keys
-REMOVEBG_KEY="your_api_key_here"
-```
+| Variable | Type | Default | Description | Example |
+| :--- | :---: | :---: | :--- | :--- |
+| `MODE` / `WORK_TYPE` | **String** | `"public"` | Access mode: `public`, `private`, `groups`, `inbox` | `public` |
+| `AUTO_STATUS_VIEW` | **Boolean** | `true` | Automatically mark contact statuses as viewed | `true` |
+| `AUTO_STATUS_REACT` | **Boolean** | `true` | Automatically react to contact statuses with emojis | `true` |
+| `STATUS_EMOJIS` | **String** | `"💯,❤️,🔥,✨,🌟,⚡"` | Comma-separated emojis for auto status reactions | `"💯,🔥,⚡,✨"` |
+| `AUTOSTATUS_IGNORE` | **String** | `""` | Comma-separated contact numbers to skip from status view/react | `254712345678,254798765432` |
+| `AUTOREAD` | **Boolean** | `false` | Automatically mark incoming chat messages as read (blue ticks) | `false` |
+| `AUTOTYPING` | **Boolean** | `false` | Simulate typing indicator when executing commands | `false` |
+| `AUTOREACT` | **Boolean** | `false` | Automatically react to incoming messages with emojis | `false` |
+| `ANTICALL` | **Boolean** | `false` | Automatically decline and reject incoming WhatsApp calls | `false` |
+| `ANTIDELETE` | **Boolean** | `false` | Automatically resend deleted messages to owner or group | `false` |
+| `ALWAYS_ONLINE` | **Boolean** | `false` | 24/7 online presence broadcast (set `false` for battery/notifications) | `false` |
+| `PRESENCE_MODE` | **String** | `"available"` | Default presence: `available`, `unavailable`, `composing`, `recording` | `available` |
+| `AUTO_PRESENCE` | **String** | `"off"` | Presence during message handling: `off`, `typing`, `recording`, `online` | `off` |
+| `DISABLED_GROUPS` | **String** | `""` | Comma-separated list of group JIDs/IDs where bot is disabled | `120363306092749988,120363123456789` |
 
 ---
 
-## 🚀 How It Works
+## ☁️ 5. Cloud Platform Sync & API Keys (Optional)
 
-### **Bidirectional Sync** 🔄
-
-The bot now supports **two-way synchronization** between `.env` file and the database/config files:
-
-#### **📥 Read from `.env` (Initialization)**
-
-When you start the bot for the **first time** (no existing database or config files):
-
-1. **Auto Status**: 
-   - Reads `AUTO_STATUS_VIEW` and `AUTO_STATUS_REACT` from `.env`
-   - Initializes settings in database/config files
-   - Logs: `[AUTOSTATUS] Initialized from environment variables`
-
-2. **Sudo Users**:
-   - Reads `SUDO_USERS` from `.env`
-   - Parses comma-separated phone numbers
-   - Adds them to database/config files
-   - Logs: `[SUDO] Initialized from environment variables`
-
-#### **📤 Write to `.env` (Sync Back)**
-
-When you change settings via bot commands:
-
-1. **Auto Status Commands** (`.autostatus on/off`, `.autostatus react on/off`):
-   - Updates database/config files
-   - **Automatically writes back to `.env`**
-   - Updates `AUTO_STATUS_VIEW` and `AUTO_STATUS_REACT`
-   - Logs: `[ENV] Updated AUTO_STATUS_VIEW="true"`
-
-2. **Sudo Commands** (`.sudo add`, `.sudo del`):
-   - Updates database/config files
-   - **Automatically writes back to `.env`**
-   - Updates `SUDO_USERS` with current list
-   - Logs: `[ENV] Updated SUDO_USERS="254789462334,1234567890"`
-
-#### **✨ Benefits**
-
-- ✅ **Always in Sync**: `.env` file always reflects current settings
-- ✅ **Portable**: Copy `.env` to another deployment and settings carry over
-- ✅ **Transparent**: See current configuration at a glance
-- ✅ **No Manual Editing**: Bot manages `.env` for you
-
----
-
-## 📝 Example Workflow
-
-### Initial Setup
-
-1. **Edit `.env`**:
-```env
-AUTO_STATUS_VIEW="true"
-AUTO_STATUS_REACT="true"
-SUDO_USERS="254789462334,1234567890"
-```
-
-2. **Start Bot**:
-```bash
-npm start
-```
-
-3. **Bot Logs**:
-```
-[AUTOSTATUS] Initialized from environment variables: { enabled: true, reactOn: true }
-[SUDO] Initialized from environment variables: [ '254789462334@s.whatsapp.net', '1234567890@s.whatsapp.net' ]
-```
-
-### Changing Settings via Commands
-
-1. **Disable Auto React**:
-```
-.autostatus react off
-```
-
-2. **Bot Updates `.env`**:
-```
-[ENV] Updated AUTO_STATUS_REACT="false"
-```
-
-3. **Your `.env` Now Shows**:
-```env
-AUTO_STATUS_VIEW="true"
-AUTO_STATUS_REACT="false"  # ← Automatically updated!
-SUDO_USERS="254789462334,1234567890"
-```
-
-### Adding Sudo User
-
-1. **Add User**:
-```
-.sudo add @user
-```
-
-2. **Bot Updates `.env`**:
-```
-[ENV] Updated SUDO_USERS="254789462334,1234567890,9876543210"
-```
-
-3. **Your `.env` Now Shows**:
-```env
-SUDO_USERS="254789462334,1234567890,9876543210"  # ← Automatically updated!
-```
-
----
-
-## 🔄 Re-initializing from Environment Variables
-
-You **don't need to** re-initialize anymore! The `.env` file is always kept in sync.
-
-However, if you want to force a reset:
-
-**Option 1: Delete database**
-```bash
-rm baileys_store.db
-```
-
-**Option 2: Delete config files**
-```bash
-rm data/autoStatus.json
-rm data/userGroupData.json
-```
-
-Then restart the bot, and it will read from `.env` again.
-
----
-
-## 💡 Tips
-
-1. **Always use quotes** around values in `.env` file
-2. **No spaces** in phone numbers (use `254789462334`, not `254 789 462 334`)
-3. **Comma-separated** for multiple values (no spaces after commas)
-4. **Restart the bot** after changing `.env` file
-5. **Delete database/config files** to re-initialize from `.env` (⚠️ This will reset all settings!)
-
----
-
-## 🔄 Re-initializing from Environment Variables
-
-If you want to reset and re-initialize from `.env`:
-
-**With Database:**
-```bash
-# Delete the database
-rm baileys_store.db
-# Restart bot
-```
-
-**With File System:**
-```bash
-# Delete config files
-rm data/autoStatus.json
-rm data/userGroupData.json
-# Restart bot
-```
-
----
-
-## 📞 Support
-
-For more help, join our WhatsApp channel:
-https://whatsapp.com/channel/0029Va8cpObHwXbDoZE9VY3K
+| Variable | Type | Default | Description | Example |
+| :--- | :---: | :---: | :--- | :--- |
+| `HEROKU_API_KEY` / `HKEY` | **String** | `""` | Heroku API Token for dynamic in-chat `.pgvars` sync | `HRKU-xxxx-xxxx` |
+| `HEROKU_APP_NAME` / `HAPP` | **String** | `""` | Heroku App Name | `my-pgwiz-bot` |
+| `KOYEB_API_TOKEN` / `K_TOKEN` | **String** | `""` | Koyeb API Token for dynamic in-chat `.pgvars` sync | `koyeb_api_tok_xxxx` |
+| `KOYEB_SERVICE_NAME` / `K_APP` | **String** | `""` | Koyeb Service / App Name | `pgwiz-service` |
+| `REMOVEBG_KEY` | **String** | `""` | API Key from remove.bg for HD background removal | `xxxx-xxxx` |
+| `GIPHY_API_KEY` | **String** | Provided | API Key for Giphy GIF search commands | `qnl7ssQChTdPjsKta2Ax2LMaGXz303tq` |
