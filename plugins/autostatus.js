@@ -187,8 +187,104 @@ setInterval(() => {
     if (reactedStatusKeys.size > 2000) reactedStatusKeys.clear();
 }, 60000);
 
+// Rich Status Event History & LID Discovery
+const statusStats = {
+    totalReceived: 0,
+    totalViewed: 0,
+    totalReacted: 0,
+    totalErrors: 0,
+    startTime: Date.now()
+};
+
+const distinctLids = new Map(); // participant -> { id, isLid, pushName, firstSeen, lastSeen, count, lastMsgId }
+const recentStatusHistory = []; // array of last 100 status items (newest at index 0)
+const MAX_HISTORY_ITEMS = 100;
+
 // In-memory cache of recent status messages per participant/number
 const recentStatusCache = new Map();
+
+function trackStatusEvent(msg, key, options = {}) {
+    if (!key || !key.id) return null;
+    const participant = key.participant || key.remoteJid;
+    if (!participant || participant === 'status@broadcast') return null;
+
+    statusStats.totalReceived++;
+
+    const isLid = participant.includes('@lid');
+    const pushName = msg?.pushName || null;
+    const now = Date.now();
+
+    // Update distinct participant record
+    const existing = distinctLids.get(participant) || {
+        id: participant,
+        isLid,
+        pushName: pushName,
+        firstSeen: new Date(now).toISOString(),
+        lastSeen: new Date(now).toISOString(),
+        count: 0,
+        lastMsgId: key.id
+    };
+    existing.count++;
+    existing.lastSeen = new Date(now).toISOString();
+    existing.lastMsgId = key.id;
+    if (pushName && !existing.pushName) existing.pushName = pushName;
+    distinctLids.set(participant, existing);
+
+    // Also index by phone number if present
+    const num = participant.split('@')[0];
+    if (num) {
+        recentStatusCache.set(num, key);
+    }
+    recentStatusCache.set(participant, key);
+    if (recentStatusCache.size > 500) {
+        const firstKey = recentStatusCache.keys().next().value;
+        recentStatusCache.delete(firstKey);
+    }
+
+    // Extract message preview
+    let msgType = 'unknown';
+    let textPreview = '';
+    if (msg?.message) {
+        const typeKey = Object.keys(msg.message)[0];
+        msgType = typeKey;
+        if (typeKey === 'imageMessage') {
+            textPreview = msg.message.imageMessage?.caption || '[Image Status]';
+        } else if (typeKey === 'videoMessage') {
+            textPreview = msg.message.videoMessage?.caption || '[Video Status]';
+        } else if (typeKey === 'extendedTextMessage') {
+            textPreview = msg.message.extendedTextMessage?.text || '[Text Status]';
+        } else if (typeKey === 'audioMessage') {
+            textPreview = '[Audio/Voice Note Status]';
+        } else {
+            textPreview = `[${typeKey}]`;
+        }
+    }
+
+    const historyItem = {
+        id: key.id,
+        sender: participant,
+        isLid,
+        pushName,
+        type: msgType,
+        preview: (textPreview || '').substring(0, 120),
+        receivedAt: new Date(now).toISOString(),
+        timestampMs: now,
+        messageTimestamp: msg?.messageTimestamp ? Number(msg.messageTimestamp) : Math.floor(now / 1000),
+        viewStatus: options.viewStatus || 'pending',
+        reactStatus: options.reactStatus || 'pending',
+        strategyUsed: options.strategyUsed || null,
+        emojiUsed: options.emojiUsed || null,
+        error: options.error || null
+    };
+
+    recentStatusHistory.unshift(historyItem);
+    if (recentStatusHistory.length > MAX_HISTORY_ITEMS) {
+        recentStatusHistory.pop();
+    }
+
+    return historyItem;
+}
+
 function cacheRecentStatus(key) {
     if (!key || !key.id) return;
     const participant = key.participant || key.remoteJid;
@@ -429,12 +525,16 @@ async function handleStatusUpdate(sock, status) {
             if (reactedStatusKeys.has(msgId)) return;
             reactedStatusKeys.add(msgId);
 
-            // Cache for dev/debug lookup
-            cacheRecentStatus(key);
+            // Track status event and discover sender LID/JID
+            const historyEntry = trackStatusEvent(msg, key);
 
             // Check ignore list
             const senderNum = (key.participant || '').split('@')[0];
             if (senderNum && ignoreList.includes(senderNum)) {
+                if (historyEntry) {
+                    historyEntry.viewStatus = 'ignored';
+                    historyEntry.reactStatus = 'ignored';
+                }
                 return;
             }
 
@@ -444,23 +544,58 @@ async function handleStatusUpdate(sock, status) {
                 actions.push(
                     sock.readMessages([key])
                         .then(() => {
+                            statusStats.totalViewed++;
+                            if (historyEntry) historyEntry.viewStatus = 'viewed';
                             console.log(`[AUTOSTATUS] 👀 Viewed status ${key.id} from ${key.participant || 'contact'}`);
                         })
                         .catch(async (err) => {
                             if (err.message?.includes('rate-overlimit')) {
                                 await new Promise(res => setTimeout(res, 1500));
-                                return sock.readMessages([key]).catch(() => {});
+                                return sock.readMessages([key])
+                                    .then(() => {
+                                        statusStats.totalViewed++;
+                                        if (historyEntry) historyEntry.viewStatus = 'viewed';
+                                    })
+                                    .catch(() => {
+                                        if (historyEntry) historyEntry.viewStatus = 'failed';
+                                    });
                             }
+                            if (historyEntry) historyEntry.viewStatus = 'failed';
                         })
                 );
+            } else {
+                if (historyEntry) historyEntry.viewStatus = 'disabled';
             }
 
             if (config.react) {
+                const strat = Number(config.strategy) || 10;
+                const emoji = getStatusEmoji(config);
+                if (historyEntry) {
+                    historyEntry.strategyUsed = strat;
+                    historyEntry.emojiUsed = emoji;
+                }
                 actions.push(
-                    reactToStatus(sock, key).catch(err => {
-                        console.error(`[AUTOSTATUS] ❌ React error for ${key.id}:`, err.message);
-                    })
+                    reactToStatus(sock, key, emoji, strat)
+                        .then((success) => {
+                            if (success) {
+                                statusStats.totalReacted++;
+                                if (historyEntry) historyEntry.reactStatus = 'reacted';
+                            } else {
+                                statusStats.totalErrors++;
+                                if (historyEntry) historyEntry.reactStatus = 'failed';
+                            }
+                        })
+                        .catch(err => {
+                            statusStats.totalErrors++;
+                            if (historyEntry) {
+                                historyEntry.reactStatus = 'failed';
+                                historyEntry.error = err.message;
+                            }
+                            console.error(`[AUTOSTATUS] ❌ React error for ${key.id}:`, err.message);
+                        })
                 );
+            } else {
+                if (historyEntry) historyEntry.reactStatus = 'disabled';
             }
 
             await Promise.allSettled(actions);
@@ -871,6 +1006,71 @@ module.exports = {
         }
     },
 
+    async getStatusDebugInfo() {
+        try {
+            const config = await readConfig();
+            const ignoreList = await getCachedIgnoreList();
+            const sock = global.botInstance;
+            const uptimeSec = Math.floor(process.uptime());
+
+            const distinctList = Array.from(distinctLids.values()).sort((a, b) => new Date(b.lastSeen) - new Date(a.lastSeen));
+            const lidCount = distinctList.filter(d => d.isLid).length;
+            const phoneCount = distinctList.filter(d => !d.isLid).length;
+
+            const botJid = sock?.user?.id ? sock.user.id.replace(/:\d+@/, '@') : null;
+            const botLid = sock?.user?.lid ? sock.user.lid.replace(/:\d+@/, '@') : null;
+
+            return {
+                success: true,
+                timestamp: new Date().toISOString(),
+                server: {
+                    uptimeSeconds: uptimeSec,
+                    uptimeFormatted: `${Math.floor(uptimeSec / 3600)}h ${Math.floor((uptimeSec % 3600) / 60)}m ${uptimeSec % 60}s`,
+                    nodeVersion: process.version,
+                    platform: process.platform,
+                    memory: {
+                        rssMb: Math.round(process.memoryUsage().rss / (1024 * 1024)),
+                        heapUsedMb: Math.round(process.memoryUsage().heapUsed / (1024 * 1024))
+                    }
+                },
+                bot: {
+                    connected: !!(sock && sock.user),
+                    id: botJid,
+                    lid: botLid,
+                    name: sock?.user?.name || settings.botName || 'PGWIZ-MD'
+                },
+                autostatus: {
+                    view: config.view,
+                    react: config.react,
+                    reaction: config.reaction,
+                    strategy: config.strategy,
+                    strategyName: STRATEGY_DESCRIPTIONS[config.strategy] || 'Unknown Strategy',
+                    ignoreList,
+                    storageType: HAS_DB ? 'Database' : 'Local File'
+                },
+                statistics: {
+                    totalReceived: statusStats.totalReceived,
+                    totalViewed: statusStats.totalViewed,
+                    totalReacted: statusStats.totalReacted,
+                    totalErrors: statusStats.totalErrors,
+                    distinctSenders: distinctList.length,
+                    distinctLidsCount: lidCount,
+                    distinctPhoneCount: phoneCount
+                },
+                distinctLids: distinctList,
+                recentStatuses: recentStatusHistory.slice(0, 50),
+                strategies: STRATEGY_DESCRIPTIONS,
+                defaultEmojis: STRATEGY_DEFAULT_EMOJIS
+            };
+        } catch (e) {
+            return {
+                success: false,
+                error: e.message,
+                timestamp: new Date().toISOString()
+            };
+        }
+    },
+
     handleStatusUpdate,
     isAutoStatusEnabled,
     isStatusReactionEnabled,
@@ -879,5 +1079,11 @@ module.exports = {
     readConfig,
     writeConfig,
     STRATEGY_DESCRIPTIONS,
-    STRATEGY_DEFAULT_EMOJIS
+    STRATEGY_DEFAULT_EMOJIS,
+    statusStats,
+    distinctLids,
+    recentStatusHistory,
+    recentStatusCache,
+    cacheRecentStatus
 };
+
