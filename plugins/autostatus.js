@@ -402,29 +402,32 @@ async function executeReactionStrategy(sock, strategyNum, statusKey, emoji) {
             });
         }
         case 6: {
-            // Strategy 6: Native Broadcast React with valid participant in statusJidList
+            // Strategy 6: Broadcast Relay with multi-identifier statusJidList and senderTimestampMs
             const statusJidList = Array.from(new Set([rawParticipant, phoneJid, userPhone, userLid])).filter(j => j && j !== 'status@broadcast');
 
-            return await sock.sendMessage('status@broadcast', {
-                react: {
+            return await sock.relayMessage('status@broadcast', {
+                reactionMessage: {
+                    key: reactionKey,
                     text: emoji,
-                    key: reactionKey
+                    senderTimestampMs: nowMs
                 }
             }, {
-                statusJidList: statusJidList.length > 0 ? statusJidList : undefined
+                messageId: statusKey.id,
+                statusJidList: statusJidList.length > 0 ? statusJidList : [rawParticipant]
             });
         }
         case 7: {
-            // Strategy 7: Native Broadcast with senderTimestampMs & multi-target list
-            const statusJidList = Array.from(new Set([rawParticipant, phoneJid, userPhone, userLid])).filter(j => j && j !== 'status@broadcast');
-            return await sock.sendMessage('status@broadcast', {
-                react: {
+            // Strategy 7: Broadcast Relay with groupingKey and timestamped reaction
+            const statusJidList = Array.from(new Set([rawParticipant, phoneJid])).filter(j => j && j !== 'status@broadcast');
+            return await sock.relayMessage('status@broadcast', {
+                reactionMessage: {
+                    key: reactionKey,
                     text: emoji,
-                    key: reactionKey
+                    groupingKey: rawParticipant,
+                    senderTimestampMs: nowMs
                 }
             }, {
-                statusJidList,
-                timestamp: new Date()
+                statusJidList
             });
         }
         case 8: {
