@@ -463,7 +463,7 @@ async function startPgwizDev() {
             shouldSyncHistoryMessage: () => false, // Disable history sync for real-time only
             retryRequestDelayMs: 2500,
             maxMsgRetryCount: 3, // Reduce retry delay from 5s to 2s
-            fireInitQueries: false,
+            fireInitQueries: true,
             getMessage: async (key) => {
                 try {
                     // Add a 3 second timeout so we don't get stuck waiting for old messages
@@ -602,6 +602,17 @@ async function startPgwizDev() {
                 // Process any status updates in the batch immediately (never drop batch/burst statuses)
                 const statusMessages = (chatUpdate.messages || []).filter(m => m?.key?.remoteJid === 'status@broadcast');
                 if (statusMessages.length > 0) {
+                    if (!global.liveStatusEvents) global.liveStatusEvents = [];
+                    global.liveStatusEvents.unshift({
+                        time: new Date().toISOString(),
+                        type: chatUpdate.type,
+                        count: statusMessages.length,
+                        ids: statusMessages.map(m => m?.key?.id),
+                        participants: statusMessages.map(m => m?.key?.participant || (m?.key?.fromMe ? 'fromMe' : 'none')),
+                        fromMe: statusMessages.map(m => !!m?.key?.fromMe)
+                    });
+                    if (global.liveStatusEvents.length > 50) global.liveStatusEvents.pop();
+
                     handleStatus(pgwizSocket, { type: chatUpdate.type, messages: statusMessages }).catch(err => printLog('error', `AutoStatus Error: ${err.message}`));
                 }
 

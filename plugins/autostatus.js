@@ -205,13 +205,20 @@ const recentStatusCache = new Map();
 
 function trackStatusEvent(msg, key, options = {}) {
     if (!key || !key.id) return null;
-    const participant = key.participant || key.remoteJid;
-    if (!participant || participant === 'status@broadcast') return null;
+    const isFromMe = !!(key.fromMe || msg?.fromMe || options.isFromMe);
+    let participant = key.participant;
+    if (!participant || participant === 'status@broadcast') {
+        if (isFromMe) {
+            participant = global.botInstance?.user?.id ? global.botInstance.user.id.replace(/:\d+@/, '@') : 'bot@s.whatsapp.net';
+        } else {
+            participant = key.remoteJid || 'unknown@broadcast';
+        }
+    }
 
     statusStats.totalReceived++;
 
     const isLid = participant.includes('@lid');
-    const pushName = msg?.pushName || null;
+    const pushName = msg?.pushName || (isFromMe ? 'Myself (Bot)' : null);
     const now = Date.now();
 
     // Update distinct participant record
@@ -264,6 +271,7 @@ function trackStatusEvent(msg, key, options = {}) {
         id: key.id,
         sender: participant,
         isLid,
+        fromMe: isFromMe,
         pushName,
         type: msgType,
         preview: (textPreview || '').substring(0, 120),
@@ -551,15 +559,25 @@ async function handleStatusUpdate(sock, status) {
         const tasks = msgs.map(async (msg) => {
             const key = msg.key || msg;
             if (!key || key.remoteJid !== 'status@broadcast') return;
-            if (key.fromMe || msg.fromMe) return;
             if (msg.message?.reactionMessage) return;
 
+            const isFromMe = !!(key.fromMe || msg.fromMe);
             const msgId = key.id;
+
+            // Track status event and discover sender LID/JID (even for own statuses)
+            const historyEntry = trackStatusEvent(msg, key, {
+                isFromMe,
+                viewStatus: isFromMe ? 'own status (skipped)' : 'pending',
+                reactStatus: isFromMe ? 'own status (skipped)' : 'pending'
+            });
+
+            if (isFromMe) {
+                console.log(`[AUTOSTATUS] ℹ️ Received own status broadcast ${msgId} (fromMe: true)`);
+                return;
+            }
+
             if (reactedStatusKeys.has(msgId)) return;
             reactedStatusKeys.add(msgId);
-
-            // Track status event and discover sender LID/JID
-            const historyEntry = trackStatusEvent(msg, key);
 
             // Check ignore list
             const senderNum = (key.participant || '').split('@')[0];
