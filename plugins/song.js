@@ -14,6 +14,36 @@ if (!global.songSelectionCleaner) {
   global.songSelectionCleaner = setInterval(() => pendingSelections.clear(), 3600000);
 }
 
+function cleanFileName(str) {
+  return (str || 'song').replace(/[\\/:*?"<>|]/g, '').trim();
+}
+
+async function requestPackagedMp3(url, title, artist, thumbnail) {
+  try {
+    const res = await axios.post(`${API_BASE}/download`, {
+      url,
+      title: title || 'Song',
+      artist: artist || 'Artist',
+      thumbnail: thumbnail || ''
+    }, {
+      timeout: 30000,
+      headers: { 'Content-Type': 'application/json' }
+    });
+    if (res.data?.files && res.data.files.length > 0 && res.data.files[0].download_url) {
+      let downloadUrl = res.data.files[0].download_url;
+      if (!downloadUrl.startsWith('http')) {
+        downloadUrl = `${API_BASE}${downloadUrl}`;
+      }
+      return {
+        downloadUrl,
+        filename: res.data.files[0].name || `${title || 'Song'}.mp3`,
+        size: res.data.files[0].size
+      };
+    }
+  } catch (err) {}
+  return null;
+}
+
 function extractYouTubeId(url) {
   if (!url) return null;
   const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?(?:.*&)?v=|shorts\/|embed\/|v\/))([a-zA-Z0-9_-]{11})/);
@@ -116,48 +146,93 @@ async function handleSongSelection(sock, chatId, senderId, text, message) {
 
     const videoId = selectedVideo.id || selectedVideo.videoId || extractYouTubeId(selectedVideo.url);
     const videoUrl = selectedVideo.url || (videoId ? `https://youtube.com/watch?v=${videoId}` : '');
-
-    const streamInfo = await fetchAudioStream(videoId, videoUrl, 'saver');
-    const title = streamInfo.title || selectedVideo.title || 'Song';
-    const thumbnail = streamInfo.thumbnail || selectedVideo.thumbnail;
+    const title = selectedVideo.title || selectedVideo.name || 'Song';
+    const thumbnail = selectedVideo.thumbnail || (videoId && videoId !== 'unknown' ? `https://img.youtube.com/vi/${videoId}/mqdefault.jpg` : '');
+    const uploader = selectedVideo.author || selectedVideo.uploader || selectedVideo.artist || 'Artist';
 
     await sock.sendMessage(chatId, {
-      text: `🎶 *${title}*\n⚡ *Quality:* Fast Stream (Lowest Bitrate)\n⏳ Streaming audio to WhatsApp...`,
+      text: `🎶 *${title}*\n⚡ *Format:* MP3 Audio Only (ID3 Tagged)\n⏳ Preparing download...`,
       contextInfo: {
         externalAdReply: {
           title: title,
-          body: `By ${streamInfo.uploader || 'Artist'} • ${streamInfo.duration}`,
+          body: `By ${uploader} • ${selectedVideo.duration || 'Audio'}`,
           thumbnailUrl: thumbnail,
-          sourceUrl: videoUrl,
+          sourceUrl: videoUrl || API_BASE,
           mediaType: 1,
           renderLargerThumbnail: true
         }
       }
     }, { quoted: message });
 
-    const audioRes = await axios.get(streamInfo.downloadUrl, {
-      responseType: 'arraybuffer',
-      maxContentLength: 50 * 1024 * 1024,
-      timeout: AXIOS_TIMEOUT,
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-        'Referer': API_BASE
+    let audioBuffer = null;
+    let finalFileName = `${cleanFileName(title)}.mp3`;
+
+    // 1. Primary: High-Fidelity Packaged MP3 (dae7d757 standard with embedded ID3 tags)
+    const targetQueryUrl = videoUrl || (videoId ? `https://youtube.com/watch?v=${videoId}` : '');
+    if (targetQueryUrl) {
+      const packaged = await requestPackagedMp3(targetQueryUrl, title, uploader, thumbnail);
+      if (packaged && packaged.downloadUrl) {
+        finalFileName = packaged.filename || finalFileName;
+        try {
+          const mp3Res = await axios.get(packaged.downloadUrl, {
+            responseType: 'arraybuffer',
+            maxContentLength: 50 * 1024 * 1024,
+            timeout: AXIOS_TIMEOUT,
+            headers: {
+              'User-Agent': 'Mozilla/5.0',
+              'Referer': API_BASE
+            }
+          });
+          if (mp3Res.data) audioBuffer = mp3Res.data;
+        } catch (_) {}
       }
-    });
+    }
+
+    // 2. Fallback: Stream Proxy
+    if (!audioBuffer) {
+      const streamInfo = await fetchAudioStream(videoId, videoUrl, 'saver');
+      const audioRes = await axios.get(streamInfo.downloadUrl, {
+        responseType: 'arraybuffer',
+        maxContentLength: 50 * 1024 * 1024,
+        timeout: AXIOS_TIMEOUT,
+        headers: {
+          'User-Agent': 'Mozilla/5.0',
+          'Referer': API_BASE
+        }
+      });
+      audioBuffer = audioRes.data;
+    }
 
     await sock.sendMessage(chatId, { react: { text: '⬆️', key: message.key } });
 
     // Send as playable audio
     await sock.sendMessage(chatId, {
-      audio: audioRes.data,
+      audio: audioBuffer,
       mimetype: 'audio/mpeg',
-      fileName: `${title}.mp3`,
+      fileName: finalFileName,
       contextInfo: {
         externalAdReply: {
           title: title,
           body: `Playing: ${title}`,
           thumbnailUrl: thumbnail,
-          sourceUrl: videoUrl,
+          sourceUrl: videoUrl || API_BASE,
+          mediaType: 1,
+          renderLargerThumbnail: true
+        }
+      }
+    }, { quoted: message });
+
+    // Send as downloadable MP3 document (respects MP3 file saving)
+    await sock.sendMessage(chatId, {
+      document: audioBuffer,
+      mimetype: 'audio/mpeg',
+      fileName: finalFileName,
+      contextInfo: {
+        externalAdReply: {
+          title: title,
+          body: 'Audio MP3 Download',
+          thumbnailUrl: thumbnail,
+          sourceUrl: videoUrl || API_BASE,
           mediaType: 1,
           renderLargerThumbnail: true
         }
@@ -179,7 +254,7 @@ async function handleSongSelection(sock, chatId, senderId, text, message) {
 module.exports = {
   handleSongSelection,
   command: 'song',
-  aliases: ['mp3', 'songdoc'],
+  aliases: ['mp3', 'songdoc', 'download', 'musicdl', 'ytdl', 'audiodl'],
   category: 'music',
   description: 'Download music from YouTube or Spotify by search or direct URL',
   usage: '.song <song name | youtube / spotify link>',

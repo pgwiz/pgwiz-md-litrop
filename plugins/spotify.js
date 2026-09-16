@@ -132,22 +132,53 @@ module.exports = {
 
       await sock.sendMessage(chatId, { react: { text: '⬇️', key: message.key } });
 
-      const audioBuffer = await axios.get(proxyUrl, {
-        responseType: 'arraybuffer',
-        timeout: AXIOS_TIMEOUT,
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-          'Referer': API_BASE
+      let audioData = null;
+      let fileName = `${cleanFileName(finalTitle)} - ${cleanFileName(finalArtist)}.mp3`;
+
+      // 1. Primary: Server-side packaged MP3 (dae7d757 standard with embedded ID3 tags)
+      try {
+        const packRes = await axios.post(`${API_BASE}/download`, {
+          url: targetUrl,
+          title: finalTitle,
+          artist: finalArtist,
+          thumbnail: finalThumbnail
+        }, {
+          timeout: 30000,
+          headers: { 'Content-Type': 'application/json' }
+        });
+        if (packRes.data?.files?.[0]?.download_url) {
+          let dl = packRes.data.files[0].download_url;
+          if (!dl.startsWith('http')) dl = `${API_BASE}${dl}`;
+          fileName = packRes.data.files[0].name || fileName;
+          const dlRes = await axios.get(dl, {
+            responseType: 'arraybuffer',
+            timeout: AXIOS_TIMEOUT,
+            headers: { 'User-Agent': 'Mozilla/5.0', 'Referer': API_BASE }
+          });
+          if (dlRes.data) audioData = dlRes.data;
         }
-      });
+      } catch (pErr) {
+        console.warn('[Spotify Packager Fallback]:', pErr.message);
+      }
+
+      // 2. Fallback to direct stream proxy
+      if (!audioData) {
+        const fbRes = await axios.get(proxyUrl, {
+          responseType: 'arraybuffer',
+          timeout: AXIOS_TIMEOUT,
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+            'Referer': API_BASE
+          }
+        });
+        audioData = fbRes.data;
+      }
 
       await sock.sendMessage(chatId, { react: { text: '⬆️', key: message.key } });
 
-      const fileName = `${cleanFileName(finalTitle)} - ${cleanFileName(finalArtist)}.mp3`;
-
       // 1. Send as Playable Audio Stream
       await sock.sendMessage(chatId, {
-        audio: audioBuffer.data,
+        audio: audioData,
         mimetype: 'audio/mpeg',
         fileName: fileName,
         contextInfo: {
@@ -164,7 +195,7 @@ module.exports = {
 
       // 2. Send as Downloadable Document File
       await sock.sendMessage(chatId, {
-        document: audioBuffer.data,
+        document: audioData,
         mimetype: 'audio/mpeg',
         fileName: fileName,
         contextInfo: {

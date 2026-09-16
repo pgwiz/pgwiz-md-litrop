@@ -13,7 +13,7 @@ function extractYouTubeId(url) {
 
 module.exports = {
   command: 'video',
-  aliases: ['ytmp4', 'ytvideo', 'ytdl', 'ytvid', 'ytv', 'playvid'],
+  aliases: ['ytmp4', 'ytvideo', 'ytvid', 'ytv', 'playvid'],
   category: 'download',
   description: 'Download YouTube videos in fast/lowest (360p) or HD (720p) quality',
   usage: '.video <youtube link | search query> [hd|720p]',

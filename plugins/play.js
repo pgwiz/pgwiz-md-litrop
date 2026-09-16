@@ -5,6 +5,36 @@ try { yts = require('yt-search'); } catch { try { yts = require('youtube-yts'); 
 const API_BASE = 'https://ytsp-api.pgwiz.cloud';
 const AXIOS_TIMEOUT = 60000;
 
+function cleanFileName(str) {
+  return (str || 'song').replace(/[\\/:*?"<>|]/g, '').trim();
+}
+
+async function requestPackagedMp3(url, title, artist, thumbnail) {
+  try {
+    const res = await axios.post(`${API_BASE}/download`, {
+      url,
+      title: title || 'Song',
+      artist: artist || 'Artist',
+      thumbnail: thumbnail || ''
+    }, {
+      timeout: 30000,
+      headers: { 'Content-Type': 'application/json' }
+    });
+    if (res.data?.files && res.data.files.length > 0 && res.data.files[0].download_url) {
+      let downloadUrl = res.data.files[0].download_url;
+      if (!downloadUrl.startsWith('http')) {
+        downloadUrl = `${API_BASE}${downloadUrl}`;
+      }
+      return {
+        downloadUrl,
+        filename: res.data.files[0].name || `${cleanFileName(title)}.mp3`,
+        size: res.data.files[0].size
+      };
+    }
+  } catch (err) {}
+  return null;
+}
+
 function extractYouTubeId(url) {
   if (!url) return null;
   const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?(?:.*&)?v=|shorts\/|embed\/|v\/))([a-zA-Z0-9_-]{11})/);
@@ -173,29 +203,74 @@ module.exports = {
 
       await sock.sendMessage(chatId, { react: { text: '⬇️', key: message.key } });
 
-      const audioBuffer = await axios.get(proxyUrl, {
-        responseType: 'arraybuffer',
-        maxContentLength: 50 * 1024 * 1024,
-        timeout: AXIOS_TIMEOUT,
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-          'Referer': API_BASE
+      let audioData = null;
+      let finalFileName = `${cleanFileName(finalTitle)}.mp3`;
+
+      // 1. Primary: Server-side packaged MP3 (dae7d757 standard with embedded ID3 tags)
+      const targetQueryUrl = directUrl || (targetVideoId ? `https://youtube.com/watch?v=${targetVideoId}` : '');
+      if (targetQueryUrl) {
+        const packaged = await requestPackagedMp3(targetQueryUrl, finalTitle, finalUploader, finalThumbnail);
+        if (packaged && packaged.downloadUrl) {
+          finalFileName = packaged.filename || finalFileName;
+          try {
+            const mp3Res = await axios.get(packaged.downloadUrl, {
+              responseType: 'arraybuffer',
+              maxContentLength: 50 * 1024 * 1024,
+              timeout: AXIOS_TIMEOUT,
+              headers: {
+                'User-Agent': 'Mozilla/5.0',
+                'Referer': API_BASE
+              }
+            });
+            if (mp3Res.data) audioData = mp3Res.data;
+          } catch (_) {}
         }
-      });
+      }
+
+      // 2. Fallback: Stream Proxy
+      if (!audioData) {
+        const streamRes = await axios.get(proxyUrl, {
+          responseType: 'arraybuffer',
+          maxContentLength: 50 * 1024 * 1024,
+          timeout: AXIOS_TIMEOUT,
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+            'Referer': API_BASE
+          }
+        });
+        audioData = streamRes.data;
+      }
 
       await sock.sendMessage(chatId, { react: { text: '⬆️', key: message.key } });
 
       // Send as playable audio
       await sock.sendMessage(chatId, {
-        audio: audioBuffer.data,
+        audio: audioData,
         mimetype: 'audio/mpeg',
-        fileName: `${finalTitle}.mp3`,
+        fileName: finalFileName,
         contextInfo: {
           externalAdReply: {
             title: finalTitle,
             body: `Now Playing • ${finalDuration}`,
             thumbnailUrl: finalThumbnail,
-            sourceUrl: directUrl || `https://youtube.com/watch?v=${targetVideoId}`,
+            sourceUrl: directUrl || (targetVideoId ? `https://youtube.com/watch?v=${targetVideoId}` : API_BASE),
+            mediaType: 1,
+            renderLargerThumbnail: true
+          }
+        }
+      }, { quoted: message });
+
+      // Send as downloadable MP3 document (respects MP3 file saving)
+      await sock.sendMessage(chatId, {
+        document: audioData,
+        mimetype: 'audio/mpeg',
+        fileName: finalFileName,
+        contextInfo: {
+          externalAdReply: {
+            title: finalTitle,
+            body: `Audio MP3 • ${finalDuration}`,
+            thumbnailUrl: finalThumbnail,
+            sourceUrl: directUrl || (targetVideoId ? `https://youtube.com/watch?v=${targetVideoId}` : API_BASE),
             mediaType: 1,
             renderLargerThumbnail: true
           }
