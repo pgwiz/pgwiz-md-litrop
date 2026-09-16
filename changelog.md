@@ -17,10 +17,13 @@ All notable changes to the PGWIZ-MD multi-device WhatsApp bot project are docume
 ### Changed & Optimized
 - **Lowest-Quality Ultra-Fast Audio Streaming**: Updated `.play` and `.song` to default to `saver` quality (64k Data Saver) from `https://ytsp-api.pgwiz.cloud/`, saving 70%+ bandwidth and delivering instantaneous streaming playback.
 - **Video Downloader (`.video`)**: Defaults to 360p stream for minimal data usage and rapid uploads, with optional `hd`/`720p` parameter.
-- **Consolidated Redundant Plugins**:
+- **Consolidated Redundant Plugins & Dualities**:
   - Removed duplicate `a-ytmp4.js` in favor of unified `video.js`.
   - Consolidated `gitclone2.js` into enhanced `gitclone.js` with GitHub zipball streaming.
   - Renamed `a-clean.js` to `wipe.js` to eliminate alias collision with `clear.js`.
+  - Consolidated `removeplugin.js` into `delplugin.js` with core system plugin protection and commandHandler reload.
+  - Consolidated `developer.js` into `owner.js` with rich platform, bot version, and GitHub info.
+  - Consolidated `updateforce.js` into `update.js` supporting `--force` / `.updateforce` and removed colliding `reload`/`hotreload` aliases.
 - **MediaFire Downloader (`.mediafire`)**: Fixed missing top-level `axios` variable and added 80MB upload safeguard.
 - **Facebook Downloader (`.fb`)**: Integrated multi-engine fallbacks (Gifted, GuruAPI, GTech) with ascending quality sorting for fast SD delivery.
 - **Instagram Downloader (`.instagram`)**: Added GuruAPI fallback and improved error handling for Reels and posts.

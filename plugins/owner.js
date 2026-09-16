@@ -2,7 +2,7 @@ const settings = require('../settings');
 
 module.exports = {
   command: 'owner',
-  aliases: ['creator', 'developer', 'dev'],
+  aliases: ['creator', 'developer', 'dev', 'author'],
   category: 'info',
   description: 'Get developer & owner information',
   usage: '.owner',
@@ -11,11 +11,21 @@ module.exports = {
     const channelInfo = context.channelInfo || {};
 
     try {
-      const ownerText = `👑 *BOT OWNER & DEVELOPER INFO*\n\n` +
-                        `👤 *Owner:* ${settings.botOwner || 'pgwiz'}\n` +
-                        `🌐 *Official Platform:* https://pgwiz.cloud\n` +
-                        `📢 *WhatsApp Channel:* https://whatsapp.com/channel/0029Va8cpObHwXbDoZE9VY3K\n\n` +
-                        `🚀 Visit *https://pgwiz.cloud* to explore official tools, API services, and bot updates!`;
+      const ownerText = 
+`╔════════════════════════════════════╗
+║    👨‍💻 DEVELOPER & OWNER INFO       ║
+╚════════════════════════════════════╝
+
+👑 *Bot Owner:* ${settings.botOwner || 'pgwiz'}
+🤖 *Bot Name:* ${settings.botName || 'MEGA-MD'}
+💾 *Version:* ${settings.version || '5.0.0'}
+
+🌐 *Official Platform:* https://pgwiz.cloud
+🐙 *GitHub:* https://github.com/pgwiz
+📢 *WhatsApp Channel:* https://whatsapp.com/channel/0029Va8cpObHwXbDoZE9VY3K
+
+🚀 Visit *https://pgwiz.cloud* for tools, API services, and updates!
+════════════════════════════════════`;
 
       await sock.sendMessage(chatId, {
         text: ownerText,

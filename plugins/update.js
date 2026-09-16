@@ -201,22 +201,24 @@ function performHotReload() {
 
 module.exports = {
   command: 'update',
-  aliases: ['upgrade', 'hotreload', 'reload'],
+  aliases: ['upgrade', 'gitupdate', 'updateforce', 'forceupdate', 'forcupdate', 'forceupgrade'],
   category: 'owner',
-  description: 'Update bot files and hot-reload plugins without disconnecting',
-  usage: '.update [--cold|zip_url]',
+  description: 'Update bot files and hot-reload plugins without disconnecting (supports --force)',
+  usage: '.update [--cold|--force|zip_url]',
   ownerOnly: true,
 
   async handler(sock, message, args, context) {
     const { chatId, channelInfo } = context;
     const isColdRequested = args.includes('--cold') || args.includes('-c') || args.includes('cold') || args.includes('restart');
+    const bodyLower = (message.body || '').toLowerCase();
+    const isForceRequested = args.includes('--force') || args.includes('-f') || args.includes('force') || bodyLower.includes('updateforce') || bodyLower.includes('forceupdate') || bodyLower.includes('forcupdate') || bodyLower.includes('forceupgrade');
 
     try {
       const isHeroku = await isHerokuEnv();
       const deploymentType = isHeroku ? 'Heroku' : 'Git';
       
       const statusMsg = await sock.sendMessage(chatId, {
-        text: `🔄 *Checking for updates on ${deploymentType}…*`,
+        text: `🔄 *Checking for updates on ${deploymentType}${isForceRequested ? ' (FORCE MODE)' : ''}…*`,
         ...channelInfo
       }, { quoted: message });
 
@@ -234,12 +236,14 @@ module.exports = {
         try {
           const { oldRev, newRev, alreadyUpToDate, commits, files } = await updateViaGit();
 
-          if (alreadyUpToDate) {
+          if (alreadyUpToDate && !isForceRequested) {
             hasUpdates = false;
-            changesSummary = `✅ *Bot is already up to date!*\n📌 *Commit:* \`${newRev.substring(0, 7)}\`\n\n_No new updates available from remote._`;
+            changesSummary = `✅ *Bot is already up to date!*\n📌 *Commit:* \`${newRev.substring(0, 7)}\`\n\n_No new updates available from remote._\n_Use \`.update --force\` or \`.updateforce\` to force reset._`;
           } else {
             hasUpdates = true;
-            changesSummary = `✅ *Updated Successfully!*\n\n`;
+            changesSummary = (isForceRequested && alreadyUpToDate)
+              ? `⚡ *Force Reset Successfully!*\n📌 *HEAD:* \`${newRev.substring(0, 7)}\`\n\n_Repository cleanly reset to remote origin/main._\n\n`
+              : `✅ *Updated Successfully!*\n\n`;
             changesSummary += `📌 *Old:* \`${oldRev.substring(0, 7)}\`\n`;
             changesSummary += `📌 *New:* \`${newRev.substring(0, 7)}\`\n\n`;
 
