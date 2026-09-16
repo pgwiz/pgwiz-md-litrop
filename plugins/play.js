@@ -20,16 +20,20 @@ module.exports = {
 
   async handler(sock, message, args, context = {}) {
     const chatId = context.chatId || message.key.remoteJid;
-    const query = args.join(' ').trim();
+    const rawQuery = args.join(' ').trim();
 
-    if (!query) {
+    if (!rawQuery) {
       return await sock.sendMessage(chatId, {
-        text: '🎵 *Instant Music Player*\n\nUsage:\n• `.play <song name>` (e.g. `.play i feel it coming`)\n• `.play <youtube or spotify link>`'
+        text: '🎵 *Instant Music Player*\n\nUsage:\n• `.play <song name>` (Ultra-fast, lowest data)\n• `.play <song name> hd` (High quality)\n• `.play <youtube or spotify link>`'
       }, { quoted: message });
     }
 
     try {
       await sock.sendMessage(chatId, { react: { text: '🔍', key: message.key } });
+
+      const isHd = /\b(hd|high|320k?)\b/i.test(rawQuery);
+      const query = rawQuery.replace(/\b(hd|high|320k?)\b/gi, '').trim();
+      const targetQuality = isHd ? 'audio_high' : 'saver';
 
       let targetVideoId = null;
       let targetTitle = '';
@@ -81,12 +85,12 @@ module.exports = {
         }, { quoted: message });
       }
 
-      // Fetch audio stream metadata from YTSP
+      // Fetch audio stream metadata from YTSP (lowest quality default)
       let streamMeta = null;
       if (targetVideoId && !directUrl.includes('spotify.com')) {
         try {
           const res = await axios.get(`${API_BASE}/stream/${targetVideoId}`, {
-            params: { quality: 'audio' },
+            params: { quality: targetQuality },
             timeout: 15000,
             headers: { 'User-Agent': 'Mozilla/5.0' }
           });
@@ -97,7 +101,7 @@ module.exports = {
       if (!streamMeta && directUrl) {
         try {
           const res = await axios.get(`${API_BASE}/get`, {
-            params: { ytl: directUrl, quality: 'audio' },
+            params: { ytl: directUrl, quality: targetQuality },
             timeout: 25000,
             headers: { 'User-Agent': 'Mozilla/5.0' }
           });
@@ -107,7 +111,7 @@ module.exports = {
               const tId = track.videoId || track.id;
               if (tId && !directUrl.includes('spotify.com')) {
                 const sRes = await axios.get(`${API_BASE}/stream/${tId}`, {
-                  params: { quality: 'audio' },
+                  params: { quality: targetQuality },
                   timeout: 15000
                 });
                 if (sRes.data) streamMeta = sRes.data;
@@ -117,6 +121,22 @@ module.exports = {
             } else {
               streamMeta = res.data;
             }
+          }
+        } catch {}
+      }
+
+      // Secondary fallback: GiftedTech / Vreden free endpoints if primary extractor is down
+      if (!streamMeta) {
+        try {
+          const fallbackRes = await axios.get(`https://api.vreden.my.id/api/ytplay?query=${encodeURIComponent(query)}`, { timeout: 15000 });
+          if (fallbackRes.data?.result?.download?.url) {
+            streamMeta = {
+              title: fallbackRes.data.result.title || targetTitle,
+              uploader: fallbackRes.data.result.author?.name || targetUploader,
+              duration: fallbackRes.data.result.timestamp || targetDuration,
+              thumbnail: fallbackRes.data.result.thumbnail || targetThumbnail,
+              url: fallbackRes.data.result.download.url
+            };
           }
         } catch {}
       }
@@ -138,7 +158,7 @@ module.exports = {
 
       // Notify downloading
       await sock.sendMessage(chatId, {
-        text: `🎵 *${finalTitle}*\n⏳ Downloading audio stream...`,
+        text: `🎵 *${finalTitle}*\n⚡ *Quality:* ${isHd ? 'High Definition (HD)' : 'Fast Stream (Lowest Bitrate)'}\n⏳ Streaming to WhatsApp...`,
         contextInfo: {
           externalAdReply: {
             title: finalTitle,
@@ -155,6 +175,7 @@ module.exports = {
 
       const audioBuffer = await axios.get(proxyUrl, {
         responseType: 'arraybuffer',
+        maxContentLength: 50 * 1024 * 1024,
         timeout: AXIOS_TIMEOUT,
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',

@@ -13,10 +13,10 @@ function extractYouTubeId(url) {
 
 module.exports = {
   command: 'video',
-  aliases: ['ytmp4', 'ytvideo', 'ytdl', 'ytvid'],
+  aliases: ['ytmp4', 'ytvideo', 'ytdl', 'ytvid', 'ytv', 'playvid'],
   category: 'download',
-  description: 'Download YouTube videos in high quality by search or link',
-  usage: '.video <youtube link | search query> [360p|720p]',
+  description: 'Download YouTube videos in fast/lowest (360p) or HD (720p) quality',
+  usage: '.video <youtube link | search query> [hd|720p]',
 
   async handler(sock, message, args, context = {}) {
     const chatId = context.chatId || message.key.remoteJid;
@@ -24,23 +24,16 @@ module.exports = {
 
     if (!rawQuery) {
       return await sock.sendMessage(chatId, {
-        text: '🎥 *YouTube Video Downloader*\n\nUsage:\n• `.video <song/video title>`\n• `.video <youtube link>`\n• `.video <link> 720p`'
+        text: '🎥 *YouTube Video Downloader*\n\nUsage:\n• `.video <title>` (Fast 360p lowest data)\n• `.video <title> hd` (720p HD quality)\n• `.video <youtube link>`'
       }, { quoted: message });
     }
 
     try {
       await sock.sendMessage(chatId, { react: { text: '🔍', key: message.key } });
 
-      let targetQuality = '360p';
-      let cleanQuery = rawQuery;
-
-      if (rawQuery.endsWith('720p') || rawQuery.endsWith('720')) {
-        targetQuality = '720p';
-        cleanQuery = rawQuery.replace(/720p?$/i, '').trim();
-      } else if (rawQuery.endsWith('360p') || rawQuery.endsWith('360')) {
-        targetQuality = '360p';
-        cleanQuery = rawQuery.replace(/360p?$/i, '').trim();
-      }
+      const isHd = /\b(720p?|hd|high)\b/i.test(rawQuery);
+      const targetQuality = isHd ? '720p' : '360p';
+      const cleanQuery = rawQuery.replace(/\b(720p?|hd|high|360p?)\b/gi, '').trim();
 
       let videoId = null;
       let videoTitle = '';
@@ -130,6 +123,7 @@ module.exports = {
 
       const videoBuffer = await axios.get(proxyUrl, {
         responseType: 'arraybuffer',
+        maxContentLength: 80 * 1024 * 1024,
         timeout: AXIOS_TIMEOUT,
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',

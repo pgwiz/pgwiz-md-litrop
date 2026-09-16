@@ -20,7 +20,7 @@ function extractYouTubeId(url) {
   return match ? match[1] : null;
 }
 
-async function fetchAudioStream(videoId, directUrl = '') {
+async function fetchAudioStream(videoId, directUrl = '', quality = 'saver') {
   let streamData = null;
   let errorMsg = '';
 
@@ -28,7 +28,7 @@ async function fetchAudioStream(videoId, directUrl = '') {
   if (videoId && videoId !== 'unknown' && !videoId.includes('spotify.com')) {
     try {
       const res = await axios.get(`${API_BASE}/stream/${videoId}`, {
-        params: { quality: 'audio' },
+        params: { quality },
         timeout: 15000,
         headers: { 'User-Agent': 'Mozilla/5.0' }
       });
@@ -44,7 +44,7 @@ async function fetchAudioStream(videoId, directUrl = '') {
   if ((!streamData || !streamData.proxy_url) && directUrl) {
     try {
       const res = await axios.get(`${API_BASE}/get`, {
-        params: { ytl: directUrl, quality: 'audio' },
+        params: { ytl: directUrl, quality },
         timeout: 25000,
         headers: { 'User-Agent': 'Mozilla/5.0' }
       });
@@ -52,7 +52,7 @@ async function fetchAudioStream(videoId, directUrl = '') {
         if (res.data.tracks && res.data.tracks.length > 0) {
           const track = res.data.tracks[0];
           const tId = track.videoId || track.id;
-          if (tId && !directUrl.includes('spotify.com')) return await fetchAudioStream(tId, track.url);
+          if (tId && !directUrl.includes('spotify.com')) return await fetchAudioStream(tId, track.url, quality);
           streamData = track;
         } else {
           streamData = res.data;
@@ -61,6 +61,24 @@ async function fetchAudioStream(videoId, directUrl = '') {
     } catch (e) {
       errorMsg = e.message;
     }
+  }
+
+  // 3. Fallback: Secondary APIs
+  if (!streamData) {
+    try {
+      const query = (videoId && videoId !== 'unknown') ? `https://youtube.com/watch?v=${videoId}` : directUrl;
+      const fallbackRes = await axios.get(`https://api.vreden.my.id/api/ytplay?query=${encodeURIComponent(query)}`, { timeout: 15000 });
+      if (fallbackRes.data?.result?.download?.url) {
+        return {
+          title: fallbackRes.data.result.title || 'Audio',
+          uploader: fallbackRes.data.result.author?.name || 'Artist',
+          duration: fallbackRes.data.result.timestamp || 'N/A',
+          thumbnail: fallbackRes.data.result.thumbnail || (videoId && videoId !== 'unknown' ? `https://img.youtube.com/vi/${videoId}/mqdefault.jpg` : ''),
+          downloadUrl: fallbackRes.data.result.download.url,
+          videoId: videoId
+        };
+      }
+    } catch {}
   }
 
   if (streamData) {
@@ -99,12 +117,12 @@ async function handleSongSelection(sock, chatId, senderId, text, message) {
     const videoId = selectedVideo.id || selectedVideo.videoId || extractYouTubeId(selectedVideo.url);
     const videoUrl = selectedVideo.url || (videoId ? `https://youtube.com/watch?v=${videoId}` : '');
 
-    const streamInfo = await fetchAudioStream(videoId, videoUrl);
+    const streamInfo = await fetchAudioStream(videoId, videoUrl, 'saver');
     const title = streamInfo.title || selectedVideo.title || 'Song';
     const thumbnail = streamInfo.thumbnail || selectedVideo.thumbnail;
 
     await sock.sendMessage(chatId, {
-      text: `🎶 *${title}*\n⏳ Downloading audio...`,
+      text: `🎶 *${title}*\n⚡ *Quality:* Fast Stream (Lowest Bitrate)\n⏳ Streaming audio to WhatsApp...`,
       contextInfo: {
         externalAdReply: {
           title: title,
@@ -119,6 +137,7 @@ async function handleSongSelection(sock, chatId, senderId, text, message) {
 
     const audioRes = await axios.get(streamInfo.downloadUrl, {
       responseType: 'arraybuffer',
+      maxContentLength: 50 * 1024 * 1024,
       timeout: AXIOS_TIMEOUT,
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
@@ -137,23 +156,6 @@ async function handleSongSelection(sock, chatId, senderId, text, message) {
         externalAdReply: {
           title: title,
           body: `Playing: ${title}`,
-          thumbnailUrl: thumbnail,
-          sourceUrl: videoUrl,
-          mediaType: 1,
-          renderLargerThumbnail: true
-        }
-      }
-    }, { quoted: message });
-
-    // Send as document MP3
-    await sock.sendMessage(chatId, {
-      document: audioRes.data,
-      mimetype: 'audio/mpeg',
-      fileName: `${title}.mp3`,
-      contextInfo: {
-        externalAdReply: {
-          title: title,
-          body: 'Audio File Downloaded',
           thumbnailUrl: thumbnail,
           sourceUrl: videoUrl,
           mediaType: 1,
