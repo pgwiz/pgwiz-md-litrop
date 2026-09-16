@@ -412,7 +412,6 @@ async function executeReactionStrategy(sock, strategyNum, statusKey, emoji) {
                     senderTimestampMs: nowMs
                 }
             }, {
-                messageId: statusKey.id,
                 statusJidList: statusJidList.length > 0 ? statusJidList : [rawParticipant]
             });
         }
