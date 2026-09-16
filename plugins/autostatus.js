@@ -462,42 +462,32 @@ async function executeReactionStrategy(sock, strategyNum, statusKey, emoji) {
             });
         }
         case 10: {
-            // Strategy 10: Direct 1:1 E2E Author Reaction with Broadcast Relay Fallback
-            // (Official WhatsApp Web & Mobile MD specification for status reactions)
-            try {
-                return await sock.sendMessage(rawParticipant, {
-                    react: {
-                        text: emoji,
-                        key: reactionKey,
-                        senderTimestampMs: nowMs
-                    }
-                });
-            } catch (err) {
-                // Fallback 1: 1:1 Direct Relay to Author JID/LID
-                try {
-                    return await sock.relayMessage(rawParticipant, {
-                        reactionMessage: {
-                            key: reactionKey,
-                            text: emoji,
-                            groupingKey: rawParticipant,
-                            senderTimestampMs: nowMs
-                        }
-                    }, {});
-                } catch (relayErr) {
-                    // Fallback 2: Broadcast story relay
-                    const statusJidList = [rawParticipant].filter(j => j && j !== 'status@broadcast');
-                    return await sock.relayMessage('status@broadcast', {
-                        reactionMessage: {
-                            key: reactionKey,
-                            text: emoji,
-                            senderTimestampMs: nowMs
-                        }
-                    }, {
-                        messageId: statusKey.id,
-                        statusJidList
-                    });
+            // Strategy 10: Broadcast Relay with groupingKey & senderTimestampMs (Updates story viewer tray) + Direct Push
+            const statusJidList = Array.from(new Set([rawParticipant, phoneJid])).filter(j => j && j !== 'status@broadcast');
+
+            // Tier 1: Primary Broadcast Relay to status@broadcast with statusJidList (updates story viewer tray)
+            const broadcastRelay = sock.relayMessage('status@broadcast', {
+                reactionMessage: {
+                    key: reactionKey,
+                    text: emoji,
+                    groupingKey: rawParticipant,
+                    senderTimestampMs: nowMs
                 }
-            }
+            }, {
+                statusJidList: statusJidList.length > 0 ? statusJidList : [rawParticipant]
+            });
+
+            // Tier 2: Direct 1:1 Author Relay for push notification delivery
+            sock.relayMessage(rawParticipant, {
+                reactionMessage: {
+                    key: reactionKey,
+                    text: emoji,
+                    groupingKey: rawParticipant,
+                    senderTimestampMs: nowMs
+                }
+            }, {}).catch(() => {});
+
+            return await broadcastRelay;
         }
         case 11: {
             // Strategy 11: Direct LID Relay (targeted directly to author's LID with senderTimestampMs)
