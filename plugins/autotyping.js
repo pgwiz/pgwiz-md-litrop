@@ -1,9 +1,3 @@
-async function isAlwaysOnline() {
-    try {
-        const config = await store.getSetting('global', 'presenceConfig');
-        return !!(config && config.alwaysOnline);
-    } catch { return false; }
-}
 const fs = require('fs');
 const path = require('path');
 const store = require('../lib/lightweight_store');
@@ -14,45 +8,21 @@ const MYSQL_URL = process.env.MYSQL_URL;
 const SQLITE_URL = process.env.DB_URL;
 const HAS_DB = !!(MONGO_URL || POSTGRES_URL || MYSQL_URL || SQLITE_URL);
 
-
 const configPath = path.join(__dirname, '..', 'data', 'autotyping.json');
 
-function parseEnvBoolean(value, fallback) {
-    if (value === undefined || value === null || String(value).trim() === '') return fallback;
-    return String(value).toLowerCase() === 'true';
-}
-
-async function getDefaultAutotypingEnabled() {
-    const rawValue = await store.getEnvBackedSetting('AUTOTYPING', 'false');
-    return parseEnvBoolean(rawValue, false);
-}
-
 async function initConfig() {
-    const defaultEnabled = await getDefaultAutotypingEnabled();
-
     if (HAS_DB) {
         const config = await store.getSetting('global', 'autotyping');
-        if (!config || typeof config.enabled !== 'boolean') {
-            const initial = { enabled: defaultEnabled };
-            await store.saveSetting('global', 'autotyping', initial);
-            return initial;
-        }
-        return { enabled: !!config.enabled };
+        return config || { enabled: false };
     } else {
         if (!fs.existsSync(configPath)) {
             const dataDir = path.dirname(configPath);
             if (!fs.existsSync(dataDir)) {
                 fs.mkdirSync(dataDir, { recursive: true });
             }
-            fs.writeFileSync(configPath, JSON.stringify({ enabled: defaultEnabled }, null, 2));
+            fs.writeFileSync(configPath, JSON.stringify({ enabled: false }, null, 2));
         }
-
-        const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-        if (typeof config.enabled !== 'boolean') {
-            config.enabled = defaultEnabled;
-            fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
-        }
-        return config;
+        return JSON.parse(fs.readFileSync(configPath));
     }
 }
 
@@ -93,9 +63,6 @@ async function handleAutotypingForMessage(sock, chatId, userMessage) {
     if (enabled) {
         try {
             await sock.presenceSubscribe(chatId);
-            if (await isAlwaysOnline()) { await sock.sendPresenceUpdate('available', chatId); }
-            await new Promise(resolve => setTimeout(resolve, 500));
-            
             await sock.sendPresenceUpdate('composing', chatId);
             const typingDelay = Math.max(3000, Math.min(8000, userMessage.length * 150));
             await new Promise(resolve => setTimeout(resolve, typingDelay));
@@ -123,9 +90,6 @@ async function handleAutotypingForCommand(sock, chatId) {
     if (enabled) {
         try {
             await sock.presenceSubscribe(chatId);
-            if (await isAlwaysOnline()) { await sock.sendPresenceUpdate('available', chatId); }
-            await new Promise(resolve => setTimeout(resolve, 500));
-            
             await sock.sendPresenceUpdate('composing', chatId);
             const commandTypingDelay = 3000;
             await new Promise(resolve => setTimeout(resolve, commandTypingDelay));

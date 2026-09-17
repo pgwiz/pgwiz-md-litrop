@@ -83,10 +83,13 @@ The following downloaders were audited and flagged as currently non-functional d
 ---
 
 ### 🛡️ WhatsApp Socket & Connection Stability Principles:
-* **Presence Pulse vs Protocol Keepalives**: WhatsApp servers disconnect or rate-limit companion WebSockets (codes 428 / 515 / 440) if application-level presence (`<presence type="available"/>`) is flooded frequently (e.g. 8s). Companion socket keepalives are handled at the protocol frame level via `keepAliveIntervalMs: 10000`. A gentle 60s pulse strictly guarded by `sock.ws.readyState === 1` preserves always-online state safely.
-* **Interval Lifecycle on Disconnect**: Leaked intervals hammering closed WebSockets prevent clean TCP teardown and flood error streams. Timers (`alwaysOnlineInterval`, `presenceHeartbeatInterval`) must be explicitly cleared in the `connection === 'close'` handler.
-* **Session Directory Key Protection**: Indiscriminate unlinking in `./session` destroys active cryptographic Signal ratchet keys. `pre-key-*`, `session-*`, `sender-key-*`, and `app-state-sync-key-*` must NEVER be deleted while the session is alive; doing so results in fatal "Bad MAC" and private key desynchronization errors.
-* **Fast Reconnect on Code 515**: Disconnect reason 515 (`restartRequired`) should initiate an immediate 2-second reconnect backoff instead of standard long delays.
+* **Presence Pulse vs Protocol Keepalives**: WhatsApp servers disconnect or rate-limit companion WebSockets (codes 428 / 515 / 440) if application-level presence (`<presence type="available"/>`) is flooded frequently. Companion socket keepalives are handled at the protocol frame level via `keepAliveIntervalMs: 10000`. A single unified 90s unref'd pulse strictly guarded by `sock.ws.readyState === 1` and managed by `plugins/alwaysonline.js` preserves always-online state safely without double-pulse collision.
+* **Non-Presence `sendNode` Preservation**: Never block non-presence stanzas in `sendNode` based on `readyState`. Dropping IQ queries, messages, or handshakes corrupts Baileys internal query state machine and causes hung promises.
+* **Clean Socket Teardown**: On `connection === 'close'`, the old WebSocket must be explicitly terminated (`ws.removeAllListeners(); ws.close();`) before a new connection is spawned, preventing status 440 ("Another bot instance is currently connected").
+* **401 Session Auto-Recovery**: On 401 (`DisconnectReason.loggedOut`), the bot must not terminate or become a dead zombie. If `SESSION_ID` is present in the environment, it re-downloads fresh credentials and reconnects automatically.
+* **Session Directory Key Protection**: Indiscriminate unlinking in `./session` destroys active cryptographic Signal ratchet keys. `pre-key-*`, `session-*`, `sender-key-*`, `sender-key-memory-*`, `app-state-sync-key-*`, and `app-state-sync-version-*` must NEVER be deleted; only `.tmp` and `.bak` files are pruned.
+* **Hosting OOM Self-Restart**: A graceful threshold at 450MB RSS flushes store state and executes `process.exit(1)`, enabling PM2, Docker, Koyeb, or Render to reboot the container cleanly before the OS kernel terminates it with an uncatchable `SIGKILL` (-9).
+* **Fast Reconnect on Code 515**: Disconnect reason 515 (`restartRequired`) initiates an immediate 2-second reconnect backoff instead of standard long delays.
 
 ---
 

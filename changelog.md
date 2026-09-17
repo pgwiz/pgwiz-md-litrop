@@ -9,14 +9,17 @@ All notable changes to the PGWIZ-MD multi-device WhatsApp bot project are docume
   - Group chats can now be configured with any of the 10 AI persona modes and 5 depth levels (previously locked to `gen-co` level 3).
   - Added Reply-to-All toggle: `repal` (replies to all messages without requiring @mention or quote) and `repan` (restores mention/reply requirement).
   - Combined commands supported: e.g., `.aimode tech 4 repal`, `.aimode repal`, `.aimode repan`, as well as direct command aliases `.repal` and `.repan`.
+  - Fixed command execution bug where `.repal` / `.repan` showed the help menu due to `context.invokedCmd` lookup mismatch.
+  - Added private DM guidance when `.repal` / `.repan` is invoked without a group target.
   - Enforced strict authorization: only group admins or bot owner/sudo can alter group AI configurations.
 - **Socket Stability & Long-Running Connection Hardening**:
-  - Eliminated connection drops and 428/515/440 disconnect loops caused by tight 8-second presence spam.
-  - Presence pulse relaxed to 60-second gentle keepalive and guarded with `sock.ws.readyState === 1` checks.
-  - Leaked interval cleanup: timers (`alwaysOnlineInterval`, `presenceHeartbeatInterval`) are systematically cleared upon socket closure (`connection === 'close'`).
-  - Added 2-second fast reconnect backoff on `DisconnectReason.restartRequired` (code 515).
-  - Fixed session directory pruning to preserve all active cryptographic Signal ratchet keys (`pre-key-*`, `session-*`, `sender-key-*`, `app-state-sync-key-*`), permanently fixing "Bad MAC" and private key desynchronization errors.
-  - Deduplication cache cleanup interval lifted to global singleton to prevent timer leaks across reconnect cycles.
+  - Fixed socket death on 401: bot now cleanly restarts and re-downloads credentials from `SESSION_ID` instead of dying permanently as a zombie process.
+  - Fixed `sendNode` blanket readiness drop: non-presence stanzas (queries, receipts, messages) now pass through safely to Baileys internal queue.
+  - Unified always-online pulse into a single 90s unref'd loop, eliminating conflicting intervals, ReferenceErrors (`getPresenceConfig`), and duplicate telemetry stanzas.
+  - Removed redundant `available` presence updates from `plugins/autotyping.js` that caused WhatsApp server rate limits on incoming message bursts.
+  - Terminated lingering WebSockets on disconnect to prevent status 440 (Session Conflict).
+  - Preserved all 7 cryptographic session file types (`pre-key-*`, `session-*`, `sender-key-*`, `sender-key-memory-*`, `app-state-sync-key-*`, `app-state-sync-version-*`, `creds.json`).
+  - Added RAM threshold restart (450MB) with graceful store flush to prevent hosting provider OS kernel OOM `SIGKILL`.
 - **AutoStatus Enhancements & Upstream Parity**:
   - Standardized Strategy 1 `statusJidList` to include `[statusKey.remoteJid, rawParticipant]` matching Baileys companion specifications.
   - Enhanced status view pipeline to prioritize native `sock.readMessages([key])` with exponential backoff on `rate-overlimit`.

@@ -926,7 +926,7 @@ async function handler(sock, message, args, context = {}) {
     }
 
     // Check if invoked via repal or repan alias directly
-    const invokedCmd = (context.commandName || '').toLowerCase().trim();
+    const invokedCmd = (context.invokedCmd || context.commandName || '').toLowerCase().trim();
     if (invokedCmd === 'repal' && !args.some(a => a.toLowerCase() === 'repal')) {
         args = ['repal', ...args];
     } else if (invokedCmd === 'repan' && !args.some(a => a.toLowerCase() === 'repan')) {
@@ -1118,6 +1118,17 @@ async function handler(sock, message, args, context = {}) {
                            `_Tip: Use \`.aimode <mode> <level> repal\` to set mode and reply-to-all together, or \`.aimode repan\` to disable reply-to-all._`;
 
             return sock.sendMessage(currentChatId, { text: groupMsg }, { quoted: message });
+        }
+
+        // Private DM Target: if only repal/repan was called without group target, inform user
+        if (!targetIsGroup && parsed.parsedReplyAll !== null && !parsed.parsedMode && !parsed.parsedLevel && parsed.explicitAction !== 'on') {
+            return sock.sendMessage(currentChatId, {
+                text: `📌 *Group Feature Notice:*\n\n` +
+                      `Reply-to-All (\`repal\` / \`repan\`) is specifically designed for group chats.\n` +
+                      `• In private direct messages, the bot *already* replies to all incoming text messages automatically.\n` +
+                      `• To configure Reply-to-All for a group remotely from your DM, provide the group JID:\n` +
+                      `  \`${context.usedPrefix || '.'}aimode ${parsed.parsedReplyAll ? 'repal' : 'repan'} <group-jid>\``
+            }, { quoted: message });
         }
 
         // Private DM Target

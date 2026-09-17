@@ -26,7 +26,7 @@ async function isAlwaysOnlineEnabled() {
     return isEn;
 }
 
-// Gentle keepalive heartbeat (WhatsApp presence maintains stable companion state without flooding)
+// Gentle keepalive heartbeat (WhatsApp companion presence keepalive pulse without flooding)
 function startAlwaysOnlineLoop(sock) {
     stopAlwaysOnlineLoop();
     if (!sock || !sock.ws || sock.ws.readyState !== 1) return;
@@ -34,16 +34,24 @@ function startAlwaysOnlineLoop(sock) {
     // Send initial presence if socket is open
     sendOnlinePresence(sock);
 
-    // Refresh every 60 seconds (safe interval that keeps presence active without rate limits or socket desync)
-    global.alwaysOnlineInterval = setInterval(() => {
-        if (!global.alwaysOnlineState || !sock || !sock.ws || sock.ws.readyState !== 1) {
+    // Refresh every 90 seconds (safe interval that keeps presence active without rate limits or socket desync)
+    global.alwaysOnlineInterval = setInterval(async () => {
+        if (!sock || !sock.ws || sock.ws.readyState !== 1) {
             stopAlwaysOnlineLoop();
             return;
         }
+        const isOnline = await isAlwaysOnlineEnabled();
+        if (!isOnline) {
+            stopAlwaysOnlineLoop(sock);
+            return;
+        }
         sendOnlinePresence(sock);
-    }, 60000);
+    }, 90000);
+    if (global.alwaysOnlineInterval && typeof global.alwaysOnlineInterval.unref === 'function') {
+        global.alwaysOnlineInterval.unref();
+    }
 
-    console.log('[PRESENCE] 🟢 Always-Online 60s keepalive pulse active');
+    console.log('[PRESENCE] 🟢 Always-Online 90s keepalive pulse active');
 }
 
 function stopAlwaysOnlineLoop(sock = null) {
