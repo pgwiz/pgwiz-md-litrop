@@ -12,7 +12,7 @@ const HAS_DB = !!(MONGO_URL || POSTGRES_URL || MYSQL_URL || SQLITE_URL);
 const configPath = path.join(__dirname, '../data/autoStatus.json');
 
 const STRATEGY_DESCRIPTIONS = {
-    1: 'Classic Relay to Broadcast (status messageId)',
+    1: 'Upstream GlobalTech Relay (Verified Working - status@broadcast)',
     2: 'Fresh ID Broadcast Relay (multi-device list)',
     3: 'Direct Author 1:1 Relay',
     4: 'Direct Author Native React',
@@ -21,7 +21,7 @@ const STRATEGY_DESCRIPTIONS = {
     7: 'Native Broadcast with senderTimestampMs & userJid',
     8: 'Direct 1:1 Relay with senderTimestampMs & fresh tag',
     9: 'Direct 1:1 Quote-Status Context Message',
-    10: 'Broadcast Relay with groupingKey & senderTimestampMs',
+    10: 'Upstream Broadcast Relay with Status ID (Mirrors Strategy 1)',
     11: 'Direct LID Relay (targeted to author LID with senderTimestampMs)',
     12: 'Direct LID Native React (sendMessage to author LID with status key)'
 };
@@ -171,7 +171,7 @@ const DEFAULTS = {
     view: true,
     react: true,
     reaction: resolveDefaultReaction(),
-    strategy: 10,
+    strategy: 1,
     emojis: getEnvStatusEmojis().length > 0 ? getEnvStatusEmojis() : HARDCODED_FALLBACK_EMOJIS
 };
 
@@ -273,11 +273,20 @@ async function readConfig() {
             effectiveReaction = data.reaction;
         }
 
+        let activeStrategy = 1;
+        if (hasEnvStrategy) {
+            activeStrategy = parseInt(envStrategyRaw, 10);
+        } else if (data.strategy !== undefined && data.strategy !== null) {
+            activeStrategy = Number(data.strategy);
+            // Auto-migrate legacy Strategy 10 to Strategy 1 (GlobalTech verified standard)
+            if (activeStrategy === 10) activeStrategy = 1;
+        }
+
         _cachedConfig = {
             view: hasEnvView ? parseEnvBool(envViewRaw, true) : (data.view !== undefined ? parseEnvBool(data.view, true) : (data.enabled !== undefined ? parseEnvBool(data.enabled, true) : true)),
             react: hasEnvReact ? parseEnvBool(envReactRaw, true) : (data.react !== undefined ? parseEnvBool(data.react, true) : (data.reactOn !== undefined ? parseEnvBool(data.reactOn, true) : true)),
             reaction: effectiveReaction,
-            strategy: hasEnvStrategy ? parseInt(envStrategyRaw, 10) : (Number(data.strategy) || 10),
+            strategy: activeStrategy,
             emojis: effectiveEmojis
         };
         _cachedConfigTime = now;
@@ -565,17 +574,10 @@ async function executeReactionStrategy(sock, strategyNum, statusKey, emoji) {
         fromMe: false
     };
 
-    // Ensure Signal cryptographic session exists for recipient if missing, without forcing destructive session recreation
-    if (typeof sock.assertSessions === 'function') {
-        try {
-            await sock.assertSessions([rawParticipant], false);
-        } catch (_) {}
-    }
-
     switch (Number(strategyNum)) {
         case 1: {
-            // Strategy 1: Classic Upstream Relay to status@broadcast
-            const statusJidList = [statusKey.remoteJid, rawParticipant].filter(Boolean);
+            // Strategy 1: Upstream GlobalTechInfo Relay to status@broadcast
+            const statusJidList = [statusKey.remoteJid || 'status@broadcast', rawParticipant].filter(Boolean);
             return await sock.relayMessage('status@broadcast', {
                 reactionMessage: {
                     key: reactionKey,
@@ -688,18 +690,16 @@ async function executeReactionStrategy(sock, strategyNum, statusKey, emoji) {
             });
         }
         case 10: {
-            // Strategy 10: Broadcast Relay with groupingKey & senderTimestampMs (Updates story viewer tray)
-            const statusJidList = Array.from(new Set([rawParticipant, phoneJid])).filter(j => j && j !== 'status@broadcast');
-
+            // Strategy 10: Upstream Broadcast Relay with Status ID (Mirrors Strategy 1)
+            const statusJidList = [statusKey.remoteJid || 'status@broadcast', rawParticipant].filter(Boolean);
             return await sock.relayMessage('status@broadcast', {
                 reactionMessage: {
                     key: reactionKey,
-                    text: emoji,
-                    groupingKey: rawParticipant,
-                    senderTimestampMs: nowMs
+                    text: emoji
                 }
             }, {
-                statusJidList: statusJidList.length > 0 ? statusJidList : [rawParticipant]
+                messageId: statusKey.id,
+                statusJidList
             });
         }
         case 11: {
@@ -734,7 +734,7 @@ async function reactToStatus(sock, statusKey, customEmoji = null, customStrategy
 
         const cfg = await readConfig();
         const emoji = customEmoji || getStatusEmoji(cfg);
-        const strat = Number(customStrategy) || Number(cfg.strategy) || 10;
+        const strat = Number(customStrategy) || Number(cfg.strategy) || 1;
 
         await executeReactionStrategy(sock, strat, statusKey, emoji);
         console.log(`[AUTOSTATUS] ✅ Reacted to status ${statusKey.id} from ${statusKey.participant || 'contact'} with ${emoji} (Strategy ${strat})`);
@@ -753,6 +753,9 @@ async function handleStatusUpdate(sock, status) {
         if (!sock) return;
         const config = await readConfig();
         if (!config.view && !config.react) return;
+
+        // Upstream GlobalTech standard settling delay: allows status media/metadata to stabilize on WhatsApp edge servers
+        await new Promise(r => setTimeout(r, 1000));
 
         let msgs = [];
         if (Array.isArray(status)) {
@@ -844,14 +847,14 @@ async function handleStatusUpdate(sock, status) {
                 if (historyEntry) historyEntry.viewStatus = 'disabled';
             }
 
-            // Step 2: Natural Pacing Pause (300ms) between view and react
+            // Step 2: Natural Pacing Pause (500ms) between view and react
             if (config.view && config.react) {
-                await new Promise(r => setTimeout(r, 300));
+                await new Promise(r => setTimeout(r, 500));
             }
 
             // Step 3: Send Reaction Relay
             if (config.react) {
-                const strat = Number(config.strategy) || 10;
+                const strat = Number(config.strategy) || 1;
                 const emoji = getStatusEmoji(config);
                 if (historyEntry) {
                     historyEntry.strategyUsed = strat;
@@ -880,7 +883,7 @@ async function handleStatusUpdate(sock, status) {
 
             // Inter-status pacing delay when multiple statuses arrive in the same upsert
             if (msgs.length > 1 && i < msgs.length - 1) {
-                await new Promise(r => setTimeout(r, 350));
+                await new Promise(r => setTimeout(r, 1000));
             }
         }
     } catch (error) {
@@ -901,7 +904,7 @@ module.exports = {
         try {
             const cfg = await readConfig();
             const ignoreList = (HAS_DB ? await store.getSetting('global', 'autoStatusIgnoreList') : []) || [];
-            const activeStrategyName = STRATEGY_DESCRIPTIONS[cfg.strategy] || STRATEGY_DESCRIPTIONS[6];
+            const activeStrategyName = STRATEGY_DESCRIPTIONS[cfg.strategy] || STRATEGY_DESCRIPTIONS[1];
 
             if (!args || args.length === 0) {
                 let privacyNote = '';
