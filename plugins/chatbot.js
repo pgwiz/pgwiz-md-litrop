@@ -1069,8 +1069,6 @@ async function handler(sock, message, args, context = {}) {
         const modeObj = MODES[config.mode] || MODES['gen-co'];
         const statusIcon = config.enabled ? '✅ Enabled' : '❌ Disabled';
         const levelDesc = DEPTH_LEVELS[config.level] || DEPTH_LEVELS[3];
-        const activeModel = config.model || DEFAULT_AI_MODEL;
-        const modelLabel = activeModel === 'ministral-3b-2512' ? ' (Default - Fast 3B)' : '';
         const replyAllStatus = config.replyAll
             ? '✅ *Active* (`repal` - replies to all messages)'
             : '❌ *Inactive* (`repan` - mentions/replies only)';
@@ -1079,7 +1077,6 @@ async function handler(sock, message, args, context = {}) {
                       `• *Target Chat:* \`${targetChatId}\`${isRemoteTarget ? ' (Remote Target)' : ' (Current Chat)'}\n` +
                       `• *Status:* ${statusIcon}\n` +
                       `• *Chat Type:* ${targetIsGroup ? 'Group Chat' : 'Private Direct Message'}\n` +
-                      `• *Active Model:* \`${activeModel}\`${modelLabel}\n` +
                       `• *Current Mode:* *${modeObj.name}* (\`${modeObj.slug}\`)\n` +
                       `• *Tagline:* _${modeObj.tagline}_\n` +
                       `• *Depth Level:* Level ${config.level} (${levelDesc})\n`;
@@ -1111,7 +1108,6 @@ async function handler(sock, message, args, context = {}) {
         const targetDesc = isRemoteTarget ? ` for \`${targetChatId}\`` : '';
         return sock.sendMessage(currentChatId, {
             text: `🔄 *AI Mode Reset to Defaults${targetDesc}!*\n\n` +
-                  `• Model reset to default (\`${DEFAULT_AI_MODEL}\`).\n` +
                   `• Mode reset to *General Conversational* (\`gen-co\`).\n` +
                   `• Depth level reset to Level 3 (Comprehensive).\n` +
                   `• Reply-to-All reset to Inactive (\`repan\`).\n` +
@@ -1138,22 +1134,6 @@ async function handler(sock, message, args, context = {}) {
         }
         modeList += `\n*Usage:* \`.aimode <mode> [level] [repal|repan] [jid]\` (e.g. \`.aimode eli5 2 repal\`)`;
         return sock.sendMessage(currentChatId, { text: modeList }, { quoted: message });
-    }
-
-    // 6.5 MODEL SELECTION MENU (.aimode model [jid] without specifying model)
-    if (parsed.explicitAction === 'model' && !parsed.parsedModel) {
-        let modelList = `*🧠 Available AI Models:*\n\n` +
-                        `1. *Ministral 3B* (\`ministral-3b-2512\` / \`3b\`) - *Default*\n` +
-                        `   _Fast, low-latency, and balanced conversational speed_\n\n` +
-                        `2. *Ministral 8B* (\`ministral-8b-2512\` / \`8b\`)\n` +
-                        `   _Enhanced reasoning and analytical knowledge_\n\n` +
-                        `3. *Ministral 14B* (\`ministral-14b-2512\` / \`14b\`)\n` +
-                        `   _Maximum nuance, deep contextual comprehension_\n\n` +
-                        `4. *Codestral* (\`codestral-2508\` / \`codestral\`)\n` +
-                        `   _Code generation, refactoring, and technical debugging_\n\n` +
-                        `*Usage:* \`.aimode model <3b|8b|14b|codestral> [jid]\`\n` +
-                        `*Example:* \`.aimode 3b\` or \`.aimode model 14b\``;
-        return sock.sendMessage(currentChatId, { text: modelList }, { quoted: message });
     }
 
     // 7. ENABLE / ALL-IN-ONE CONFIGURATION
@@ -1190,7 +1170,6 @@ async function handler(sock, message, args, context = {}) {
         const currentModeObj = MODES[config.mode] || MODES['gen-co'];
         const targetDesc = isRemoteTarget ? ` for \`${targetChatId}\`` : '';
         const levelDesc = DEPTH_LEVELS[config.level] || DEPTH_LEVELS[3];
-        const activeModel = config.model || DEFAULT_AI_MODEL;
 
         if (targetIsGroup) {
             const replyAllStatus = config.replyAll
@@ -1198,7 +1177,6 @@ async function handler(sock, message, args, context = {}) {
                 : '❌ *Inactive* (`repan` - mentions/replies only)';
 
             let groupMsg = `✅ *AI Mode Updated${targetDesc}!*\n\n` +
-                           `• *AI Model:* \`${activeModel}\`\n` +
                            `• *Persona Mode:* *${currentModeObj.name}* (\`${currentModeObj.slug}\`)\n` +
                            `• *Tagline:* _${currentModeObj.tagline}_\n` +
                            `• *Depth Level:* Level ${config.level} / 5 (${levelDesc})\n` +
@@ -1223,7 +1201,6 @@ async function handler(sock, message, args, context = {}) {
         // Private DM Target
         return sock.sendMessage(currentChatId, {
             text: `✅ *AI Mode Activated${targetDesc}!*\n\n` +
-                  `• *AI Model:* \`${activeModel}\`\n` +
                   `• *Persona Mode:* *${currentModeObj.name}* (\`${currentModeObj.slug}\`)\n` +
                   `• *Category:* ${currentModeObj.category}\n` +
                   `• *Tagline:* _${currentModeObj.tagline}_\n` +
@@ -1242,7 +1219,6 @@ async function handler(sock, message, args, context = {}) {
     }
     help += `*${isRemoteTarget ? 'Target Chat' : 'Current Chat'}:* \`${targetChatId}\`${isRemoteTarget ? ' (Remote Target)' : ''}\n` +
             `*Status:* ${config.enabled ? '✅ Active' : '❌ Inactive'}\n` +
-            `*Active Model:* \`${config.model || DEFAULT_AI_MODEL}\`\n` +
             `*Active Mode:* ${MODES[config.mode]?.name || 'General Conversational'} (\`${config.mode}\`)\n` +
             `*Depth Level:* Level ${config.level} / 5\n` +
             (targetIsGroup ? `*Reply to All:* ${config.replyAll ? '✅ Active (`repal`)' : '❌ Inactive (`repan`)'}\n\n` : `\n`) +
@@ -1251,14 +1227,13 @@ async function handler(sock, message, args, context = {}) {
             `• \`.aimode off [jid]\` - Disable AI mode\n` +
             `• \`.aimode status [jid]\` - View status & settings\n` +
             `• \`.aimode reset [jid]\` - Reset settings & clear chat memory\n` +
-            `• \`.aimode model [3b|8b|14b|codestral]\` - Switch AI model (Default: \`3b\`)\n` +
             `• \`.aimode <mode> [level] [repal|repan] [jid]\` - Set persona mode & depth level\n` +
             `• \`.aimode repal\` (or \`.repal\`) - Enable Reply-to-All in group (replies to all messages)\n` +
             `• \`.aimode repan\` (or \`.repan\`) - Disable Reply-to-All in group (replies only on mention)\n` +
             `• \`.aimode level <1-5> [jid]\` - Adjust response depth level\n\n` +
             `*Admin & Owner JID Targeting:*\n` +
             `• Target any chat by phone number or JID:\n` +
-            `  - \`.aimode default 1 3b 254712345678\`\n` +
+            `  - \`.aimode default 1 254712345678\`\n` +
             `  - \`.aimode on tech 3 254712345678@s.whatsapp.net\`\n` +
             `  - \`.aimode eli5 2 repal 120363025123456789@g.us\`\n` +
             `  - \`.aimode off 254712345678\`\n` +
