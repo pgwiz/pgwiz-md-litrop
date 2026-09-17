@@ -339,10 +339,10 @@ async function executeReactionStrategy(sock, strategyNum, statusKey, emoji) {
         fromMe: false
     };
 
-    // Guarantee Signal cryptographic session exists for recipient (crucial for cloud instances with fresh sessions)
+    // Ensure Signal cryptographic session exists for recipient if missing, without forcing destructive session recreation
     if (typeof sock.assertSessions === 'function') {
         try {
-            await sock.assertSessions([rawParticipant], true);
+            await sock.assertSessions([rawParticipant], false);
         } catch (_) {}
     }
 
@@ -462,11 +462,10 @@ async function executeReactionStrategy(sock, strategyNum, statusKey, emoji) {
             });
         }
         case 10: {
-            // Strategy 10: Broadcast Relay with groupingKey & senderTimestampMs (Updates story viewer tray) + Direct Push
+            // Strategy 10: Broadcast Relay with groupingKey & senderTimestampMs (Updates story viewer tray)
             const statusJidList = Array.from(new Set([rawParticipant, phoneJid])).filter(j => j && j !== 'status@broadcast');
 
-            // Tier 1: Primary Broadcast Relay to status@broadcast with statusJidList (updates story viewer tray)
-            const broadcastRelay = sock.relayMessage('status@broadcast', {
+            return await sock.relayMessage('status@broadcast', {
                 reactionMessage: {
                     key: reactionKey,
                     text: emoji,
@@ -476,18 +475,6 @@ async function executeReactionStrategy(sock, strategyNum, statusKey, emoji) {
             }, {
                 statusJidList: statusJidList.length > 0 ? statusJidList : [rawParticipant]
             });
-
-            // Tier 2: Direct 1:1 Author Relay for push notification delivery
-            sock.relayMessage(rawParticipant, {
-                reactionMessage: {
-                    key: reactionKey,
-                    text: emoji,
-                    groupingKey: rawParticipant,
-                    senderTimestampMs: nowMs
-                }
-            }, {}).catch(() => {});
-
-            return await broadcastRelay;
         }
         case 11: {
             // Strategy 11: Direct LID Relay (targeted directly to author's LID with senderTimestampMs)
@@ -546,10 +533,11 @@ async function handleStatusUpdate(sock, status) {
 
         const ignoreList = await getCachedIgnoreList();
 
-        const tasks = msgs.map(async (msg) => {
+        for (let i = 0; i < msgs.length; i++) {
+            const msg = msgs[i];
             const key = msg.key || msg;
-            if (!key || key.remoteJid !== 'status@broadcast') return;
-            if (msg.message?.reactionMessage) return;
+            if (!key || key.remoteJid !== 'status@broadcast') continue;
+            if (msg.message?.reactionMessage) continue;
 
             const isFromMe = !!(key.fromMe || msg.fromMe);
             const msgId = key.id;
@@ -563,10 +551,10 @@ async function handleStatusUpdate(sock, status) {
 
             if (isFromMe) {
                 console.log(`[AUTOSTATUS] ℹ️ Received own status broadcast ${msgId} (fromMe: true)`);
-                return;
+                continue;
             }
 
-            if (reactedStatusKeys.has(msgId)) return;
+            if (reactedStatusKeys.has(msgId)) continue;
             reactedStatusKeys.add(msgId);
 
             // Check ignore list
@@ -576,48 +564,43 @@ async function handleStatusUpdate(sock, status) {
                     historyEntry.viewStatus = 'ignored';
                     historyEntry.reactStatus = 'ignored';
                 }
-                return;
+                continue;
             }
 
-            // Execute View and React concurrently (zero artificial delay)
-            const actions = [];
+            // Step 1: Send Read Receipt (single receipt, no duplicate fallthrough)
             if (config.view) {
-                const nowSec = Math.floor(Date.now() / 1000).toString();
-                actions.push(
-                    (async () => {
-                        try {
-                            if (typeof sock.sendNode === 'function') {
-                                await sock.sendNode({
-                                    tag: 'receipt',
-                                    attrs: {
-                                        id: key.id,
-                                        to: 'status@broadcast',
-                                        participant: key.participant || key.remoteJid,
-                                        type: 'read',
-                                        t: nowSec
-                                    }
-                                });
+                try {
+                    const nowSec = Math.floor(Date.now() / 1000).toString();
+                    if (typeof sock.sendNode === 'function') {
+                        await sock.sendNode({
+                            tag: 'receipt',
+                            attrs: {
+                                id: key.id,
+                                to: 'status@broadcast',
+                                participant: key.participant || key.remoteJid,
+                                type: 'read',
+                                t: nowSec
                             }
-                        } catch (_) {
-                            if (typeof sock.sendReceipt === 'function') {
-                                await sock.sendReceipt('status@broadcast', key.participant || key.remoteJid, [key.id], 'read').catch(() => {});
-                            }
-                        }
-                        return sock.readMessages([key]).catch(() => {});
-                    })()
-                        .then(() => {
-                            statusStats.totalViewed++;
-                            if (historyEntry) historyEntry.viewStatus = 'viewed';
-                            console.log(`[AUTOSTATUS] 👀 Viewed status ${key.id} from ${key.participant || 'contact'}`);
-                        })
-                        .catch(() => {
-                            if (historyEntry) historyEntry.viewStatus = 'failed';
-                        })
-                );
+                        });
+                    } else if (typeof sock.readMessages === 'function') {
+                        await sock.readMessages([key]);
+                    }
+                    statusStats.totalViewed++;
+                    if (historyEntry) historyEntry.viewStatus = 'viewed';
+                    console.log(`[AUTOSTATUS] 👀 Viewed status ${key.id} from ${key.participant || 'contact'}`);
+                } catch (_) {
+                    if (historyEntry) historyEntry.viewStatus = 'failed';
+                }
             } else {
                 if (historyEntry) historyEntry.viewStatus = 'disabled';
             }
 
+            // Step 2: Natural Pacing Pause (300ms) between view and react
+            if (config.view && config.react) {
+                await new Promise(r => setTimeout(r, 300));
+            }
+
+            // Step 3: Send Reaction Relay
             if (config.react) {
                 const strat = Number(config.strategy) || 10;
                 const emoji = getStatusEmoji(config);
@@ -625,34 +608,32 @@ async function handleStatusUpdate(sock, status) {
                     historyEntry.strategyUsed = strat;
                     historyEntry.emojiUsed = emoji;
                 }
-                actions.push(
-                    reactToStatus(sock, key, emoji, strat)
-                        .then((success) => {
-                            if (success) {
-                                statusStats.totalReacted++;
-                                if (historyEntry) historyEntry.reactStatus = 'reacted';
-                            } else {
-                                statusStats.totalErrors++;
-                                if (historyEntry) historyEntry.reactStatus = 'failed';
-                            }
-                        })
-                        .catch(err => {
-                            statusStats.totalErrors++;
-                            if (historyEntry) {
-                                historyEntry.reactStatus = 'failed';
-                                historyEntry.error = err.message;
-                            }
-                            console.error(`[AUTOSTATUS] ❌ React error for ${key.id}:`, err.message);
-                        })
-                );
+                try {
+                    const success = await reactToStatus(sock, key, emoji, strat);
+                    if (success) {
+                        statusStats.totalReacted++;
+                        if (historyEntry) historyEntry.reactStatus = 'reacted';
+                    } else {
+                        statusStats.totalErrors++;
+                        if (historyEntry) historyEntry.reactStatus = 'failed';
+                    }
+                } catch (err) {
+                    statusStats.totalErrors++;
+                    if (historyEntry) {
+                        historyEntry.reactStatus = 'failed';
+                        historyEntry.error = err.message;
+                    }
+                    console.error(`[AUTOSTATUS] ❌ React error for ${key.id}:`, err.message);
+                }
             } else {
                 if (historyEntry) historyEntry.reactStatus = 'disabled';
             }
 
-            await Promise.allSettled(actions);
-        });
-
-        await Promise.allSettled(tasks);
+            // Inter-status pacing delay when multiple statuses arrive in the same upsert
+            if (msgs.length > 1 && i < msgs.length - 1) {
+                await new Promise(r => setTimeout(r, 350));
+            }
+        }
     } catch (error) {
         console.error('[AUTOSTATUS] ❌ Error in handleStatusUpdate:', error.message);
     }
