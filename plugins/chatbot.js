@@ -235,42 +235,83 @@ function resolveTargetJid(input) {
     let s = input.trim();
     if (!s) return null;
 
-    // Strip URL wrappers if any
+    // Strip URL wrappers, command wrappers, quotes, and punctuation
     s = s.replace(/^https?:\/\/(?:api\.)?whatsapp\.com\/send\?phone=/i, '');
     s = s.replace(/^https?:\/\/wa\.me\//i, '');
     s = s.replace(/^whatsapp:/i, '');
+    s = s.replace(/[<>\(\)\[\]"']/g, '');
 
     // Strip leading @
     if (s.startsWith('@')) s = s.slice(1);
 
-    // If explicit WhatsApp domain is present
-    if (s.endsWith('@s.whatsapp.net') || s.endsWith('@g.us') || s.endsWith('@lid')) {
-        if (s.endsWith('@s.whatsapp.net')) {
-            const num = s.split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
-            return num ? `${num}@s.whatsapp.net` : null;
-        }
-        return s;
+    const lower = s.toLowerCase();
+
+    // If explicit WhatsApp user domain is present
+    if (lower.endsWith('@s.whatsapp.net') || lower.endsWith('@c.us')) {
+        const userPart = s.split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+        return (userPart.length >= 7 && userPart.length <= 16 && !userPart.startsWith('0'))
+            ? `${userPart}@s.whatsapp.net`
+            : null;
     }
 
-    // Hyphenated legacy group ID (e.g. 123456789-987654321)
-    if (s.includes('-') && /^\d+-\d+$/.test(s)) {
+    // If explicit WhatsApp group domain is present
+    if (lower.endsWith('@g.us')) {
+        const groupId = s.split('@')[0].split(':')[0].trim();
+        if (/^120363\d{11,16}$/.test(groupId) || /^\d{7,16}-\d{9,16}$/.test(groupId) || /^\d{17,22}$/.test(groupId)) {
+            return `${groupId}@g.us`;
+        }
+        return null;
+    }
+
+    // If explicit WhatsApp LID domain is present
+    if (lower.endsWith('@lid')) {
+        const lidPart = s.split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+        return lidPart ? `${lidPart}@lid` : null;
+    }
+
+    // Legacy group ID without domain (e.g. 123456789-1612345678)
+    if (/^\d{7,16}-\d{9,16}$/.test(s)) {
         return `${s}@g.us`;
     }
 
-    // Clean digits
-    const cleanDigits = s.replace(/[^0-9]/g, '');
+    // Strip device ID before extracting digits
+    const cleanNoDevice = s.split(':')[0];
+    const cleanDigits = cleanNoDevice.replace(/[^0-9]/g, '');
     if (!cleanDigits) return null;
 
-    // Modern WhatsApp group JID starts with 120363 and is 17-20 digits
-    if (cleanDigits.startsWith('120363') && cleanDigits.length >= 17) {
+    // Modern WhatsApp group JID without domain (starts with 120363 and 17-22 digits)
+    if (cleanDigits.startsWith('120363') && cleanDigits.length >= 17 && cleanDigits.length <= 22) {
         return `${cleanDigits}@g.us`;
     }
 
-    // Standard phone number (7 to 16 digits)
-    if (cleanDigits.length >= 7 && cleanDigits.length <= 16) {
+    // Standard phone number in international format (7 to 16 digits, no leading 0)
+    if (cleanDigits.length >= 7 && cleanDigits.length <= 16 && !cleanDigits.startsWith('0')) {
         return `${cleanDigits}@s.whatsapp.net`;
     }
 
+    return null;
+}
+
+/**
+ * Combines adjacent numeric chunks into a potential phone number JID
+ */
+function tryCombinePhone(args, startIndex) {
+    if (startIndex >= args.length) return null;
+    const first = String(args[startIndex] || '').trim();
+    if (!first.startsWith('+') && !/^\d+$/.test(first)) return null;
+
+    let combined = first;
+    let lookAhead = startIndex + 1;
+    while (lookAhead < args.length && /^\d+$/.test(String(args[lookAhead]).trim())) {
+        combined += String(args[lookAhead]).trim();
+        lookAhead++;
+    }
+    if (lookAhead > startIndex + 1) {
+        const resolved = resolveTargetJid(combined);
+        if (resolved) {
+            return { jid: resolved, nextIndex: lookAhead - 1 };
+        }
+    }
     return null;
 }
 
@@ -298,25 +339,34 @@ function parseAiModeArgs(args) {
         if (!raw) continue;
         const lower = raw.toLowerCase();
 
-        // 1. Check for combined phone number with spaces (e.g. +254 712 345 678)
-        if (!targetJid && (raw.startsWith('+') || (/^\d{2,5}$/.test(raw) && !/^[1-5]$/.test(raw)))) {
-            let combined = raw;
-            let lookAhead = i + 1;
-            while (lookAhead < rawArgs.length && /^\d+$/.test(String(rawArgs[lookAhead]).trim())) {
-                combined += String(rawArgs[lookAhead]).trim();
-                lookAhead++;
-            }
-            if (lookAhead > i + 1) {
-                const resolvedCombined = resolveTargetJid(combined);
-                if (resolvedCombined) {
-                    targetJid = resolvedCombined;
-                    i = lookAhead - 1;
-                    continue;
-                }
+        // 1. If mode or 'on' was already parsed, and raw is 1-5 followed by a multi-token phone or direct JID:
+        if ((parsedMode || explicitAction === 'on') && !parsedLevel && /^[1-5]$/.test(raw) && i + 1 < rawArgs.length) {
+            const nextCombined = tryCombinePhone(rawArgs, i + 1);
+            const nextDirect = resolveTargetJid(String(rawArgs[i + 1]).trim());
+            if (nextCombined) {
+                parsedLevel = parseInt(raw, 10);
+                if (!targetJid) targetJid = nextCombined.jid;
+                i = nextCombined.nextIndex;
+                continue;
+            } else if (nextDirect) {
+                parsedLevel = parseInt(raw, 10);
+                if (!targetJid) targetJid = nextDirect;
+                i++;
+                continue;
             }
         }
 
-        // 2. Check for Target JID / Phone Number
+        // 2. Check for multi-token phone numbers starting at current index
+        if (!targetJid) {
+            const combinedResult = tryCombinePhone(rawArgs, i);
+            if (combinedResult) {
+                targetJid = combinedResult.jid;
+                i = combinedResult.nextIndex;
+                continue;
+            }
+        }
+
+        // 3. Direct Target JID / Phone Number / Group ID
         if (!targetJid) {
             const resolved = resolveTargetJid(raw);
             if (resolved) {
@@ -325,9 +375,9 @@ function parseAiModeArgs(args) {
             }
         }
 
-        // 3. Keyword prefixes with next arg:
-        // 'mode <slug>', 'persona <slug>', 'tone <slug>', 'style <slug>', 'set <slug>'
-        if (['mode', 'persona', 'tone', 'style', 'set'].includes(lower)) {
+        // 4. Keyword prefixes with next arg:
+        // 'mode <slug>', 'persona <slug>', 'tone <slug>', 'style <slug>'
+        if (['mode', 'persona', 'tone', 'style'].includes(lower)) {
             if (i + 1 < rawArgs.length) {
                 const nextLower = String(rawArgs[i + 1] || '').toLowerCase().trim();
                 if (MODE_ALIASES[nextLower]) {
@@ -337,6 +387,19 @@ function parseAiModeArgs(args) {
                 }
             }
             if (!explicitAction) explicitAction = 'mode';
+            continue;
+        }
+
+        // Generic setter 'set' (e.g. .aimode set tech 3, .aimode set level 2)
+        if (lower === 'set') {
+            if (i + 1 < rawArgs.length) {
+                const nextLower = String(rawArgs[i + 1] || '').toLowerCase().trim();
+                if (MODE_ALIASES[nextLower]) {
+                    parsedMode = MODE_ALIASES[nextLower];
+                    i++;
+                    continue;
+                }
+            }
             continue;
         }
 
@@ -362,21 +425,25 @@ function parseAiModeArgs(args) {
                     targetJid = resolved;
                     i++;
                     continue;
+                } else {
+                    invalidJidAttempt = rawArgs[i + 1];
+                    i++;
+                    continue;
                 }
             }
             continue;
         }
 
-        // 4. Actions
-        if (['on', 'enable', 'start'].includes(lower)) {
+        // 5. Actions
+        if (['on', 'enable', 'start', 'activate'].includes(lower)) {
             explicitAction = 'on';
             continue;
         }
-        if (['off', 'disable', 'stop'].includes(lower)) {
+        if (['off', 'disable', 'stop', 'deactivate'].includes(lower)) {
             explicitAction = 'off';
             continue;
         }
-        if (['status', 'info', 'check', 'view'].includes(lower)) {
+        if (['status', 'info', 'check', 'view', 'get'].includes(lower)) {
             explicitAction = 'status';
             continue;
         }
@@ -389,7 +456,7 @@ function parseAiModeArgs(args) {
             continue;
         }
 
-        // 5. Depth Level (1 - 5)
+        // 6. Depth Level (1 - 5)
         if (/^[1-5]$/.test(lower)) {
             if (!parsedLevel) {
                 parsedLevel = parseInt(lower, 10);
@@ -397,7 +464,7 @@ function parseAiModeArgs(args) {
             }
         }
 
-        // 6. Mode Alias
+        // 7. Mode Alias
         if (MODE_ALIASES[lower]) {
             if (!parsedMode) {
                 parsedMode = MODE_ALIASES[lower];
@@ -412,6 +479,11 @@ function parseAiModeArgs(args) {
         }
 
         unrecognized.push(raw);
+    }
+
+    // If only a target JID was supplied without explicit action or settings, default to 'status' query
+    if (targetJid && !explicitAction && !parsedMode && !parsedLevel && unrecognized.length === 0) {
+        explicitAction = 'status';
     }
 
     return {
@@ -682,10 +754,15 @@ async function handleChatbotResponse(sock, chatId, message, userMessage, senderI
             // Group chats: Strictly restricted to conversational mode (gen-co)
             const botId = sock.user?.id || sock.user?.jid || '';
             const botNumber = (botId || '').split(':')[0].split('@')[0];
+            const botLid = sock.user?.lid || '';
+            const botLidNumber = botLid ? botLid.split(':')[0].split('@')[0] : '';
 
             let promptText = (rawText || userMessage || '').trim();
             if (botNumber) {
                 promptText = promptText.replace(new RegExp(`@${botNumber}\\b`, 'g'), '').trim();
+            }
+            if (botLidNumber) {
+                promptText = promptText.replace(new RegExp(`@${botLidNumber}\\b`, 'g'), '').trim();
             }
 
             if (!promptText && media) {
@@ -844,8 +921,17 @@ async function handler(sock, message, args, context = {}) {
 
     // 1. Permission checks
     if (isRemoteTarget) {
-        // JID supplied: Caller must be bot owner/sudo OR group admin of current group
-        const hasPermission = isOwnerOrSudoCheck || (isCurrentGroup && isSenderAdmin);
+        // JID supplied: Caller must be bot owner/sudo OR group admin of current group OR admin of target group
+        let hasPermission = isOwnerOrSudoCheck || (isCurrentGroup && isSenderAdmin);
+        if (!hasPermission && targetIsGroup) {
+            try {
+                const targetAdminStatus = await isAdmin(sock, targetChatId, senderId);
+                if (targetAdminStatus.isSenderAdmin) {
+                    hasPermission = true;
+                }
+            } catch {}
+        }
+
         if (!hasPermission) {
             return sock.sendMessage(currentChatId, {
                 text: '❌ *Permission Denied*: Only bot owners, sudo users, or group admins can target another chat by JID.'
@@ -1014,7 +1100,7 @@ async function handler(sock, message, args, context = {}) {
     if (parsed.unrecognized.length > 0) {
         help += `⚠️ *Unknown command or mode:* "${parsed.unrecognized.join(' ')}"\n\n`;
     }
-    help += `*Current Chat:* \`${currentChatId}\`\n` +
+    help += `*${isRemoteTarget ? 'Target Chat' : 'Current Chat'}:* \`${targetChatId}\`${isRemoteTarget ? ' (Remote Target)' : ''}\n` +
             `*Status:* ${config.enabled ? '✅ Active' : '❌ Inactive'}\n` +
             `*Active Mode:* ${MODES[config.mode]?.name || 'General Conversational'} (\`${config.mode}\`)\n` +
             `*Depth Level:* Level ${config.level} / 5\n\n` +
