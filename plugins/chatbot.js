@@ -138,16 +138,44 @@ const DEPTH_LEVELS = {
     5: 'DEPTH LEVEL 5 (Masterclass): Exhaustive architectural breakdown and best practices.'
 };
 
-// Multi-turn conversation memory store
+// Multi-turn conversation memory store: chatId -> { history: Array, lastActive: number }
 const conversationHistory = new Map();
 const MAX_TURNS = 6;
+const STALE_TTL = 30 * 60 * 1000; // 30 minutes
 
-// Periodic cleanup of stale memory entries
-setInterval(() => {
-    if (conversationHistory.size > 500) {
-        conversationHistory.clear();
+function getChatHistory(chatId) {
+    const entry = conversationHistory.get(chatId);
+    if (!entry) return [];
+    if (Date.now() - entry.lastActive > STALE_TTL) {
+        conversationHistory.delete(chatId);
+        return [];
     }
-}, 30 * 60 * 1000);
+    return entry.history || [];
+}
+
+function updateChatHistory(chatId, history, userMsg, botMsg) {
+    const updated = Array.isArray(history) ? [...history] : [];
+    if (userMsg) updated.push({ role: 'user', content: userMsg });
+    if (botMsg) updated.push({ role: 'assistant', content: botMsg });
+    while (updated.length > MAX_TURNS * 2) {
+        updated.splice(0, 2);
+    }
+    conversationHistory.set(chatId, {
+        history: updated,
+        lastActive: Date.now()
+    });
+}
+
+// Periodic cleanup of stale memory entries (with unref to never hold process alive)
+const cleanupTimer = setInterval(() => {
+    const now = Date.now();
+    for (const [id, entry] of conversationHistory.entries()) {
+        if (!entry || !entry.lastActive || (now - entry.lastActive > STALE_TTL)) {
+            conversationHistory.delete(id);
+        }
+    }
+}, 5 * 60 * 1000);
+if (cleanupTimer.unref) cleanupTimer.unref();
 
 // Humorous system prompt for incoming media in private direct messages
 const HUMOROUS_MEDIA_SYSTEM_PROMPT =
@@ -212,7 +240,7 @@ async function saveAiConfig(chatId, config) {
 /**
  * Calls Mistral Conversational API endpoint
  */
-async function callMistralChat({ message, mode = 'gen-co', level = 3, history = [], systemPromptOverride = null }) {
+async function callMistralChat({ message, mode = 'gen-co', level = 3, history = [], systemPromptOverride = null }, retries = 1) {
     const payload = {
         message: String(message || '').trim(),
         mode,
@@ -240,8 +268,6 @@ async function callMistralChat({ message, mode = 'gen-co', level = 3, history = 
             signal: controller.signal
         });
 
-        clearTimeout(timeout);
-
         if (!response.ok) {
             const errData = await response.json().catch(() => ({}));
             const errMsg = errData.error || `HTTP ${response.status} ${response.statusText}`;
@@ -261,13 +287,19 @@ async function callMistralChat({ message, mode = 'gen-co', level = 3, history = 
             level: data.level
         };
     } catch (err) {
-        clearTimeout(timeout);
         if (err.name === 'AbortError') {
             console.error('[AI-MODE] Mistral API timed out after 35s');
             return { success: false, error: 'Request timed out' };
         }
+        if (retries > 0) {
+            console.warn(`[AI-MODE] Mistral API fetch failed (${err.message}). Retrying in 1s...`);
+            await new Promise(r => setTimeout(r, 1000));
+            return callMistralChat({ message, mode, level, history, systemPromptOverride }, retries - 1);
+        }
         console.error('[AI-MODE] Mistral API call failed:', err.message);
         return { success: false, error: err.message };
+    } finally {
+        clearTimeout(timeout);
     }
 }
 
@@ -284,6 +316,7 @@ function getMediaType(msg) {
 
     if (m.imageMessage) return { type: 'image', caption: m.imageMessage.caption || '' };
     if (m.videoMessage) return { type: 'video', caption: m.videoMessage.caption || '' };
+    if (m.ptvMessage) return { type: 'video note', caption: m.ptvMessage.caption || '' };
     if (m.stickerMessage) return { type: 'sticker', caption: '' };
     if (m.audioMessage) return { type: m.audioMessage.ptt ? 'voice note' : 'audio', caption: '' };
     if (m.documentMessage) return { type: 'document', caption: m.documentMessage.caption || m.documentMessage.fileName || '' };
@@ -291,14 +324,50 @@ function getMediaType(msg) {
 }
 
 /**
+ * Helper to extract contextInfo across any Baileys message wrapper
+ */
+function extractContextInfo(msg) {
+    if (!msg) return null;
+    let m = msg;
+    if (m.ephemeralMessage?.message) m = m.ephemeralMessage.message;
+    if (m.viewOnceMessage?.message) m = m.viewOnceMessage.message;
+    if (m.viewOnceMessageV2?.message) m = m.viewOnceMessageV2.message;
+    if (m.documentWithCaptionMessage?.message) m = m.documentWithCaptionMessage.message;
+
+    if (m.contextInfo) return m.contextInfo;
+    for (const key of Object.keys(m)) {
+        if (m[key] && typeof m[key] === 'object' && m[key].contextInfo) {
+            return m[key].contextInfo;
+        }
+    }
+    return null;
+}
+
+/**
+ * Helper to extract text from quoted message
+ */
+function getQuotedText(contextInfo) {
+    if (!contextInfo?.quotedMessage) return '';
+    const q = contextInfo.quotedMessage;
+    return (
+        q.conversation ||
+        q.extendedTextMessage?.text ||
+        q.imageMessage?.caption ||
+        q.videoMessage?.caption ||
+        q.documentMessage?.caption ||
+        ''
+    ).trim();
+}
+
+/**
  * Checks if the bot is explicitly mentioned or replied to in a group
  */
 function isBotAddressedInGroup(sock, message, innerMsg, userMessage) {
-    const botId = sock.user?.id || sock.user?.jid || '';
+    const botId = sock?.user?.id || sock?.user?.jid || '';
     if (!botId) return false;
 
     const botNumber = botId.split(':')[0].split('@')[0];
-    const botLid = sock.user?.lid || '';
+    const botLid = sock?.user?.lid || '';
     const botLidNumber = botLid ? botLid.split(':')[0].split('@')[0] : '';
 
     const botJidTargets = new Set([
@@ -311,15 +380,11 @@ function isBotAddressedInGroup(sock, message, innerMsg, userMessage) {
         botJidTargets.add(botLidNumber);
         botJidTargets.add(`${botLidNumber}@lid`);
     }
+    if (sock?.user?.jid) {
+        botJidTargets.add(sock.user.jid);
+    }
 
-    const contextInfo =
-        innerMsg?.extendedTextMessage?.contextInfo ||
-        innerMsg?.imageMessage?.contextInfo ||
-        innerMsg?.videoMessage?.contextInfo ||
-        innerMsg?.stickerMessage?.contextInfo ||
-        innerMsg?.documentMessage?.contextInfo ||
-        message.message?.extendedTextMessage?.contextInfo ||
-        message.message?.contextInfo;
+    const contextInfo = extractContextInfo(innerMsg) || extractContextInfo(message?.message);
 
     if (contextInfo) {
         // 1. Check mentionedJid array
@@ -389,12 +454,19 @@ async function handleChatbotResponse(sock, chatId, message, userMessage, senderI
                 promptText = 'Hello!';
             }
 
+            // If replying to a bot message and history is empty, attach quoted context
+            const contextInfo = extractContextInfo(actualMsg) || extractContextInfo(message.message);
+            const quotedText = getQuotedText(contextInfo);
+            const history = getChatHistory(chatId);
+            if (quotedText && history.length === 0 && !promptText.includes(quotedText)) {
+                promptText = `[Replying to: "${quotedText}"] ${promptText}`;
+            }
+
             // Show typing indicator
             try {
                 await sock.sendPresenceUpdate('composing', chatId);
             } catch {}
 
-            const history = conversationHistory.get(chatId) || [];
             const result = await callMistralChat({
                 message: promptText,
                 mode: 'gen-co',
@@ -402,12 +474,12 @@ async function handleChatbotResponse(sock, chatId, message, userMessage, senderI
                 history
             });
 
-            if (result.success && result.message) {
-                history.push({ role: 'user', content: promptText });
-                history.push({ role: 'assistant', content: result.message });
-                if (history.length > MAX_TURNS * 2) history.splice(0, 2);
-                conversationHistory.set(chatId, history);
+            try {
+                await sock.sendPresenceUpdate('paused', chatId);
+            } catch {}
 
+            if (result.success && result.message) {
+                updateChatHistory(chatId, history, promptText, result.message);
                 await sock.sendMessage(chatId, { text: result.message }, { quoted: message });
             } else {
                 console.error(`[AI-MODE] Group response failed: ${result.error}`);
@@ -431,16 +503,21 @@ async function handleChatbotResponse(sock, chatId, message, userMessage, senderI
                     ? `[User sent a ${media.type} with caption: "${media.caption.trim()}"]`
                     : `[User sent a ${media.type} with no caption]`;
 
-                const history = conversationHistory.get(chatId) || [];
+                const history = getChatHistory(chatId);
                 const result = await callMistralChat({
                     message: mediaPrompt,
                     mode: config.mode || 'gen-co',
                     level: 2, // punchy summary for humorous roasts
-                    history: [],
+                    history: history.slice(-4),
                     systemPromptOverride: HUMOROUS_MEDIA_SYSTEM_PROMPT
                 });
 
+                try {
+                    await sock.sendPresenceUpdate('paused', chatId);
+                } catch {}
+
                 if (result.success && result.message) {
+                    updateChatHistory(chatId, history, mediaPrompt, result.message);
                     await sock.sendMessage(chatId, { text: result.message }, { quoted: message });
                 } else {
                     console.error(`[AI-MODE] Humorous media response failed: ${result.error}`);
@@ -455,7 +532,7 @@ async function handleChatbotResponse(sock, chatId, message, userMessage, senderI
             const promptText = (rawText || userMessage || '').trim();
             if (!promptText) return;
 
-            const history = conversationHistory.get(chatId) || [];
+            const history = getChatHistory(chatId);
             const result = await callMistralChat({
                 message: promptText,
                 mode: config.mode || 'gen-co',
@@ -463,12 +540,12 @@ async function handleChatbotResponse(sock, chatId, message, userMessage, senderI
                 history
             });
 
-            if (result.success && result.message) {
-                history.push({ role: 'user', content: promptText });
-                history.push({ role: 'assistant', content: result.message });
-                if (history.length > MAX_TURNS * 2) history.splice(0, 2);
-                conversationHistory.set(chatId, history);
+            try {
+                await sock.sendPresenceUpdate('paused', chatId);
+            } catch {}
 
+            if (result.success && result.message) {
+                updateChatHistory(chatId, history, promptText, result.message);
                 await sock.sendMessage(chatId, { text: result.message }, { quoted: message });
             } else {
                 console.error(`[AI-MODE] Private DM response failed: ${result.error}`);
@@ -491,8 +568,16 @@ async function handler(sock, message, args, context = {}) {
     const senderId = context.senderId || message.key.participant || message.key.remoteJid;
     const isOwnerOrSudoCheck = !!(context.isOwnerOrSudoCheck || message.key.fromMe);
 
-    // Permission check for groups: Only admins or owner/sudo can toggle AI mode
-    if (isGroup && !isOwnerOrSudoCheck) {
+    const sub = (args[0] || '').toLowerCase().trim();
+    const val = (args[1] || '').toLowerCase().trim();
+    const config = await getAiConfig(chatId);
+
+    // Identify if the requested action is mutating
+    const isMutatingAction = ['on', 'enable', 'start', 'off', 'disable', 'stop', 'reset', 'level', 'mode', 'persona', 'tone', 'style', 'set'].includes(sub) ||
+        !!MODE_ALIASES[sub];
+
+    // Permission check for groups: Only admins or owner/sudo can mutate AI mode in groups
+    if (isGroup && isMutatingAction && !isOwnerOrSudoCheck) {
         let isSenderAdmin = context.isSenderAdmin;
         if (typeof isSenderAdmin !== 'boolean') {
             try {
@@ -509,13 +594,15 @@ async function handler(sock, message, args, context = {}) {
         }
     }
 
-    const sub = (args[0] || '').toLowerCase().trim();
-    const val = (args[1] || '').toLowerCase().trim();
-    const config = await getAiConfig(chatId);
-
     // 1. ENABLE AI MODE
     if (sub === 'on' || sub === 'enable' || sub === 'start') {
         config.enabled = true;
+
+        // If an optional mode alias is provided in DM (e.g. .aimode on eli5)
+        if (!isGroup && val && MODE_ALIASES[val] && MODES[MODE_ALIASES[val]]) {
+            config.mode = MODE_ALIASES[val];
+        }
+
         await saveAiConfig(chatId, config);
 
         if (isGroup) {
@@ -619,8 +706,9 @@ async function handler(sock, message, args, context = {}) {
         }, { quoted: message });
     }
 
-    // 6. PERSONA MODE CONFIGURATION (.aimode mode <slug> OR .aimode <slug>)
-    const targetCandidate = (sub === 'mode' ? val : sub).toLowerCase();
+    // 6. PERSONA MODE CONFIGURATION (.aimode mode <slug>, .aimode persona <slug>, .aimode tone <slug>, .aimode style <slug>, .aimode set <slug>, OR .aimode <slug>)
+    const isModePrefix = ['mode', 'persona', 'tone', 'style', 'set'].includes(sub);
+    const targetCandidate = (isModePrefix ? val : sub).toLowerCase();
     const resolvedSlug = MODE_ALIASES[targetCandidate];
 
     if (resolvedSlug && MODES[resolvedSlug]) {
@@ -633,6 +721,14 @@ async function handler(sock, message, args, context = {}) {
         }
 
         config.mode = resolvedSlug;
+        const optionalLevelStr = isModePrefix ? args[2] : args[1];
+        if (optionalLevelStr) {
+            const optionalLevel = parseInt(optionalLevelStr, 10);
+            if (optionalLevel >= 1 && optionalLevel <= 5) {
+                config.level = optionalLevel;
+            }
+        }
+
         await saveAiConfig(chatId, config);
         const modeData = MODES[resolvedSlug];
 
@@ -641,7 +737,7 @@ async function handler(sock, message, args, context = {}) {
                   `• *Mode:* *${modeData.name}* (\`${modeData.slug}\`)\n` +
                   `• *Category:* ${modeData.category}\n` +
                   `• *Tagline:* _${modeData.tagline}_\n` +
-                  `• *Default Depth:* Level ${modeData.defaultLevel}\n\n` +
+                  `• *Depth Level:* Level ${config.level} / 5\n\n` +
                   `All subsequent private messages will use this persona style.`
         }, { quoted: message });
     }
