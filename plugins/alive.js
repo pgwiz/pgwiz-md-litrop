@@ -4,17 +4,25 @@ const settings = require("../settings");
 
 module.exports = {
   command: 'alive',
-  aliases: ['status', 'bot', 'info'],
+  aliases: ['status', 'bot', 'uptime', 'runtime', 'info'],
   category: 'general',
-  description: 'Check bot status and system info',
-  usage: '.alive',
-  
+  description: 'Check bot status, active uptime, system telemetry, and runtime info',
+  usage: '.alive | .uptime | .status',
 
   async handler(sock, message, args, context = {}) {
     const chatId = context.chatId || message.key.remoteJid;
 
     try {
+      let commandCount = 'N/A';
+      try {
+        const commandHandler = require('../lib/commandHandler');
+        if (commandHandler && commandHandler.commands) {
+          commandCount = commandHandler.commands.size;
+        }
+      } catch {}
+
       // Calculate uptime from process start
+      const uptimeMs = process.uptime() * 1000;
       let uptime = Math.floor(process.uptime());
 
       const days = Math.floor(uptime / 86400);
@@ -24,7 +32,6 @@ module.exports = {
       const minutes = Math.floor(uptime / 60);
       const seconds = uptime % 60;
 
-      // Format uptime as readable string (e.g., "2d 5h 30m")
       const uptimeParts = [];
       if (days) uptimeParts.push(`${days}d`);
       if (hours) uptimeParts.push(`${hours}h`);
@@ -32,7 +39,8 @@ module.exports = {
       if (seconds || uptimeParts.length === 0) uptimeParts.push(`${seconds}s`);
 
       const uptimeText = uptimeParts.join(' ');
-      
+      const startedAt = new Date(Date.now() - uptimeMs).toLocaleString();
+
       // Get system resource info
       const totalMem = (os.totalmem() / 1024 / 1024).toFixed(2);
       const freeMem = (os.freemem() / 1024 / 1024).toFixed(2);
@@ -43,28 +51,31 @@ module.exports = {
       const arch = os.arch();
       const nodeVersion = process.version;
 
-      // Memory health indicator
       let memEmoji = '🟢';
       if (memPercent > 70) memEmoji = '🟡';
       if (memPercent > 85) memEmoji = '🔴';
 
-      // CPU health indicator
       let cpuEmoji = '🟢';
       if (cpuLoad > 0.7) cpuEmoji = '🟡';
       if (cpuLoad > 1.5) cpuEmoji = '🔴';
 
-      // Build status message with dev formatting
+      const botName = settings.botName || process.env.BOT_NAME || 'PGWIZ-MD';
+      const botOwner = settings.botOwner || process.env.BOT_OWNER || 'pgwiz';
+      const version = settings.version || '2.0.0';
+
       const text = `
 ═══════════════════════════
-🤖 ${settings.botName || 'PGWIZ-MD'} STATUS
+🤖 ${botName.toUpperCase()} STATUS
 ═══════════════════════════
 
 ✅ *STATUS:* ACTIVE & RUNNING
 
 ━━━━━━ BOT INFO ━━━━━━
-📦 *Version:* ${settings.version}
-👤 *Owner:* ${settings.botOwner}
+📦 *Version:* ${version}
+👤 *Owner:* ${botOwner}
 ⏱️ *Uptime:* ${uptimeText}
+🚀 *Started:* ${startedAt}
+🧩 *Plugins:* ${commandCount}
 
 ━━━━ SYSTEM RESOURCES ━━━━
 ${memEmoji} *RAM:* ${usedMem}MB / ${totalMem}MB (${memPercent}%)
@@ -73,7 +84,7 @@ ${cpuEmoji} *CPU:* ${cpuLoad} load avg
 ⚙️ *Node.js:* ${nodeVersion}
 
 ═══════════════════════════
-⏰ Timestamp: ${new Date().toLocaleString()}`;
+⏰ Timestamp: ${new Date().toLocaleString()}`.trim();
 
       await sock.sendMessage(chatId, {
         text,
@@ -82,7 +93,7 @@ ${cpuEmoji} *CPU:* ${cpuLoad} load avg
           isForwarded: true,
           forwardedNewsletterMessageInfo: {
             newsletterJid: settings.newsletterJid || '120363179639202475@newsletter',
-            newsletterName: settings.newsletterName || settings.botName || 'PGWIZ-MD',
+            newsletterName: settings.newsletterName || botName,
             serverMessageId: -1
           }
         }

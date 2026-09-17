@@ -1,14 +1,17 @@
 const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
+const settings = require('../settings');
 
 module.exports = {
   command: 'viewonce',
-  aliases: ['viewmedia', 'vv'],
+  aliases: ['viewmedia', 'vv', 'vvadmin', 'vvowner'],
   category: 'general',
-  description: 'Re-send a view-once image, video, or voice note.',
-  usage: '.viewonce (reply to a view-once media)',
+  description: 'Re-send a view-once media in chat or forward to owner privately (.vvadmin)',
+  usage: '.viewonce (reply to a view-once media) | .vvadmin (forward to owner)',
 
   async handler(sock, message, args, context = {}) {
     const chatId = context.chatId || message.key.remoteJid;
+    const invokedCmd = (context.invokedCmd || context.command || '').toLowerCase();
+    const isToOwner = invokedCmd === 'vvadmin' || invokedCmd === 'vvowner' || (args[0] && args[0].toLowerCase() === 'owner');
 
     try {
       const quoted = message.message?.extendedTextMessage?.contextInfo?.quotedMessage;
@@ -27,15 +30,15 @@ module.exports = {
       let mediaMessage = null;
       let caption = '';
 
-      if (quotedImage && quotedImage.viewOnce) {
+      if (quotedImage && (quotedImage.viewOnce || quotedImage.fileLength)) {
         mediaType = 'image';
         mediaMessage = quotedImage;
         caption = quotedImage.caption || '';
-      } else if (quotedVideo && quotedVideo.viewOnce) {
+      } else if (quotedVideo && (quotedVideo.viewOnce || quotedVideo.fileLength)) {
         mediaType = 'video';
         mediaMessage = quotedVideo;
         caption = quotedVideo.caption || '';
-      } else if (quotedAudio && quotedAudio.viewOnce) {
+      } else if (quotedAudio && (quotedAudio.viewOnce || quotedAudio.fileLength)) {
         mediaType = 'audio';
         mediaMessage = quotedAudio;
       } else if (viewOnceImage) {
@@ -58,26 +61,41 @@ module.exports = {
         return;
       }
 
+      // If forwarding to owner, get owner JID
+      let targetDestination = chatId;
+      if (isToOwner) {
+        const ownerNumber = settings.ownerNumber && settings.ownerNumber[0]
+          ? (settings.ownerNumber[0].replace(/[^0-9]/g, '') + '@s.whatsapp.net')
+          : null;
+
+        if (!ownerNumber) {
+          await sock.sendMessage(chatId, {
+            text: '❌ Main admin / owner number is not configured in settings.'
+          }, { quoted: message });
+          return;
+        }
+        targetDestination = ownerNumber;
+      }
+
       const stream = await downloadContentFromMessage(mediaMessage, mediaType);
       let buffer = Buffer.from([]);
       for await (const chunk of stream) buffer = Buffer.concat([buffer, chunk]);
 
+      let messageContent = {};
+      const prefixCaption = isToOwner ? `Forwarded ViewOnce ${mediaType.toUpperCase()}\n\n` : '';
+
       if (mediaType === 'image') {
-        await sock.sendMessage(chatId, {
-          image: buffer,
-          caption: caption
-        }, { quoted: message });
+        messageContent = { image: buffer, caption: prefixCaption + (caption || '') };
       } else if (mediaType === 'video') {
-        await sock.sendMessage(chatId, {
-          video: buffer,
-          caption: caption
-        }, { quoted: message });
+        messageContent = { video: buffer, caption: prefixCaption + (caption || '') };
       } else if (mediaType === 'audio') {
-        await sock.sendMessage(chatId, {
-          audio: buffer,
-          mimetype: 'audio/mpeg',
-          ptt: true
-        }, { quoted: message });
+        messageContent = { audio: buffer, mimetype: 'audio/mpeg', ptt: true };
+      }
+
+      await sock.sendMessage(targetDestination, messageContent);
+
+      if (isToOwner) {
+        await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
       }
 
     } catch (error) {

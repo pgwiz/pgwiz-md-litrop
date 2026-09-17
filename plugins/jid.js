@@ -1,19 +1,39 @@
 module.exports = {
   command: 'jid',
-  aliases: ['userid', 'id', 'getjid'],
+  aliases: ['userid', 'id', 'getjid', 'gid', 'groupid'],
   category: 'info',
-  description: 'Get JID (WhatsApp ID) of a user',
-  usage: '.jid [@user|reply|number]',
+  description: 'Get JID (WhatsApp ID) of a user, group, or channel',
+  usage: '.jid [@user|reply|number] | .gid',
 
   async handler(sock, message, args, context = {}) {
     const chatId = context.chatId || message.key.remoteJid;
     const isGroup = chatId.endsWith('@g.us');
+    const invoked = (context.invokedCmd || context.command || '').toLowerCase();
 
-    // Get target from mention, reply, or number
+    // 1. Group ID shortcut (.gid / .groupid)
+    if (invoked === 'gid' || invoked === 'groupid') {
+      if (!isGroup) {
+        return await sock.sendMessage(chatId, {
+          text: '❌ This command can only be used within a group chat.'
+        }, { quoted: message });
+      }
+
+      let groupName = '';
+      try {
+        const metadata = await sock.groupMetadata(chatId);
+        groupName = metadata.subject || '';
+      } catch (e) {}
+
+      return await sock.sendMessage(chatId, {
+        text: `🆔 *Group ID:* \`${chatId}\`${groupName ? `\n🏷️ *Name:* ${groupName}` : ''}`
+      }, { quoted: message });
+    }
+
+    // 2. User/Target JID lookup
     const ctx = message.message?.extendedTextMessage?.contextInfo;
     let target = ctx?.mentionedJid?.[0] || ctx?.participant;
 
-    // Try parsing phone number
+    // Try parsing phone number from argument
     if (!target && args?.[0]) {
       const input = args[0].replace(/[^0-9]/g, '');
       if (input.length >= 7) {
@@ -78,7 +98,7 @@ module.exports = {
 • \`xxx@newsletter\` = Newsletter
 • \`xxx:yy@g.us\` = Broadcast
 
-⏰ Retrieved: ${new Date().toLocaleTimeString()}`;
+⏰ Retrieved: ${new Date().toLocaleTimeString()}`.trim();
 
     await sock.sendMessage(chatId, {
       text: text

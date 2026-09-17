@@ -2,6 +2,27 @@
 
 All notable changes to the PGWIZ-MD multi-device WhatsApp bot project are documented in this file.
 
+## [4.3.0] - 2026-09-17
+
+### Added
+- **Mistral Conversational AI Mode (`.aimode`, `.chatbot`)**:
+  - Integrated with `https://mistral-conversational.vercel.app/api/chat` using Mistral AI models (`ministral-8b-2512`).
+  - Supports 8 persona modes: `gen-co`, `gen-co-em`, `prof-tech`, `socratic`, `eli5`, `concise`, `code-mentor`, `creative`.
+  - Supports 5 depth levels: from Level 1 (Ultra-Brief) to Level 5 (Masterclass).
+  - Multi-turn bounded conversation memory with automatic pruning.
+  - **Private Direct Messages**:
+    - Automatic response to incoming text without requiring direct mention or reply.
+    - Incoming media (photos, videos, stickers, voice notes, documents) triggers a humorous roast/playful response with custom witty system prompts.
+    - Persona mode and depth levels fully configurable via aliases (`.aimode eli5`, `.aimode code`, `.aimode tech`, `.aimode level 1`, etc.).
+  - **Group Chats**:
+    - Strictly restricted to Conversational Mode (`gen-co`).
+    - Responds ONLY when the bot is explicitly mentioned (`mentionedJid`) or replied to (`quotedMessage`).
+    - Configurable only by group admins or bot owner/sudo.
+  - **Safeguards**:
+    - Self-messages (`fromMe: true`) strictly ignored to prevent reply loops.
+    - Command-prefixed messages (`usedPrefix`) bypassed.
+    - 35s timeout and graceful connection failure handling with polite user feedback.
+
 ## [4.2.0] - 2026-09-16
 
 ### Added
