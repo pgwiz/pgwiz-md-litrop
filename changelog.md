@@ -5,9 +5,11 @@ All notable changes to the PGWIZ-MD multi-device WhatsApp bot project are docume
 ## [4.3.0] - 2026-09-17
 
 ### Added
-- **Mistral Conversational AI Mode (`.aimode`, `.chatbot`)**:
-  - Integrated with `https://mistral-conversational.vercel.app/api/chat` using Mistral AI models (`ministral-8b-2512`).
-  - Supports 8 persona modes: `gen-co`, `gen-co-em`, `prof-tech`, `socratic`, `eli5`, `concise`, `code-mentor`, `creative`.
+- **Conversational AI Mode (`.aimode`, `.chatbot`)**:
+  - High-performance conversational AI service with 10 persona modes and 5 depth levels.
+  - Supports 10 persona modes: `gen-co`, `gen-co-em`, `prof-tech`, `socratic`, `eli5`, `concise`, `code-mentor`, `creative`, `zen`, and `medieval`.
+  - Admin & Bot Owner JID targeting (`.aimode <cmd> [jid]`): configure or inspect AI mode for any private DM or group chat via phone number or JID with strict permission validation.
+  - All-in-one long string multi-parameter configuration with flexible argument ordering (e.g. `.aimode default 1 <jid>`, `.aimode on tech 3 <jid>`, `.aimode eli5 2 <jid>`).
   - Supports 5 depth levels: from Level 1 (Ultra-Brief) to Level 5 (Masterclass).
   - Multi-turn bounded conversation memory with automatic pruning.
   - **Private Direct Messages**:
@@ -42,9 +44,16 @@ All notable changes to the PGWIZ-MD multi-device WhatsApp bot project are docume
   - Removed duplicate `a-ytmp4.js` in favor of unified `video.js`.
   - Consolidated `gitclone2.js` into enhanced `gitclone.js` with GitHub zipball streaming.
   - Renamed `a-clean.js` to `wipe.js` to eliminate alias collision with `clear.js`.
+  - Consolidated `joke2.js` into `joke.js` with dual dad/general joke fallback and aliases `['jokes', 'funny', 'joke2', 'jokes2', 'funny2', 'dadjoke']`.
+  - Consolidated `quote2.js` into `quote.js` with multi-provider fallback and aliases `['quotes', 'quotetext', 'quote2', 'quotes2', 'randomquote', 'inspirational']`.
+  - Replaced legacy `sticker-alt.js` and `sticker2.js` with unified high-fidelity `sticker.js` supporting EXIF metadata, transparent 512x512 padding, and dynamic compression fallback.
+  - Consolidated `tiny.js` into `shorten.js` with TinyURL, is.gd, and CleanURI triple fallback.
+  - Consolidated `url.js` into `tourl.js` with Catbox primary and Telegraph/Uguu fallbacks.
+  - Consolidated `igsc.js` into `igs.js` with support for cropped sticker generation via `.igsc` or `--crop`.
   - Consolidated `removeplugin.js` into `delplugin.js` with core system plugin protection and commandHandler reload.
   - Consolidated `developer.js` into `owner.js` with rich platform, bot version, and GitHub info.
   - Consolidated `updateforce.js` into `update.js` supporting `--force` / `.updateforce` and removed colliding `reload`/`hotreload` aliases.
+  - Resolved alias collisions across `stealth.js`, `tag.js`, `smartmenu.js`, `audiofx.js`, `itunes.js`, `chatbot.js`, `genshin.js`, `delete.js`, `pull.js`, and `sharpen.js`.
 - **MediaFire Downloader (`.mediafire`)**: Fixed missing top-level `axios` variable and added 80MB upload safeguard.
 - **Facebook Downloader (`.fb`)**: Integrated multi-engine fallbacks (Gifted, GuruAPI, GTech) with ascending quality sorting for fast SD delivery.
 - **Instagram Downloader (`.instagram`)**: Added GuruAPI fallback and improved error handling for Reels and posts.

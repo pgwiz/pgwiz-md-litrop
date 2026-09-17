@@ -5,10 +5,10 @@ const isAdmin = require('../lib/isAdmin');
 const isOwnerOrSudo = require('../lib/isOwner');
 const settings = require('../settings');
 
-const MISTRAL_API_URL = 'https://mistral-conversational.vercel.app/api/chat';
+const AI_API_URL = 'https://mistral-conversational.vercel.app/api/chat';
 const SETTING_KEY = 'aimode';
 
-// 8 Official Persona Modes from Mistral Conversational API (/docs)
+// 10 Official Persona Modes from Conversational API (/docs)
 const MODES = {
     'gen-co': {
         slug: 'gen-co',
@@ -73,6 +73,22 @@ const MODES = {
         category: 'Creative',
         defaultLevel: 3,
         temperature: 0.9
+    },
+    'zen': {
+        slug: 'zen',
+        name: 'Zen Master',
+        tagline: 'Calm, mindful clarity, stillness, and centered wisdom',
+        category: 'Philosophy',
+        defaultLevel: 3,
+        temperature: 0.5
+    },
+    'medieval': {
+        slug: 'medieval',
+        name: 'Medieval Knight & Chronicler',
+        tagline: 'Chivalric prose, archaic flair, and royal chronicle',
+        category: 'Historical',
+        defaultLevel: 3,
+        temperature: 0.8
     }
 };
 
@@ -84,12 +100,14 @@ const MODE_ALIASES = {
     'general': 'gen-co',
     'conversational': 'gen-co',
     'normal': 'gen-co',
+    'standard': 'gen-co',
 
     'gen-co-em': 'gen-co-em',
     'gencoem': 'gen-co-em',
     'emoji': 'gen-co-em',
     'emojis': 'gen-co-em',
     'fun': 'gen-co-em',
+    'expressive': 'gen-co-em',
 
     'prof-tech': 'prof-tech',
     'proftech': 'prof-tech',
@@ -98,22 +116,27 @@ const MODE_ALIASES = {
     'pro': 'prof-tech',
     'professional': 'prof-tech',
     'engineer': 'prof-tech',
+    'architect': 'prof-tech',
 
     'socratic': 'socratic',
     'tutor': 'socratic',
     'guide': 'socratic',
     'inquiry': 'socratic',
+    'mentor': 'socratic',
+    'reasoning': 'socratic',
 
     'eli5': 'eli5',
     'simple': 'eli5',
     'kid': 'eli5',
     'beginner': 'eli5',
+    'easy': 'eli5',
 
     'concise': 'concise',
     'bullet': 'concise',
     'brief': 'concise',
     'short': 'concise',
     'fast': 'concise',
+    'summary': 'concise',
 
     'code-mentor': 'code-mentor',
     'codementor': 'code-mentor',
@@ -122,12 +145,29 @@ const MODE_ALIASES = {
     'developer': 'code-mentor',
     'dev': 'code-mentor',
     'program': 'code-mentor',
+    'programmer': 'code-mentor',
 
     'creative': 'creative',
     'story': 'creative',
     'storyteller': 'creative',
     'writer': 'creative',
-    'artistic': 'creative'
+    'artistic': 'creative',
+
+    'zen': 'zen',
+    'peace': 'zen',
+    'calm': 'zen',
+    'monk': 'zen',
+    'meditation': 'zen',
+    'mindful': 'zen',
+    'stillness': 'zen',
+
+    'medieval': 'medieval',
+    'knight': 'medieval',
+    'archaic': 'medieval',
+    'king': 'medieval',
+    'royal': 'medieval',
+    'courtly': 'medieval',
+    'chivalry': 'medieval'
 };
 
 const DEPTH_LEVELS = {
@@ -185,6 +225,206 @@ const HUMOROUS_MEDIA_SYSTEM_PROMPT =
     'Never be boring or robotic. Keep it entertaining and good-natured!';
 
 /**
+ * Cleanly resolves user-supplied input into a valid WhatsApp JID.
+ * Supports phone numbers (e.g. 254712345678, +254712345678),
+ * user JIDs (254712345678@s.whatsapp.net), group JIDs (120363xxxxxx@g.us),
+ * hyphenated legacy group JIDs (12345-67890@g.us), and @mention tokens.
+ */
+function resolveTargetJid(input) {
+    if (!input || typeof input !== 'string') return null;
+    let s = input.trim();
+    if (!s) return null;
+
+    // Strip URL wrappers if any
+    s = s.replace(/^https?:\/\/(?:api\.)?whatsapp\.com\/send\?phone=/i, '');
+    s = s.replace(/^https?:\/\/wa\.me\//i, '');
+    s = s.replace(/^whatsapp:/i, '');
+
+    // Strip leading @
+    if (s.startsWith('@')) s = s.slice(1);
+
+    // If explicit WhatsApp domain is present
+    if (s.endsWith('@s.whatsapp.net') || s.endsWith('@g.us') || s.endsWith('@lid')) {
+        if (s.endsWith('@s.whatsapp.net')) {
+            const num = s.split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+            return num ? `${num}@s.whatsapp.net` : null;
+        }
+        return s;
+    }
+
+    // Hyphenated legacy group ID (e.g. 123456789-987654321)
+    if (s.includes('-') && /^\d+-\d+$/.test(s)) {
+        return `${s}@g.us`;
+    }
+
+    // Clean digits
+    const cleanDigits = s.replace(/[^0-9]/g, '');
+    if (!cleanDigits) return null;
+
+    // Modern WhatsApp group JID starts with 120363 and is 17-20 digits
+    if (cleanDigits.startsWith('120363') && cleanDigits.length >= 17) {
+        return `${cleanDigits}@g.us`;
+    }
+
+    // Standard phone number (7 to 16 digits)
+    if (cleanDigits.length >= 7 && cleanDigits.length <= 16) {
+        return `${cleanDigits}@s.whatsapp.net`;
+    }
+
+    return null;
+}
+
+/**
+ * Parses multi-parameter argument strings with flexible token ordering.
+ * e.g.:
+ *  .aimode default 1 <jid>
+ *  .aimode on <mode> [level] [jid]
+ *  .aimode <mode> [level] [jid]
+ *  .aimode off [jid]
+ *  .aimode status [jid]
+ *  .aimode reset [jid]
+ */
+function parseAiModeArgs(args) {
+    let targetJid = null;
+    let explicitAction = null; // 'on', 'off', 'status', 'info', 'reset', 'level', 'mode', 'help'
+    let parsedMode = null;
+    let parsedLevel = null;
+    let invalidJidAttempt = null;
+    const unrecognized = [];
+
+    const rawArgs = Array.isArray(args) ? args : [];
+    for (let i = 0; i < rawArgs.length; i++) {
+        const raw = String(rawArgs[i] || '').trim();
+        if (!raw) continue;
+        const lower = raw.toLowerCase();
+
+        // 1. Check for combined phone number with spaces (e.g. +254 712 345 678)
+        if (!targetJid && (raw.startsWith('+') || (/^\d{2,5}$/.test(raw) && !/^[1-5]$/.test(raw)))) {
+            let combined = raw;
+            let lookAhead = i + 1;
+            while (lookAhead < rawArgs.length && /^\d+$/.test(String(rawArgs[lookAhead]).trim())) {
+                combined += String(rawArgs[lookAhead]).trim();
+                lookAhead++;
+            }
+            if (lookAhead > i + 1) {
+                const resolvedCombined = resolveTargetJid(combined);
+                if (resolvedCombined) {
+                    targetJid = resolvedCombined;
+                    i = lookAhead - 1;
+                    continue;
+                }
+            }
+        }
+
+        // 2. Check for Target JID / Phone Number
+        if (!targetJid) {
+            const resolved = resolveTargetJid(raw);
+            if (resolved) {
+                targetJid = resolved;
+                continue;
+            }
+        }
+
+        // 3. Keyword prefixes with next arg:
+        // 'mode <slug>', 'persona <slug>', 'tone <slug>', 'style <slug>', 'set <slug>'
+        if (['mode', 'persona', 'tone', 'style', 'set'].includes(lower)) {
+            if (i + 1 < rawArgs.length) {
+                const nextLower = String(rawArgs[i + 1] || '').toLowerCase().trim();
+                if (MODE_ALIASES[nextLower]) {
+                    parsedMode = MODE_ALIASES[nextLower];
+                    i++;
+                    continue;
+                }
+            }
+            if (!explicitAction) explicitAction = 'mode';
+            continue;
+        }
+
+        // 'level <1-5>', 'lvl <1-5>', 'depth <1-5>'
+        if (['level', 'lvl', 'depth'].includes(lower)) {
+            if (i + 1 < rawArgs.length) {
+                const nextVal = parseInt(rawArgs[i + 1], 10);
+                if (nextVal >= 1 && nextVal <= 5) {
+                    parsedLevel = nextVal;
+                    i++;
+                    continue;
+                }
+            }
+            if (!explicitAction) explicitAction = 'level';
+            continue;
+        }
+
+        // 'to <jid>', 'jid <jid>', 'chat <jid>', 'target <jid>'
+        if (['to', 'jid', 'chat', 'target'].includes(lower)) {
+            if (i + 1 < rawArgs.length) {
+                const resolved = resolveTargetJid(rawArgs[i + 1]);
+                if (resolved) {
+                    targetJid = resolved;
+                    i++;
+                    continue;
+                }
+            }
+            continue;
+        }
+
+        // 4. Actions
+        if (['on', 'enable', 'start'].includes(lower)) {
+            explicitAction = 'on';
+            continue;
+        }
+        if (['off', 'disable', 'stop'].includes(lower)) {
+            explicitAction = 'off';
+            continue;
+        }
+        if (['status', 'info', 'check', 'view'].includes(lower)) {
+            explicitAction = 'status';
+            continue;
+        }
+        if (['reset', 'clear'].includes(lower)) {
+            explicitAction = 'reset';
+            continue;
+        }
+        if (['help', 'menu'].includes(lower)) {
+            explicitAction = 'help';
+            continue;
+        }
+
+        // 5. Depth Level (1 - 5)
+        if (/^[1-5]$/.test(lower)) {
+            if (!parsedLevel) {
+                parsedLevel = parseInt(lower, 10);
+                continue;
+            }
+        }
+
+        // 6. Mode Alias
+        if (MODE_ALIASES[lower]) {
+            if (!parsedMode) {
+                parsedMode = MODE_ALIASES[lower];
+                continue;
+            }
+        }
+
+        // Check if user attempted a JID but formatted it incorrectly
+        if (raw.includes('@') || raw.startsWith('+') || /^\d{6,}$/.test(raw.replace(/[^0-9]/g, ''))) {
+            invalidJidAttempt = raw;
+            continue;
+        }
+
+        unrecognized.push(raw);
+    }
+
+    return {
+        targetJid,
+        explicitAction,
+        parsedMode,
+        parsedLevel,
+        invalidJidAttempt,
+        unrecognized
+    };
+}
+
+/**
  * Retrieves AI mode configuration for a specific chat
  */
 async function getAiConfig(chatId) {
@@ -198,7 +438,7 @@ async function getAiConfig(chatId) {
             return {
                 enabled: !!data.enabled,
                 mode: chatId.endsWith('@g.us') ? 'gen-co' : (data.mode || 'gen-co'),
-                level: typeof data.level === 'number' ? data.level : 3
+                level: chatId.endsWith('@g.us') ? 3 : (typeof data.level === 'number' ? data.level : 3)
             };
         }
         if (typeof data === 'boolean') {
@@ -227,7 +467,7 @@ async function saveAiConfig(chatId, config) {
         const toSave = {
             enabled: !!config.enabled,
             mode: isGroup ? 'gen-co' : (config.mode || 'gen-co'),
-            level: typeof config.level === 'number' ? config.level : 3
+            level: isGroup ? 3 : (typeof config.level === 'number' ? config.level : 3)
         };
         await store.saveSetting(chatId, SETTING_KEY, toSave);
         return true;
@@ -238,9 +478,9 @@ async function saveAiConfig(chatId, config) {
 }
 
 /**
- * Calls Mistral Conversational API endpoint
+ * Calls Conversational API endpoint
  */
-async function callMistralChat({ message, mode = 'gen-co', level = 3, history = [], systemPromptOverride = null }, retries = 1) {
+async function callAiChat({ message, mode = 'gen-co', level = 3, history = [], systemPromptOverride = null }, retries = 1) {
     const payload = {
         message: String(message || '').trim(),
         mode,
@@ -258,11 +498,11 @@ async function callMistralChat({ message, mode = 'gen-co', level = 3, history = 
     const timeout = setTimeout(() => controller.abort(), 35000);
 
     try {
-        const response = await fetch(MISTRAL_API_URL, {
+        const response = await fetch(AI_API_URL, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'User-Agent': 'MEGA-MD-MistralAI/1.0'
+                'User-Agent': 'MEGA-MD-AI/1.0'
             },
             body: JSON.stringify(payload),
             signal: controller.signal
@@ -271,7 +511,7 @@ async function callMistralChat({ message, mode = 'gen-co', level = 3, history = 
         if (!response.ok) {
             const errData = await response.json().catch(() => ({}));
             const errMsg = errData.error || `HTTP ${response.status} ${response.statusText}`;
-            console.error('[AI-MODE] Mistral API error:', errMsg);
+            console.error('[AI-MODE] API error:', errMsg);
             return { success: false, error: errMsg };
         }
 
@@ -288,15 +528,15 @@ async function callMistralChat({ message, mode = 'gen-co', level = 3, history = 
         };
     } catch (err) {
         if (err.name === 'AbortError') {
-            console.error('[AI-MODE] Mistral API timed out after 35s');
+            console.error('[AI-MODE] API timed out after 35s');
             return { success: false, error: 'Request timed out' };
         }
         if (retries > 0) {
-            console.warn(`[AI-MODE] Mistral API fetch failed (${err.message}). Retrying in 1s...`);
+            console.warn(`[AI-MODE] API fetch failed (${err.message}). Retrying in 1s...`);
             await new Promise(r => setTimeout(r, 1000));
-            return callMistralChat({ message, mode, level, history, systemPromptOverride }, retries - 1);
+            return callAiChat({ message, mode, level, history, systemPromptOverride }, retries - 1);
         }
-        console.error('[AI-MODE] Mistral API call failed:', err.message);
+        console.error('[AI-MODE] API call failed:', err.message);
         return { success: false, error: err.message };
     } finally {
         clearTimeout(timeout);
@@ -467,7 +707,7 @@ async function handleChatbotResponse(sock, chatId, message, userMessage, senderI
                 await sock.sendPresenceUpdate('composing', chatId);
             } catch {}
 
-            const result = await callMistralChat({
+            const result = await callAiChat({
                 message: promptText,
                 mode: 'gen-co',
                 level: 3,
@@ -504,7 +744,7 @@ async function handleChatbotResponse(sock, chatId, message, userMessage, senderI
                     : `[User sent a ${media.type} with no caption]`;
 
                 const history = getChatHistory(chatId);
-                const result = await callMistralChat({
+                const result = await callAiChat({
                     message: mediaPrompt,
                     mode: config.mode || 'gen-co',
                     level: 2, // punchy summary for humorous roasts
@@ -533,7 +773,7 @@ async function handleChatbotResponse(sock, chatId, message, userMessage, senderI
             if (!promptText) return;
 
             const history = getChatHistory(chatId);
-            const result = await callMistralChat({
+            const result = await callAiChat({
                 message: promptText,
                 mode: config.mode || 'gen-co',
                 level: config.level || 3,
@@ -560,235 +800,273 @@ async function handleChatbotResponse(sock, chatId, message, userMessage, senderI
 }
 
 /**
- * Command Handler (.aimode / .chatbot / .mistral / .chatgpt)
+ * Command Handler (.aimode / .chatbot / .chatgpt / .autochat)
  */
 async function handler(sock, message, args, context = {}) {
-    const chatId = context.chatId || message.key.remoteJid;
-    const isGroup = chatId.endsWith('@g.us');
+    const currentChatId = context.chatId || message.key.remoteJid;
+    const isCurrentGroup = currentChatId.endsWith('@g.us');
     const senderId = context.senderId || message.key.participant || message.key.remoteJid;
-    const isOwnerOrSudoCheck = !!(context.isOwnerOrSudoCheck || message.key.fromMe);
 
-    const sub = (args[0] || '').toLowerCase().trim();
-    const val = (args[1] || '').toLowerCase().trim();
-    const config = await getAiConfig(chatId);
-
-    // Identify if the requested action is mutating
-    const isMutatingAction = ['on', 'enable', 'start', 'off', 'disable', 'stop', 'reset', 'level', 'mode', 'persona', 'tone', 'style', 'set'].includes(sub) ||
-        !!MODE_ALIASES[sub];
-
-    // Permission check for groups: Only admins or owner/sudo can mutate AI mode in groups
-    if (isGroup && isMutatingAction && !isOwnerOrSudoCheck) {
-        let isSenderAdmin = context.isSenderAdmin;
-        if (typeof isSenderAdmin !== 'boolean') {
-            try {
-                const adminStatus = await isAdmin(sock, chatId, senderId);
-                isSenderAdmin = adminStatus.isSenderAdmin;
-            } catch {
-                isSenderAdmin = false;
-            }
+    // Check caller privileges
+    let isOwnerOrSudoCheck = !!(context.isOwnerOrSudoCheck || message.key.fromMe);
+    if (!isOwnerOrSudoCheck) {
+        try {
+            isOwnerOrSudoCheck = await isOwnerOrSudo(senderId, sock, currentChatId);
+        } catch {
+            isOwnerOrSudoCheck = false;
         }
-        if (!isSenderAdmin) {
-            return sock.sendMessage(chatId, {
+    }
+
+    let isSenderAdmin = context.isSenderAdmin;
+    if (isCurrentGroup && typeof isSenderAdmin !== 'boolean') {
+        try {
+            const adminStatus = await isAdmin(sock, currentChatId, senderId);
+            isSenderAdmin = adminStatus.isSenderAdmin;
+        } catch {
+            isSenderAdmin = false;
+        }
+    }
+
+    // Parse all-in-one argument string
+    const parsed = parseAiModeArgs(args);
+
+    // If an invalid JID format was attempted
+    if (parsed.invalidJidAttempt) {
+        return sock.sendMessage(currentChatId, {
+            text: `❌ *Invalid Target JID / Phone Number:* "${parsed.invalidJidAttempt}"\n\n` +
+                  `Please provide a valid phone number (e.g. \`254712345678\`) or WhatsApp JID (e.g. \`120363xxxxxx@g.us\`).`
+        }, { quoted: message });
+    }
+
+    const targetChatId = parsed.targetJid || currentChatId;
+    const isRemoteTarget = targetChatId !== currentChatId;
+    const targetIsGroup = targetChatId.endsWith('@g.us');
+
+    // 1. Permission checks
+    if (isRemoteTarget) {
+        // JID supplied: Caller must be bot owner/sudo OR group admin of current group
+        const hasPermission = isOwnerOrSudoCheck || (isCurrentGroup && isSenderAdmin);
+        if (!hasPermission) {
+            return sock.sendMessage(currentChatId, {
+                text: '❌ *Permission Denied*: Only bot owners, sudo users, or group admins can target another chat by JID.'
+            }, { quoted: message });
+        }
+    } else if (isCurrentGroup) {
+        // Mutating AI mode in current group requires group admin or owner/sudo
+        const isMutating = parsed.explicitAction === 'on' ||
+                           parsed.explicitAction === 'off' ||
+                           parsed.explicitAction === 'reset' ||
+                           !!parsed.parsedMode ||
+                           !!parsed.parsedLevel;
+
+        if (isMutating && !isOwnerOrSudoCheck && !isSenderAdmin) {
+            return sock.sendMessage(currentChatId, {
                 text: '❌ *Permission Denied*: Only group admins or the bot owner can configure AI Mode for this group.'
             }, { quoted: message });
         }
     }
 
-    // 1. ENABLE AI MODE
-    if (sub === 'on' || sub === 'enable' || sub === 'start') {
-        config.enabled = true;
+    const config = await getAiConfig(targetChatId);
 
-        // If an optional mode alias is provided in DM (e.g. .aimode on eli5)
-        if (!isGroup && val && MODE_ALIASES[val] && MODES[MODE_ALIASES[val]]) {
-            config.mode = MODE_ALIASES[val];
-        }
-
-        await saveAiConfig(chatId, config);
-
-        if (isGroup) {
-            return sock.sendMessage(chatId, {
-                text: `✅ *AI Mode Activated for this Group!*\n\n` +
-                      `• *Mode:* Conversational (\`gen-co\`) [Group Policy]\n` +
-                      `• *Trigger:* Mention me (@bot) or reply to any of my messages.\n` +
-                      `• Powered by Mistral Conversational AI.`
-            }, { quoted: message });
-        } else {
-            const currentModeObj = MODES[config.mode] || MODES['gen-co'];
-            return sock.sendMessage(chatId, {
-                text: `✅ *AI Mode Activated!*\n\n` +
-                      `• *Persona Mode:* *${currentModeObj.name}* (\`${currentModeObj.slug}\`)\n` +
-                      `• *Tagline:* _${currentModeObj.tagline}_\n` +
-                      `• *Depth Level:* ${config.level} / 5\n\n` +
-                      `*Direct Message Behavior:*\n` +
-                      `• Automatically replies to all incoming text messages.\n` +
-                      `• Sending media (photos, videos, stickers, voice notes) triggers witty roasts & humorous remarks!\n` +
-                      `• Configure persona mode anytime via \`.aimode <mode>\`.`
-            }, { quoted: message });
-        }
-    }
-
-    // 2. DISABLE AI MODE
-    if (sub === 'off' || sub === 'disable' || sub === 'stop') {
+    // 2. DISABLE AI MODE (.aimode off [jid])
+    if (parsed.explicitAction === 'off') {
         config.enabled = false;
-        await saveAiConfig(chatId, config);
-        conversationHistory.delete(chatId);
+        await saveAiConfig(targetChatId, config);
+        conversationHistory.delete(targetChatId);
 
-        return sock.sendMessage(chatId, {
-            text: `❌ *AI Mode Deactivated!*\n\n` +
-                  (isGroup
-                      ? `I will no longer reply to mentions or messages in this group.`
-                      : `Automatic replies and media responses in this direct message are now paused.`)
+        const targetDesc = isRemoteTarget ? ` for \`${targetChatId}\`` : '';
+        const groupNotice = targetIsGroup
+            ? `The bot will no longer reply to mentions or messages in this group.`
+            : `Automatic replies and media responses are now paused.`;
+
+        return sock.sendMessage(currentChatId, {
+            text: `❌ *AI Mode Deactivated${targetDesc}!*\n\n${groupNotice}`
         }, { quoted: message });
     }
 
-    // 3. STATUS / INFO
-    if (sub === 'status' || sub === 'info') {
+    // 3. STATUS / INFO (.aimode status [jid], .aimode info [jid])
+    if (parsed.explicitAction === 'status' || parsed.explicitAction === 'info') {
         const modeObj = MODES[config.mode] || MODES['gen-co'];
         const statusIcon = config.enabled ? '✅ Enabled' : '❌ Disabled';
         const levelDesc = DEPTH_LEVELS[config.level] || DEPTH_LEVELS[3];
 
-        let msgText = `*🤖 MISTRAL CONVERSATIONAL AI MODE*\n\n` +
+        let msgText = `*🤖 CONVERSATIONAL AI MODE STATUS*\n\n` +
+                      `• *Target Chat:* \`${targetChatId}\`${isRemoteTarget ? ' (Remote Target)' : ' (Current Chat)'}\n` +
                       `• *Status:* ${statusIcon}\n` +
-                      `• *Chat Type:* ${isGroup ? 'Group Chat' : 'Private Direct Message'}\n` +
+                      `• *Chat Type:* ${targetIsGroup ? 'Group Chat' : 'Private Direct Message'}\n` +
                       `• *Current Mode:* *${modeObj.name}* (\`${modeObj.slug}\`)\n` +
                       `• *Tagline:* _${modeObj.tagline}_\n` +
-                      `• *Depth Level:* ${config.level} (${levelDesc})\n\n`;
+                      `• *Depth Level:* Level ${config.level} (${levelDesc})\n\n`;
 
-        if (isGroup) {
+        if (targetIsGroup) {
             msgText += `*Group Policy:*\n` +
-                       `Group chats are strictly locked to Conversational Mode (\`gen-co\`) and respond only when mentioned or replied to.`;
+                       `Group chats are strictly locked to Conversational Mode (\`gen-co\`) and respond only when mentioned (@bot) or replied to.`;
         } else {
             msgText += `*Private DM Customization:*\n` +
-                       `Use \`.aimode <mode>\` to change persona style or \`.aimode level <1-5>\` to adjust depth.`;
+                       `Use \`.aimode <mode> [level] [jid]\` to customize persona mode or depth level.`;
         }
 
-        return sock.sendMessage(chatId, { text: msgText }, { quoted: message });
+        return sock.sendMessage(currentChatId, { text: msgText }, { quoted: message });
     }
 
-    // 4. RESET HISTORY & SETTINGS
-    if (sub === 'reset') {
+    // 4. RESET HISTORY & SETTINGS (.aimode reset [jid])
+    if (parsed.explicitAction === 'reset') {
         config.mode = 'gen-co';
         config.level = 3;
-        await saveAiConfig(chatId, config);
-        conversationHistory.delete(chatId);
+        await saveAiConfig(targetChatId, config);
+        conversationHistory.delete(targetChatId);
 
-        return sock.sendMessage(chatId, {
-            text: `🔄 *AI Mode Reset to Defaults!*\n\n` +
+        const targetDesc = isRemoteTarget ? ` for \`${targetChatId}\`` : '';
+        return sock.sendMessage(currentChatId, {
+            text: `🔄 *AI Mode Reset to Defaults${targetDesc}!*\n\n` +
                   `• Mode reset to *General Conversational* (\`gen-co\`).\n` +
                   `• Depth level reset to Level 3 (Comprehensive).\n` +
                   `• Conversation memory cleared.`
         }, { quoted: message });
     }
 
-    // 5. DEPTH LEVEL CONFIGURATION (.aimode level <1-5>)
-    if (sub === 'level') {
-        if (isGroup) {
-            return sock.sendMessage(chatId, {
+    // 5. DEPTH LEVEL MENU (.aimode level [jid] without specifying level)
+    if (parsed.explicitAction === 'level' && !parsed.parsedLevel) {
+        if (targetIsGroup) {
+            return sock.sendMessage(currentChatId, {
                 text: `⚠️ *Group Restriction*: Group chats are strictly locked to default conversational settings. Depth level adjustment is available in private direct messages only.`
             }, { quoted: message });
         }
 
-        const lvl = parseInt(val, 10);
-        if (!lvl || lvl < 1 || lvl > 5) {
-            let lvlList = `*Available Depth Levels (1 - 5):*\n\n`;
-            for (let i = 1; i <= 5; i++) {
-                lvlList += `• *Level ${i}*: ${DEPTH_LEVELS[i]}\n`;
-            }
-            lvlList += `\n*Usage:* \`.aimode level <1-5>\` (e.g. \`.aimode level 2\`)`;
-            return sock.sendMessage(chatId, { text: lvlList }, { quoted: message });
+        let lvlList = `*Available Depth Levels (1 - 5):*\n\n`;
+        for (let i = 1; i <= 5; i++) {
+            lvlList += `• *Level ${i}*: ${DEPTH_LEVELS[i]}\n`;
         }
-
-        config.level = lvl;
-        await saveAiConfig(chatId, config);
-
-        return sock.sendMessage(chatId, {
-            text: `✅ *Depth Level Updated to Level ${lvl}!*\n\n${DEPTH_LEVELS[lvl]}`
-        }, { quoted: message });
+        lvlList += `\n*Usage:* \`.aimode level <1-5> [jid]\` (e.g. \`.aimode level 2\`)`;
+        return sock.sendMessage(currentChatId, { text: lvlList }, { quoted: message });
     }
 
-    // 6. PERSONA MODE CONFIGURATION (.aimode mode <slug>, .aimode persona <slug>, .aimode tone <slug>, .aimode style <slug>, .aimode set <slug>, OR .aimode <slug>)
-    const isModePrefix = ['mode', 'persona', 'tone', 'style', 'set'].includes(sub);
-    const targetCandidate = (isModePrefix ? val : sub).toLowerCase();
-    const resolvedSlug = MODE_ALIASES[targetCandidate];
-
-    if (resolvedSlug && MODES[resolvedSlug]) {
-        // Enforce group chat restriction
-        if (isGroup) {
-            return sock.sendMessage(chatId, {
-                text: `⚠️ *Group Restriction*: Group chats are strictly restricted to *Conversational Mode* (\`gen-co\`).\n\n` +
-                      `Persona mode configuration (such as \`${resolvedSlug}\`) is only available in private direct messages.`
+    // 6. PERSONA MODES MENU (.aimode mode [jid] without specifying slug)
+    if (parsed.explicitAction === 'mode' && !parsed.parsedMode) {
+        if (targetIsGroup) {
+            return sock.sendMessage(currentChatId, {
+                text: `⚠️ *Group Restriction*: Group chats are strictly restricted to *Conversational Mode* (\`gen-co\`). Persona customization is available in private direct messages only.`
             }, { quoted: message });
         }
 
-        config.mode = resolvedSlug;
-        const optionalLevelStr = isModePrefix ? args[2] : args[1];
-        if (optionalLevelStr) {
-            const optionalLevel = parseInt(optionalLevelStr, 10);
-            if (optionalLevel >= 1 && optionalLevel <= 5) {
-                config.level = optionalLevel;
+        let modeList = `*🎭 Available Persona Modes (Private DMs):*\n\n`;
+        let idx = 1;
+        for (const [slug, m] of Object.entries(MODES)) {
+            modeList += `${idx++}. *${m.name}* (\`${slug}\`)\n   _${m.tagline}_\n`;
+        }
+        modeList += `\n*Usage:* \`.aimode <mode> [level] [jid]\` (e.g. \`.aimode eli5 2\`)`;
+        return sock.sendMessage(currentChatId, { text: modeList }, { quoted: message });
+    }
+
+    // 7. ENABLE / ALL-IN-ONE CONFIGURATION
+    // Triggers when 'on', or a mode is provided, or a level is provided
+    if (parsed.explicitAction === 'on' || parsed.parsedMode || parsed.parsedLevel) {
+        config.enabled = true;
+
+        // GROUP TARGET LOGIC
+        if (targetIsGroup) {
+            config.mode = 'gen-co';
+            config.level = 3;
+            await saveAiConfig(targetChatId, config);
+
+            const targetDesc = isRemoteTarget ? ` for Group \`${targetChatId}\`` : ` for this Group`;
+            let groupMsg = `✅ *AI Mode Activated${targetDesc}!*\n\n` +
+                           `• *Mode:* Conversational (\`gen-co\`) [Group Policy]\n` +
+                           `• *Depth Level:* Level 3 (Comprehensive)\n` +
+                           `• *Trigger:* Mention me (@bot) or reply to any of my messages.\n` +
+                           `• Powered by Conversational AI.`;
+
+            if ((parsed.parsedMode && parsed.parsedMode !== 'gen-co') || (parsed.parsedLevel && parsed.parsedLevel !== 3)) {
+                groupMsg += `\n\n_📌 Note: Group chats remain locked to Conversational Mode (\`gen-co\`) and Level 3. Persona styling applies to private direct messages._`;
             }
+
+            return sock.sendMessage(currentChatId, { text: groupMsg }, { quoted: message });
         }
 
-        await saveAiConfig(chatId, config);
-        const modeData = MODES[resolvedSlug];
+        // PRIVATE DM TARGET LOGIC
+        if (parsed.parsedMode) {
+            config.mode = parsed.parsedMode;
+        }
+        if (parsed.parsedLevel) {
+            config.level = parsed.parsedLevel;
+        }
 
-        return sock.sendMessage(chatId, {
-            text: `✅ *Persona Mode Updated!*\n\n` +
-                  `• *Mode:* *${modeData.name}* (\`${modeData.slug}\`)\n` +
-                  `• *Category:* ${modeData.category}\n` +
-                  `• *Tagline:* _${modeData.tagline}_\n` +
+        await saveAiConfig(targetChatId, config);
+
+        const currentModeObj = MODES[config.mode] || MODES['gen-co'];
+        const targetDesc = isRemoteTarget ? ` for \`${targetChatId}\`` : '';
+
+        return sock.sendMessage(currentChatId, {
+            text: `✅ *AI Mode Activated${targetDesc}!*\n\n` +
+                  `• *Persona Mode:* *${currentModeObj.name}* (\`${currentModeObj.slug}\`)\n` +
+                  `• *Category:* ${currentModeObj.category}\n` +
+                  `• *Tagline:* _${currentModeObj.tagline}_\n` +
                   `• *Depth Level:* Level ${config.level} / 5\n\n` +
-                  `All subsequent private messages will use this persona style.`
+                  `*Direct Message Behavior:*\n` +
+                  `• Automatically replies to all incoming text messages.\n` +
+                  `• Sending media (photos, videos, stickers, voice notes) triggers witty roasts & humorous remarks!\n` +
+                  `• Configure anytime via \`.aimode <mode> [level] [jid]\`.`
         }, { quoted: message });
     }
 
-    // 7. DEFAULT HELP MENU
-    let help = `*🤖 MISTRAL CONVERSATIONAL AI MODE*\n\n` +
-               `*Current Chat Status:* ${config.enabled ? '✅ Active' : '❌ Inactive'}\n` +
-               `*Active Mode:* ${MODES[config.mode]?.name || 'General Conversational'} (\`${config.mode}\`)\n` +
-               `*Depth Level:* ${config.level} / 5\n\n` +
-               `*Commands:*\n` +
-               `• \`.aimode on\` - Enable AI Mode for this chat\n` +
-               `• \`.aimode off\` - Disable AI Mode for this chat\n` +
-               `• \`.aimode status\` - View current status & settings\n` +
-               `• \`.aimode reset\` - Reset settings and clear chat memory\n`;
-
-    if (!isGroup) {
-        help += `• \`.aimode <mode>\` - Switch persona mode (DMs only)\n` +
-                `• \`.aimode level <1-5>\` - Adjust response depth level (DMs only)\n\n` +
-                `*🎭 Available Persona Modes (Private DMs):*\n` +
-                `1. \`gen-co\` (or \`general\`) - Balanced daily assistant\n` +
-                `2. \`gen-co-em\` (or \`emoji\`) - Vibrant with emojis\n` +
-                `3. \`prof-tech\` (or \`tech\`) - Analytical engineering consultant\n` +
-                `4. \`socratic\` (or \`guide\`) - Socratic mentor & guided inquiry\n` +
-                `5. \`eli5\` (or \`simple\`) - Explain Like I'm 5 (analogies)\n` +
-                `6. \`concise\` (or \`bullet\`) - Zero fluff, maximum signal\n` +
-                `7. \`code-mentor\` (or \`code\`) - Software architect & code mentor\n` +
-                `8. \`creative\` (or \`story\`) - Imaginative prose & storytelling\n\n` +
-                `*💡 Features in Private DMs:*\n` +
-                `• Automatically responds to all incoming text.\n` +
-                `• Incoming photos, stickers, audio, and documents trigger witty roasts!`;
-    } else {
-        help += `\n*👥 Group Chat Policy:*\n` +
-                `• Restricted strictly to Conversational Mode (\`gen-co\`).\n` +
-                `• Responds only when explicitly mentioned (@bot) or replied to.`;
+    // 8. HELP MENU (No args, help, or unrecognized input)
+    let help = `*🤖 CONVERSATIONAL AI MODE*\n\n`;
+    if (parsed.unrecognized.length > 0) {
+        help += `⚠️ *Unknown command or mode:* "${parsed.unrecognized.join(' ')}"\n\n`;
     }
+    help += `*Current Chat:* \`${currentChatId}\`\n` +
+            `*Status:* ${config.enabled ? '✅ Active' : '❌ Inactive'}\n` +
+            `*Active Mode:* ${MODES[config.mode]?.name || 'General Conversational'} (\`${config.mode}\`)\n` +
+            `*Depth Level:* Level ${config.level} / 5\n\n` +
+            `*Commands:*\n` +
+            `• \`.aimode on [mode] [level] [jid]\` - Enable & configure AI mode\n` +
+            `• \`.aimode off [jid]\` - Disable AI mode\n` +
+            `• \`.aimode status [jid]\` - View status & settings\n` +
+            `• \`.aimode reset [jid]\` - Reset settings & clear chat memory\n` +
+            `• \`.aimode default 1 [jid]\` - Set default conversational mode & level 1\n` +
+            `• \`.aimode <mode> [level] [jid]\` - Set persona mode & depth level\n` +
+            `• \`.aimode level <1-5> [jid]\` - Adjust response depth level\n\n` +
+            `*Admin & Owner JID Targeting:*\n` +
+            `• Target any chat by phone number or JID:\n` +
+            `  - \`.aimode default 1 254712345678\`\n` +
+            `  - \`.aimode on tech 3 254712345678@s.whatsapp.net\`\n` +
+            `  - \`.aimode eli5 2 120363025123456789@g.us\`\n` +
+            `  - \`.aimode off 254712345678\`\n` +
+            `  - \`.aimode status 120363025123456789@g.us\`\n\n` +
+            `*🎭 Available Persona Modes (Private DMs):*\n` +
+            `1. \`gen-co\` (or \`default\`, \`general\`) - Balanced daily assistant\n` +
+            `2. \`gen-co-em\` (or \`emoji\`, \`fun\`) - Vibrant with emojis\n` +
+            `3. \`prof-tech\` (or \`tech\`, \`pro\`) - Analytical engineering consultant\n` +
+            `4. \`socratic\` (or \`guide\`, \`tutor\`) - Socratic mentor & guided reasoning\n` +
+            `5. \`eli5\` (or \`simple\`, \`beginner\`) - Explain Like I'm 5 (analogies)\n` +
+            `6. \`concise\` (or \`bullet\`, \`brief\`) - Zero fluff, maximum signal\n` +
+            `7. \`code-mentor\` (or \`code\`, \`dev\`) - Software architect & code mentor\n` +
+            `8. \`creative\` (or \`story\`, \`writer\`) - Imaginative prose & storytelling\n` +
+            `9. \`zen\` (or \`peace\`, \`calm\`) - Mindful clarity, stillness & wisdom\n` +
+            `10. \`medieval\` (or \`knight\`, \`royal\`) - Chivalric prose & archaic flair\n\n` +
+            `*👥 Group Policy:*\n` +
+            `• Group chats remain locked to Conversational Mode (\`gen-co\`).\n` +
+            `• Responds only when explicitly mentioned (@bot) or replied to.\n` +
+            `• Admins can toggle AI mode on/off or view status remotely via JID.`;
 
-    return sock.sendMessage(chatId, { text: help }, { quoted: message });
+    return sock.sendMessage(currentChatId, { text: help }, { quoted: message });
 }
 
 module.exports = {
     command: 'chatbot',
-    aliases: ['aimode', 'mistral', 'chatgpt', 'chatbots', 'autochat', 'achat'],
+    aliases: ['aimode', 'chatgpt', 'chatbots', 'autochat', 'achat'],
     category: 'ai',
-    description: 'Toggle and configure Mistral Conversational AI mode for private DMs or group chats',
-    usage: '.aimode <on|off|status|mode <slug>|level <1-5>|reset>',
+    description: 'Toggle and configure Conversational AI mode for private DMs or group chats',
+    usage: '.aimode [on|off|status|default 1|<mode> [level] [jid]]',
 
     handler,
     handleChatbotResponse,
     getAiConfig,
     saveAiConfig,
-    callMistralChat,
+    callAiChat,
+    callMistralChat: callAiChat,
+    resolveTargetJid,
+    parseAiModeArgs,
     MODES,
     MODE_ALIASES,
     DEPTH_LEVELS
