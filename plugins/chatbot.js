@@ -7,6 +7,28 @@ const settings = require('../settings');
 
 const AI_API_URL = 'https://mistral-conversational.vercel.app/api/chat';
 const SETTING_KEY = 'aimode';
+const DEFAULT_AI_MODEL = process.env.DEFAULT_AI_MODEL || process.env.AI_MODEL || 'ministral-3b-2512';
+
+const MODEL_ALIASES = {
+    '3b': 'ministral-3b-2512',
+    'mistral-3b': 'ministral-3b-2512',
+    'ministral-3b': 'ministral-3b-2512',
+    'ministral-3b-2512': 'ministral-3b-2512',
+
+    '8b': 'ministral-8b-2512',
+    'mistral-8b': 'ministral-8b-2512',
+    'ministral-8b': 'ministral-8b-2512',
+    'ministral-8b-2512': 'ministral-8b-2512',
+
+    '14b': 'ministral-14b-2512',
+    'mistral-14b': 'ministral-14b-2512',
+    'ministral-14b': 'ministral-14b-2512',
+    'ministral-14b-2512': 'ministral-14b-2512',
+
+    'codestral': 'codestral-2508',
+    'codestral-2508': 'codestral-2508',
+    'code-model': 'codestral-2508'
+};
 
 // 10 Official Persona Modes from Conversational API (/docs)
 const MODES = {
@@ -327,10 +349,11 @@ function tryCombinePhone(args, startIndex) {
  */
 function parseAiModeArgs(args) {
     let targetJid = null;
-    let explicitAction = null; // 'on', 'off', 'status', 'info', 'reset', 'level', 'mode', 'help'
+    let explicitAction = null; // 'on', 'off', 'status', 'info', 'reset', 'level', 'mode', 'model', 'help'
     let parsedMode = null;
     let parsedLevel = null;
     let parsedReplyAll = null; // true for 'repal', false for 'repan'
+    let parsedModel = null;
     let invalidJidAttempt = null;
     const unrecognized = [];
 
@@ -387,6 +410,32 @@ function parseAiModeArgs(args) {
         }
 
         // 4. Keyword prefixes with next arg:
+        // 'model <name>', 'engine <name>', 'llm <name>'
+        if (['model', 'engine', 'llm'].includes(lower)) {
+            if (i + 1 < rawArgs.length) {
+                const nextLower = String(rawArgs[i + 1] || '').toLowerCase().trim();
+                if (MODEL_ALIASES[nextLower]) {
+                    parsedModel = MODEL_ALIASES[nextLower];
+                    i++;
+                    continue;
+                } else if (['ministral-3b-2512', 'ministral-8b-2512', 'ministral-14b-2512', 'codestral-2508'].includes(nextLower)) {
+                    parsedModel = nextLower;
+                    i++;
+                    continue;
+                }
+            }
+            if (!explicitAction) explicitAction = 'model';
+            continue;
+        }
+
+        // Direct Model match (e.g. 3b, 8b, 14b, codestral)
+        if (MODEL_ALIASES[lower]) {
+            if (!parsedModel) {
+                parsedModel = MODEL_ALIASES[lower];
+                continue;
+            }
+        }
+
         // 'mode <slug>', 'persona <slug>', 'tone <slug>', 'style <slug>'
         if (['mode', 'persona', 'tone', 'style'].includes(lower)) {
             if (i + 1 < rawArgs.length) {
@@ -493,7 +542,7 @@ function parseAiModeArgs(args) {
     }
 
     // If only a target JID was supplied without explicit action or settings, default to 'status' query
-    if (targetJid && !explicitAction && !parsedMode && !parsedLevel && parsedReplyAll === null && unrecognized.length === 0) {
+    if (targetJid && !explicitAction && !parsedMode && !parsedLevel && parsedReplyAll === null && !parsedModel && unrecognized.length === 0) {
         explicitAction = 'status';
     }
 
@@ -503,6 +552,7 @@ function parseAiModeArgs(args) {
         parsedMode,
         parsedLevel,
         parsedReplyAll,
+        parsedModel,
         invalidJidAttempt,
         unrecognized
     };
@@ -523,7 +573,8 @@ async function getAiConfig(chatId) {
                 enabled: !!data.enabled,
                 mode: data.mode || 'gen-co',
                 level: typeof data.level === 'number' ? data.level : 3,
-                replyAll: !!data.replyAll
+                replyAll: !!data.replyAll,
+                model: data.model || DEFAULT_AI_MODEL
             };
         }
         if (typeof data === 'boolean') {
@@ -531,7 +582,8 @@ async function getAiConfig(chatId) {
                 enabled: data,
                 mode: 'gen-co',
                 level: 3,
-                replyAll: false
+                replyAll: false,
+                model: DEFAULT_AI_MODEL
             };
         }
     } catch (e) {
@@ -541,7 +593,8 @@ async function getAiConfig(chatId) {
         enabled: false,
         mode: 'gen-co',
         level: 3,
-        replyAll: false
+        replyAll: false,
+        model: DEFAULT_AI_MODEL
     };
 }
 
@@ -554,7 +607,8 @@ async function saveAiConfig(chatId, config) {
             enabled: !!config.enabled,
             mode: config.mode || 'gen-co',
             level: typeof config.level === 'number' ? config.level : 3,
-            replyAll: !!config.replyAll
+            replyAll: !!config.replyAll,
+            model: config.model || DEFAULT_AI_MODEL
         };
         await store.saveSetting(chatId, SETTING_KEY, toSave);
         return true;
@@ -567,14 +621,15 @@ async function saveAiConfig(chatId, config) {
 /**
  * Calls Conversational API endpoint
  */
-async function callAiChat({ message, mode = 'gen-co', level = 3, history = [], systemPromptOverride = null }, retries = 1) {
+async function callAiChat({ message, mode = 'gen-co', level = 3, history = [], systemPromptOverride = null, model = null }, retries = 1) {
+    const chosenModel = model || DEFAULT_AI_MODEL;
     const payload = {
         message: String(message || '').trim(),
         mode,
         level: Number(level) || 3,
         stream: false,
         history: Array.isArray(history) ? history.slice(-MAX_TURNS) : [],
-        model: 'ministral-8b-2512'
+        model: chosenModel
     };
 
     if (systemPromptOverride) {
@@ -611,7 +666,8 @@ async function callAiChat({ message, mode = 'gen-co', level = 3, history = [], s
             success: true,
             message: data.message.trim(),
             mode: data.mode,
-            level: data.level
+            level: data.level,
+            model: data.model || chosenModel
         };
     } catch (err) {
         if (err.name === 'AbortError') {
@@ -621,7 +677,7 @@ async function callAiChat({ message, mode = 'gen-co', level = 3, history = [], s
         if (retries > 0) {
             console.warn(`[AI-MODE] API fetch failed (${err.message}). Retrying in 1s...`);
             await new Promise(r => setTimeout(r, 1000));
-            return callAiChat({ message, mode, level, history, systemPromptOverride }, retries - 1);
+            return callAiChat({ message, mode, level, history, systemPromptOverride, model: chosenModel }, retries - 1);
         }
         console.error('[AI-MODE] API call failed:', err.message);
         return { success: false, error: err.message };
@@ -802,12 +858,14 @@ async function handleChatbotResponse(sock, chatId, message, userMessage, senderI
 
             const targetMode = config.mode || 'gen-co';
             const targetLevel = typeof config.level === 'number' ? config.level : 3;
+            const targetModel = config.model || DEFAULT_AI_MODEL;
 
             const result = await callAiChat({
                 message: promptText,
                 mode: targetMode,
                 level: targetLevel,
-                history
+                history,
+                model: targetModel
             });
 
             try {
@@ -847,7 +905,8 @@ async function handleChatbotResponse(sock, chatId, message, userMessage, senderI
                     mode: config.mode || 'gen-co',
                     level: 2, // punchy summary for humorous roasts
                     history: history.slice(-4),
-                    systemPromptOverride: HUMOROUS_MEDIA_SYSTEM_PROMPT
+                    systemPromptOverride: HUMOROUS_MEDIA_SYSTEM_PROMPT,
+                    model: config.model || DEFAULT_AI_MODEL
                 });
 
                 try {
@@ -875,7 +934,8 @@ async function handleChatbotResponse(sock, chatId, message, userMessage, senderI
                 message: promptText,
                 mode: config.mode || 'gen-co',
                 level: config.level || 3,
-                history
+                history,
+                model: config.model || DEFAULT_AI_MODEL
             });
 
             try {
@@ -973,7 +1033,8 @@ async function handler(sock, message, args, context = {}) {
                            parsed.explicitAction === 'reset' ||
                            parsed.parsedReplyAll !== null ||
                            !!parsed.parsedMode ||
-                           !!parsed.parsedLevel;
+                           !!parsed.parsedLevel ||
+                           !!parsed.parsedModel;
 
         if (isMutating && !isOwnerOrSudoCheck && !isSenderAdmin) {
             return sock.sendMessage(currentChatId, {
@@ -1008,6 +1069,8 @@ async function handler(sock, message, args, context = {}) {
         const modeObj = MODES[config.mode] || MODES['gen-co'];
         const statusIcon = config.enabled ? '✅ Enabled' : '❌ Disabled';
         const levelDesc = DEPTH_LEVELS[config.level] || DEPTH_LEVELS[3];
+        const activeModel = config.model || DEFAULT_AI_MODEL;
+        const modelLabel = activeModel === 'ministral-3b-2512' ? ' (Default - Fast 3B)' : '';
         const replyAllStatus = config.replyAll
             ? '✅ *Active* (`repal` - replies to all messages)'
             : '❌ *Inactive* (`repan` - mentions/replies only)';
@@ -1016,6 +1079,7 @@ async function handler(sock, message, args, context = {}) {
                       `• *Target Chat:* \`${targetChatId}\`${isRemoteTarget ? ' (Remote Target)' : ' (Current Chat)'}\n` +
                       `• *Status:* ${statusIcon}\n` +
                       `• *Chat Type:* ${targetIsGroup ? 'Group Chat' : 'Private Direct Message'}\n` +
+                      `• *Active Model:* \`${activeModel}\`${modelLabel}\n` +
                       `• *Current Mode:* *${modeObj.name}* (\`${modeObj.slug}\`)\n` +
                       `• *Tagline:* _${modeObj.tagline}_\n` +
                       `• *Depth Level:* Level ${config.level} (${levelDesc})\n`;
@@ -1040,12 +1104,14 @@ async function handler(sock, message, args, context = {}) {
         config.mode = 'gen-co';
         config.level = 3;
         config.replyAll = false;
+        config.model = DEFAULT_AI_MODEL;
         await saveAiConfig(targetChatId, config);
         conversationHistory.delete(targetChatId);
 
         const targetDesc = isRemoteTarget ? ` for \`${targetChatId}\`` : '';
         return sock.sendMessage(currentChatId, {
             text: `🔄 *AI Mode Reset to Defaults${targetDesc}!*\n\n` +
+                  `• Model reset to default (\`${DEFAULT_AI_MODEL}\`).\n` +
                   `• Mode reset to *General Conversational* (\`gen-co\`).\n` +
                   `• Depth level reset to Level 3 (Comprehensive).\n` +
                   `• Reply-to-All reset to Inactive (\`repan\`).\n` +
@@ -1074,9 +1140,25 @@ async function handler(sock, message, args, context = {}) {
         return sock.sendMessage(currentChatId, { text: modeList }, { quoted: message });
     }
 
+    // 6.5 MODEL SELECTION MENU (.aimode model [jid] without specifying model)
+    if (parsed.explicitAction === 'model' && !parsed.parsedModel) {
+        let modelList = `*🧠 Available AI Models:*\n\n` +
+                        `1. *Ministral 3B* (\`ministral-3b-2512\` / \`3b\`) - *Default*\n` +
+                        `   _Fast, low-latency, and balanced conversational speed_\n\n` +
+                        `2. *Ministral 8B* (\`ministral-8b-2512\` / \`8b\`)\n` +
+                        `   _Enhanced reasoning and analytical knowledge_\n\n` +
+                        `3. *Ministral 14B* (\`ministral-14b-2512\` / \`14b\`)\n` +
+                        `   _Maximum nuance, deep contextual comprehension_\n\n` +
+                        `4. *Codestral* (\`codestral-2508\` / \`codestral\`)\n` +
+                        `   _Code generation, refactoring, and technical debugging_\n\n` +
+                        `*Usage:* \`.aimode model <3b|8b|14b|codestral> [jid]\`\n` +
+                        `*Example:* \`.aimode 3b\` or \`.aimode model 14b\``;
+        return sock.sendMessage(currentChatId, { text: modelList }, { quoted: message });
+    }
+
     // 7. ENABLE / ALL-IN-ONE CONFIGURATION
-    // Triggers when 'on', or a mode is provided, or a level is provided, or reply-to-all flag is toggled
-    if (parsed.explicitAction === 'on' || parsed.parsedMode || parsed.parsedLevel || parsed.parsedReplyAll !== null) {
+    // Triggers when 'on', or a mode is provided, or a level is provided, or a model is provided, or reply-to-all flag is toggled
+    if (parsed.explicitAction === 'on' || parsed.parsedMode || parsed.parsedLevel || parsed.parsedReplyAll !== null || parsed.parsedModel) {
         if (parsed.explicitAction === 'on') {
             config.enabled = true;
         }
@@ -1088,6 +1170,11 @@ async function handler(sock, message, args, context = {}) {
 
         if (parsed.parsedLevel) {
             config.level = parsed.parsedLevel;
+            config.enabled = true;
+        }
+
+        if (parsed.parsedModel) {
+            config.model = parsed.parsedModel;
             config.enabled = true;
         }
 
@@ -1103,6 +1190,7 @@ async function handler(sock, message, args, context = {}) {
         const currentModeObj = MODES[config.mode] || MODES['gen-co'];
         const targetDesc = isRemoteTarget ? ` for \`${targetChatId}\`` : '';
         const levelDesc = DEPTH_LEVELS[config.level] || DEPTH_LEVELS[3];
+        const activeModel = config.model || DEFAULT_AI_MODEL;
 
         if (targetIsGroup) {
             const replyAllStatus = config.replyAll
@@ -1110,6 +1198,7 @@ async function handler(sock, message, args, context = {}) {
                 : '❌ *Inactive* (`repan` - mentions/replies only)';
 
             let groupMsg = `✅ *AI Mode Updated${targetDesc}!*\n\n` +
+                           `• *AI Model:* \`${activeModel}\`\n` +
                            `• *Persona Mode:* *${currentModeObj.name}* (\`${currentModeObj.slug}\`)\n` +
                            `• *Tagline:* _${currentModeObj.tagline}_\n` +
                            `• *Depth Level:* Level ${config.level} / 5 (${levelDesc})\n` +
@@ -1121,7 +1210,7 @@ async function handler(sock, message, args, context = {}) {
         }
 
         // Private DM Target: if only repal/repan was called without group target, inform user
-        if (!targetIsGroup && parsed.parsedReplyAll !== null && !parsed.parsedMode && !parsed.parsedLevel && parsed.explicitAction !== 'on') {
+        if (!targetIsGroup && parsed.parsedReplyAll !== null && !parsed.parsedMode && !parsed.parsedLevel && !parsed.parsedModel && parsed.explicitAction !== 'on') {
             return sock.sendMessage(currentChatId, {
                 text: `📌 *Group Feature Notice:*\n\n` +
                       `Reply-to-All (\`repal\` / \`repan\`) is specifically designed for group chats.\n` +
@@ -1134,6 +1223,7 @@ async function handler(sock, message, args, context = {}) {
         // Private DM Target
         return sock.sendMessage(currentChatId, {
             text: `✅ *AI Mode Activated${targetDesc}!*\n\n` +
+                  `• *AI Model:* \`${activeModel}\`\n` +
                   `• *Persona Mode:* *${currentModeObj.name}* (\`${currentModeObj.slug}\`)\n` +
                   `• *Category:* ${currentModeObj.category}\n` +
                   `• *Tagline:* _${currentModeObj.tagline}_\n` +
@@ -1152,6 +1242,7 @@ async function handler(sock, message, args, context = {}) {
     }
     help += `*${isRemoteTarget ? 'Target Chat' : 'Current Chat'}:* \`${targetChatId}\`${isRemoteTarget ? ' (Remote Target)' : ''}\n` +
             `*Status:* ${config.enabled ? '✅ Active' : '❌ Inactive'}\n` +
+            `*Active Model:* \`${config.model || DEFAULT_AI_MODEL}\`\n` +
             `*Active Mode:* ${MODES[config.mode]?.name || 'General Conversational'} (\`${config.mode}\`)\n` +
             `*Depth Level:* Level ${config.level} / 5\n` +
             (targetIsGroup ? `*Reply to All:* ${config.replyAll ? '✅ Active (`repal`)' : '❌ Inactive (`repan`)'}\n\n` : `\n`) +
@@ -1160,13 +1251,14 @@ async function handler(sock, message, args, context = {}) {
             `• \`.aimode off [jid]\` - Disable AI mode\n` +
             `• \`.aimode status [jid]\` - View status & settings\n` +
             `• \`.aimode reset [jid]\` - Reset settings & clear chat memory\n` +
+            `• \`.aimode model [3b|8b|14b|codestral]\` - Switch AI model (Default: \`3b\`)\n` +
             `• \`.aimode <mode> [level] [repal|repan] [jid]\` - Set persona mode & depth level\n` +
             `• \`.aimode repal\` (or \`.repal\`) - Enable Reply-to-All in group (replies to all messages)\n` +
             `• \`.aimode repan\` (or \`.repan\`) - Disable Reply-to-All in group (replies only on mention)\n` +
             `• \`.aimode level <1-5> [jid]\` - Adjust response depth level\n\n` +
             `*Admin & Owner JID Targeting:*\n` +
             `• Target any chat by phone number or JID:\n` +
-            `  - \`.aimode default 1 254712345678\`\n` +
+            `  - \`.aimode default 1 3b 254712345678\`\n` +
             `  - \`.aimode on tech 3 254712345678@s.whatsapp.net\`\n` +
             `  - \`.aimode eli5 2 repal 120363025123456789@g.us\`\n` +
             `  - \`.aimode off 254712345678\`\n` +
@@ -1208,5 +1300,7 @@ module.exports = {
     parseAiModeArgs,
     MODES,
     MODE_ALIASES,
-    DEPTH_LEVELS
+    DEPTH_LEVELS,
+    MODEL_ALIASES,
+    DEFAULT_AI_MODEL
 };
