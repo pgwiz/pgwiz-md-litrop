@@ -69,9 +69,10 @@ const settings = {
   ytch: "pgwiz",
   newsletterJid: '120363179639202475@newsletter',
   newsletterName: process.env.BOT_NAME || process.env.BOTNAME || process.env.NEWSLETTER_NAME || "PGWIZ-MD",
-  statusEmojis: process.env.AUTO_STATUS_EMOJIS || process.env.STATUS_EMOJIS || "❤️,🔥,✨,💯,🌟,⚡,😍,👏,💖,🥰,👍,🎉",
-  statusReaction: process.env.AUTO_STATUS_REACTION || process.env.STATUS_REACTION || process.env.AUTO_STATUS_EMOJI || process.env.STATUS_EMOJI || "",
-  autoReactEmojis: process.env.AUTO_REACT_EMOJIS || process.env.AUTOREACT_EMOJIS || ""
+  statusEmojis: (process.env.AUTO_STATUS_EMOJIS && process.env.AUTO_STATUS_EMOJIS.trim()) || (process.env.STATUS_EMOJIS && process.env.STATUS_EMOJIS.trim()) || "❤️,🔥,✨,💯,🌟,⚡,😍,👏,💖,🥰,👍,🎉",
+  statusReaction: (process.env.AUTO_STATUS_REACTION && process.env.AUTO_STATUS_REACTION.trim()) || (process.env.STATUS_REACTION && process.env.STATUS_REACTION.trim()) || (process.env.AUTO_STATUS_EMOJI && process.env.AUTO_STATUS_EMOJI.trim()) || (process.env.STATUS_EMOJI && process.env.STATUS_EMOJI.trim()) || "",
+  autoReactEmojis: (process.env.AUTO_REACT_EMOJIS && process.env.AUTO_REACT_EMOJIS.trim()) || (process.env.AUTOREACT_EMOJIS && process.env.AUTOREACT_EMOJIS.trim()) || (process.env.AUTO_REACT_EMOJI && process.env.AUTO_REACT_EMOJI.trim()) || (process.env.AUTOREACT_EMOJI && process.env.AUTOREACT_EMOJI.trim()) || "",
+  cmdReactEmoji: (process.env.CMD_REACT_EMOJI && process.env.CMD_REACT_EMOJI.trim()) || (process.env.COMMAND_REACT_EMOJI && process.env.COMMAND_REACT_EMOJI.trim()) || "⏳"
 };
 
 if (!process.env.TZ) {

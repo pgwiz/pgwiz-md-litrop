@@ -51,7 +51,7 @@ function getAllRuntimeEnv() {
     // Standard bot keys to prioritize
     const importantKeys = [
         'SESSION_ID', 'BOT_NAME', 'OWNER_NUMBER', 'PREFIX', 'MODE', 'WORK_TYPE', 'ALWAYS_ONLINE',
-        'AUTO_REACT', 'AUTOREACT', 'AUTO_REACTION', 'AUTO_REACT_EMOJIS',
+        'AUTO_REACT', 'AUTOREACT', 'AUTO_REACTION', 'AUTO_REACT_EMOJIS', 'AUTO_REACT_EMOJI', 'CMD_REACT_EMOJI', 'COMMAND_REACT_EMOJI',
         'AUTO_STATUS_VIEW', 'AUTO_STATUS_REACT', 'STATUS_EMOJIS', 'AUTO_STATUS_EMOJIS', 'STATUS_REACTION', 'AUTO_STATUS_REACTION', 'STATUS_EMOJI', 'AUTO_STATUS_EMOJI', 'AUTO_STATUS_SAVE', 'AUTO_STATUS_DOWNLOAD',
         'MONGO_URL', 'POSTGRES_URL', 'MYSQL_URL', 'DB_URL',
         'HKEY', 'HEROKU_API_KEY', 'HAPP', 'HEROKU_APP_NAME',
@@ -607,11 +607,19 @@ module.exports = {
                     const cur = await store.getSetting('global', 'autoStatus') || {};
                     cur.emojis = value;
                     await store.saveSetting('global', 'autoStatus', cur).catch(() => {});
+                    try {
+                        const autostatus = require('./autostatus');
+                        if (typeof autostatus.invalidateConfigCache === 'function') autostatus.invalidateConfigCache();
+                    } catch (_) {}
                 } else if (key === 'STATUS_REACTION' || key === 'AUTO_STATUS_REACTION' || key === 'STATUS_EMOJI' || key === 'AUTO_STATUS_EMOJI') {
                     await store.saveSetting('global', 'statusReaction', value).catch(() => {});
                     const cur = await store.getSetting('global', 'autoStatus') || {};
                     cur.reaction = value;
                     await store.saveSetting('global', 'autoStatus', cur).catch(() => {});
+                    try {
+                        const autostatus = require('./autostatus');
+                        if (typeof autostatus.invalidateConfigCache === 'function') autostatus.invalidateConfigCache();
+                    } catch (_) {}
                 } else if (key === 'ALWAYS_ONLINE') {
                     await store.saveSetting('global', 'alwaysOnline', parseEnvBool(value, false)).catch(() => {});
                 }

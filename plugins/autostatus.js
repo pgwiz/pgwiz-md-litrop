@@ -41,18 +41,28 @@ const STRATEGY_DEFAULT_EMOJIS = {
     12: '😍'
 };
 
+// Unicode test regex covering:
+// 1. Regional Indicator Pairs (flags like 🇺🇸, 🇰🇪)
+// 2. Keycaps ([0-9#*]\uFE0F?\u20E3 or 🔟)
+// 3. Extended Pictographic & Emoji Presentation characters with skin tones, variation selectors, and ZWJ combinations
+// 4. Common symbol emojis like ™️, ©️, ®️, ‼️, ⁉️, 〽️
+const EMOJI_TEST_REGEX = /(?:\p{Extended_Pictographic}|\p{Emoji_Presentation}|\p{Regional_Indicator}|[\uFE0F\u20E3])/u;
+const FULL_EMOJI_REGEX = /(?:\p{Regional_Indicator}{2}|[0-9#*]\uFE0F?\u20E3|\uD83D\uDD1F|[\u203C\u2049\u2122\u2139\u2194-\u2199\u21A9\u21AA\u231A\u231B\u2328\u23CF\u23E9-\u23F3\u23F8-\u23FA\u24C2\u25AA\u25AB\u25B6\u25C0\u25FB-\u25FE\u2600-\u27BF\u2934\u2935\u2B05-\u2B07\u2B1B\u2B1C\u2B50\u2B55\u3030\u303D\u3297\u3299]\uFE0F?|(?:\p{Extended_Pictographic}|\p{Emoji_Presentation})(?:\uFE0F|\p{Emoji_Modifier}|\u200D(?:\p{Extended_Pictographic}|\p{Emoji_Presentation}))*)/gu;
+
 function parseEmojiList(input) {
     if (!input) return [];
     if (Array.isArray(input)) {
-        return input
-            .map(s => (typeof s === 'string' ? s.trim() : String(s).trim()))
-            .filter(s => s && /\p{Extended_Pictographic}/u.test(s));
+        const out = [];
+        for (const item of input) {
+            out.push(...parseEmojiList(item));
+        }
+        return out;
     }
     let str = String(input).trim();
     if (!str) return [];
 
     const lower = str.toLowerCase();
-    if (lower === 'random' || lower === 'none' || lower === 'false' || lower === 'off' || lower === 'disabled') {
+    if (lower === 'random' || lower === 'none' || lower === 'false' || lower === 'off' || lower === 'disabled' || lower === 'null' || lower === 'undefined') {
         return [];
     }
 
@@ -66,19 +76,13 @@ function parseEmojiList(input) {
         try {
             const parsed = JSON.parse(str);
             if (Array.isArray(parsed)) {
-                const cleaned = parsed
-                    .map(s => String(s).trim())
-                    .filter(s => s && /\p{Extended_Pictographic}/u.test(s));
-                if (cleaned.length > 0) return cleaned;
+                return parseEmojiList(parsed);
             }
         } catch (_) {
             try {
                 const parsed = JSON.parse(str.replace(/'/g, '"'));
                 if (Array.isArray(parsed)) {
-                    const cleaned = parsed
-                        .map(s => String(s).trim())
-                        .filter(s => s && /\p{Extended_Pictographic}/u.test(s));
-                    if (cleaned.length > 0) return cleaned;
+                    return parseEmojiList(parsed);
                 }
             } catch (_) {}
         }
@@ -89,22 +93,34 @@ function parseEmojiList(input) {
         const parts = str
             .split(/[,;|/\s]+/)
             .map(s => s.trim())
-            .filter(s => s && /\p{Extended_Pictographic}/u.test(s));
-        if (parts.length > 0) return parts;
+            .filter(Boolean);
+        const result = [];
+        for (const p of parts) {
+            if (EMOJI_TEST_REGEX.test(p)) {
+                if (typeof Intl !== 'undefined' && Intl.Segmenter) {
+                    const seg = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+                    const clusters = Array.from(seg.segment(p), s => s.segment.trim()).filter(s => s && EMOJI_TEST_REGEX.test(s));
+                    result.push(...clusters);
+                } else {
+                    result.push(p);
+                }
+            }
+        }
+        if (result.length > 0) return result;
     }
 
-    // Grapheme cluster segmentation (contiguous emojis "❤️🔥✨💯" or single emoji "💯")
+    // Grapheme cluster segmentation (contiguous emojis "❤️🔥✨💯" or single emoji "💯", "🇺🇸", "1️⃣")
     if (typeof Intl !== 'undefined' && Intl.Segmenter) {
         try {
             const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
             const segments = Array.from(segmenter.segment(str), s => s.segment.trim())
-                .filter(s => s && /\p{Extended_Pictographic}/u.test(s));
+                .filter(s => s && EMOJI_TEST_REGEX.test(s));
             if (segments.length > 0) return segments;
         } catch (_) {}
     }
 
     // Fallback regex match
-    const matches = str.match(/\p{Extended_Pictographic}/gu);
+    const matches = str.match(FULL_EMOJI_REGEX);
     if (matches && matches.length > 0) {
         return matches.map(s => s.trim()).filter(Boolean);
     }
@@ -115,12 +131,25 @@ function parseEmojiList(input) {
 const HARDCODED_FALLBACK_EMOJIS = ['❤️', '🔥', '✨', '💯', '🌟', '⚡', '😍', '👏', '💖', '🥰', '👍', '🎉'];
 
 function getEnvStatusEmojis() {
-    const raw = process.env.AUTO_STATUS_EMOJIS ?? process.env.STATUS_EMOJIS ?? process.env.AUTO_REACT_STATUS_EMOJIS ?? process.env.STATUS_REACTION_EMOJIS;
+    const raw = (process.env.AUTO_STATUS_EMOJIS && process.env.AUTO_STATUS_EMOJIS.trim()) ||
+                (process.env.STATUS_EMOJIS && process.env.STATUS_EMOJIS.trim()) ||
+                (process.env.AUTO_REACT_STATUS_EMOJIS && process.env.AUTO_REACT_STATUS_EMOJIS.trim()) ||
+                (process.env.STATUS_REACTION_EMOJIS && process.env.STATUS_REACTION_EMOJIS.trim()) ||
+                (process.env.AUTO_STATUS_EMOJI && process.env.AUTO_STATUS_EMOJI.trim()) ||
+                (process.env.STATUS_EMOJI && process.env.STATUS_EMOJI.trim()) ||
+                (settings?.statusEmojis && settings.statusEmojis.trim());
     return parseEmojiList(raw);
 }
 
 function getEnvStatusReaction() {
-    return (process.env.AUTO_STATUS_REACTION ?? process.env.STATUS_REACTION ?? process.env.AUTO_STATUS_EMOJI ?? process.env.STATUS_EMOJI ?? '').trim();
+    return (
+        (process.env.AUTO_STATUS_REACTION && process.env.AUTO_STATUS_REACTION.trim()) ||
+        (process.env.STATUS_REACTION && process.env.STATUS_REACTION.trim()) ||
+        (process.env.AUTO_STATUS_EMOJI && process.env.AUTO_STATUS_EMOJI.trim()) ||
+        (process.env.STATUS_EMOJI && process.env.STATUS_EMOJI.trim()) ||
+        (settings?.statusReaction && settings.statusReaction.trim()) ||
+        ''
+    );
 }
 
 function resolveDefaultReaction() {
@@ -213,7 +242,15 @@ async function readConfig() {
         let effectiveEmojis = DEFAULTS.emojis;
         if (envEmojisList.length > 0) {
             effectiveEmojis = envEmojisList;
+        } else if (envReactionRaw) {
+            const parsedReaction = parseEmojiList(envReactionRaw);
+            if (parsedReaction.length > 1) {
+                effectiveEmojis = parsedReaction;
+            }
         } else if (Array.isArray(data.emojis) && data.emojis.length > 0) {
+            const parsedStored = parseEmojiList(data.emojis);
+            if (parsedStored.length > 0) effectiveEmojis = parsedStored;
+        } else if (typeof data.emojis === 'string' && data.emojis.trim()) {
             const parsedStored = parseEmojiList(data.emojis);
             if (parsedStored.length > 0) effectiveEmojis = parsedStored;
         }
@@ -227,9 +264,11 @@ async function readConfig() {
                 const parsed = parseEmojiList(envReactionRaw);
                 effectiveReaction = parsed.length > 1 ? 'random' : (parsed[0] || envReactionRaw);
             }
-        } else if (envEmojisList.length > 0) {
-            // When user specifies an emoji list in env and no fixed reaction emoji, use random
-            effectiveReaction = (data.reaction && data.reaction !== '💯') ? data.reaction : 'random';
+        } else if (envEmojisList.length > 1) {
+            // When user specifies multiple emojis in env and no fixed reaction emoji, randomize
+            effectiveReaction = 'random';
+        } else if (envEmojisList.length === 1) {
+            effectiveReaction = envEmojisList[0];
         } else if (data.reaction) {
             effectiveReaction = data.reaction;
         }
@@ -248,18 +287,29 @@ async function readConfig() {
     }
 }
 
+function invalidateConfigCache() {
+    _cachedConfig = null;
+    _cachedConfigTime = 0;
+    _cachedIgnoreList = null;
+    _cachedIgnoreTime = 0;
+}
+
 async function writeConfig(config) {
     try {
-        _cachedConfig = null;
-        _cachedConfigTime = 0;
+        invalidateConfigCache();
 
         if (config.view !== undefined) process.env.AUTO_STATUS_VIEW = String(config.view);
         if (config.react !== undefined) process.env.AUTO_STATUS_REACT = String(config.react);
         if (config.strategy !== undefined) process.env.AUTO_STATUS_STRATEGY = String(config.strategy);
-        if (config.reaction !== undefined) process.env.AUTO_STATUS_REACTION = String(config.reaction);
+        if (config.reaction !== undefined) {
+            process.env.AUTO_STATUS_REACTION = String(config.reaction);
+            process.env.STATUS_REACTION = String(config.reaction);
+        }
         if (config.emojis !== undefined) {
             const emList = Array.isArray(config.emojis) ? config.emojis : parseEmojiList(config.emojis);
-            process.env.AUTO_STATUS_EMOJIS = emList.join(',');
+            const emStr = emList.join(',');
+            process.env.AUTO_STATUS_EMOJIS = emStr;
+            process.env.STATUS_EMOJIS = emStr;
         }
 
         if (HAS_DB) {
@@ -326,8 +376,11 @@ function getStatusEmoji(cfg = {}) {
     }
 
     // 2. Emoji pool set in env (e.g. AUTO_STATUS_EMOJIS or STATUS_EMOJIS) -> pick randomly
-    if (envEmojisList.length > 0) {
+    if (envEmojisList.length > 1) {
         return envEmojisList[Math.floor(Math.random() * envEmojisList.length)];
+    }
+    if (envEmojisList.length === 1) {
+        return envEmojisList[0];
     }
 
     // 3. Fallback to cfg.reaction if set and not 'random'
@@ -351,14 +404,14 @@ function getStatusEmoji(cfg = {}) {
         return cfg.emojis[Math.floor(Math.random() * cfg.emojis.length)];
     }
 
-    return '💯';
+    return DEFAULTS.emojis[0] || '❤️';
 }
 
 // Track reacted statuses to prevent duplicate reaction stanzas
 const reactedStatusKeys = new Set();
 setInterval(() => {
     if (reactedStatusKeys.size > 2000) reactedStatusKeys.clear();
-}, 60000);
+}, 60000).unref();
 
 // Rich Status Event History & LID Discovery
 const statusStats = {
@@ -950,7 +1003,7 @@ module.exports = {
                 const isAll = requestedStrategy === 'all';
                 const isNew = requestedStrategy === 'new';
                 const strategyToRun = isAll ? 'ALL (1 to 12)' : (isNew ? 'NEW (7 to 12)' : (requestedStrategy || cfg.strategy || 6));
-                const emojiToUse = requestedEmoji || cfg.reaction || '💚';
+                const emojiToUse = requestedEmoji || (cfg.reaction && cfg.reaction !== 'random' ? cfg.reaction : getStatusEmoji(cfg)) || '💚';
 
                 log(`Diagnostic probe started for: ${targetParticipant}`);
                 log(`Target Stanza ID: ${targetId}`);
@@ -999,7 +1052,7 @@ module.exports = {
                 (async () => {
                     for (let i = 0; i < strategiesToTest.length; i++) {
                         const sNum = strategiesToTest[i];
-                        const sEmoji = requestedEmoji || STRATEGY_DEFAULT_EMOJIS[sNum] || emojiToUse;
+                        const sEmoji = requestedEmoji || ((isAll || isNew) ? STRATEGY_DEFAULT_EMOJIS[sNum] : (getStatusEmoji(cfg) || STRATEGY_DEFAULT_EMOJIS[sNum])) || emojiToUse;
                         try {
                             log(`[STRATEGY ${sNum}] Dispatching "${STRATEGY_DESCRIPTIONS[sNum]}" with emoji ${sEmoji}...`);
                             await executeReactionStrategy(sock, sNum, targetKey, sEmoji);
@@ -1332,6 +1385,7 @@ module.exports = {
     reactToStatus,
     readConfig,
     writeConfig,
+    invalidateConfigCache,
     getStatusEmoji,
     parseEmojiList,
     STRATEGY_DESCRIPTIONS,
