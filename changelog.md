@@ -2,6 +2,19 @@
 
 All notable changes to the PGWIZ-MD multi-device WhatsApp bot project are documented in this file.
 
+## [4.5.0] - 2026-09-17
+
+### Fixed
+- **AutoStatus Ghost DM & "Waiting for this message" Elimination**:
+  - Completely removed 1:1 message dispatching (`sock.sendMessage(rawParticipant, ...)`) from `plugins/autostatus.js` across all reaction strategies.
+  - Enforced strict broadcast-only transmission to `'status@broadcast'` with sanitized `statusJidList`.
+  - Permanently prevented status reactions from creating ghost direct message threads or Signal protocol decryption errors ("Waiting for this message. This may take a while") on contacts' devices.
+
+### Added
+- **Web Panel 5-Minute Key Throttle & `.getcode` Command**:
+  - Increased automatic temporary access key dispatch rate-limit to 5 minutes (`300,000 ms`), preventing message spam when accessing the web panel without a static password.
+  - Added owner-only `.getcode` command (aliases: `.code`, `.panelcode`, `.webcode`, `.logincode`, `.accesskey`) to retrieve or rotate the active access key on demand, displaying remaining validity and direct login link.
+
 ## [4.4.0] - 2026-09-17
 
 ### Added & Enhanced
