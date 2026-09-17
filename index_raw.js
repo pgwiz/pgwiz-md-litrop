@@ -448,6 +448,9 @@ async function startPgwizDev() {
             printLog('info', '👻 STEALTH MODE IS ACTIVE - Starting in stealth mode');
         }
 
+        const isAlwaysOnline = await isAlwaysOnlineEnabled();
+        const shouldMarkOnline = !isGhostActive && isAlwaysOnline;
+
         const pgwizSocket = makeWASocket({
             version,
             logger: pino({ level: 'silent' }, nullStream), // Silent logger with null stream
@@ -457,7 +460,7 @@ async function startPgwizDev() {
                 creds: state.creds,
                 keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "silent" }, nullStream)),
             },
-            markOnlineOnConnect: false,
+            markOnlineOnConnect: shouldMarkOnline,
             generateHighQualityLinkPreview: true,
             syncFullHistory: false,
             shouldSyncHistoryMessage: () => false, // Disable history sync for real-time only
@@ -492,6 +495,7 @@ async function startPgwizDev() {
         
         const originalSendNode = pgwizSocket.sendNode;
         pgwizSocket.sendNode = async function (node) {
+            if (!this.ws || this.ws.readyState !== 1) return;
             if (node && node.tag === 'presence') {
                 try {
                     const ghostMode = await store.getSetting('global', 'stealthMode');
@@ -514,6 +518,7 @@ async function startPgwizDev() {
         const originalSendReadReceipt = pgwizSocket.sendReadReceipt;
 
         pgwizSocket.sendPresenceUpdate = async function (...args) {
+            if (!this.ws || this.ws.readyState !== 1) return;
             const [presenceType, jid] = args;
             const ghostMode = await store.getSetting('global', 'stealthMode');
             if (ghostMode && ghostMode.enabled) return;
@@ -522,18 +527,12 @@ async function startPgwizDev() {
             if (alwaysOnline) {
                 const state = String(presenceType || '').toLowerCase();
                 if (state === 'unavailable') return; // Stay online when alwaysOnline is enabled
-                if (state === 'paused') {
-                    return originalSendPresenceUpdate.call(this, 'available', jid);
-                }
                 return originalSendPresenceUpdate.apply(this, args);
             } else {
                 const state = String(presenceType || '').toLowerCase();
                 if (state === 'available') {
                     // Drop available updates when alwaysOnline is disabled so commands don't force online
                     return;
-                }
-                if (state === 'paused') {
-                    return originalSendPresenceUpdate.call(this, 'unavailable', jid);
                 }
                 return originalSendPresenceUpdate.apply(this, args);
             }
@@ -589,10 +588,13 @@ async function startPgwizDev() {
         pgwizSocket.ev.on('creds.update', saveCreds);
         store.bind(pgwizSocket.ev);
 
-        const processedMessageKeys = new Set();
-        setInterval(() => {
-            if (processedMessageKeys.size > 5000) processedMessageKeys.clear();
-        }, 60000);
+        if (!global.processedMessageKeys) {
+            global.processedMessageKeys = new Set();
+            setInterval(() => {
+                if (global.processedMessageKeys.size > 5000) global.processedMessageKeys.clear();
+            }, 60000);
+        }
+        const processedMessageKeys = global.processedMessageKeys;
 
         pgwizSocket.ev.on('messages.upsert', async (chatUpdate) => {
             try {
@@ -813,9 +815,11 @@ async function startPgwizDev() {
                 // Single non-stacking presence heartbeat (60s interval to prevent WebSocket congestion)
                 if (global.presenceHeartbeatInterval) {
                     clearInterval(global.presenceHeartbeatInterval);
+                    global.presenceHeartbeatInterval = null;
                 }
                 global.presenceHeartbeatInterval = setInterval(async () => {
                     try {
+                        if (!pgwizSocket || !pgwizSocket.ws || pgwizSocket.ws.readyState !== 1) return;
                         const currentGhostMode = await store.getSetting('global', 'stealthMode');
                         if (currentGhostMode && currentGhostMode.enabled) return;
 
@@ -892,6 +896,15 @@ async function startPgwizDev() {
             }
 
             if (connection === 'close') {
+                if (global.presenceHeartbeatInterval) {
+                    clearInterval(global.presenceHeartbeatInterval);
+                    global.presenceHeartbeatInterval = null;
+                }
+                try {
+                    const { stopAlwaysOnlineLoop } = require('./plugins/alwaysonline');
+                    stopAlwaysOnlineLoop();
+                } catch {}
+
                 const statusCode = lastDisconnect?.error?.output?.statusCode;
                 const errorMsg = String(lastDisconnect?.error?.message || '').toLowerCase();
 
@@ -926,6 +939,13 @@ async function startPgwizDev() {
                     return;
                 }
 
+                if (statusCode === DisconnectReason.restartRequired || statusCode === 515) {
+                    printLog('connection', 'WhatsApp requested restart (515). Reconnecting in 2 seconds...');
+                    await delay(2000);
+                    startPgwizDev();
+                    return;
+                }
+
                 const waitTime = 8000;
                 printLog('connection', `Reconnecting in ${waitTime/1000} seconds...`);
                 await delay(waitTime);
@@ -943,6 +963,18 @@ async function startPgwizDev() {
 
         pgwizSocket.ev.on('status.update', async (status) => {
             await handleStatus(pgwizSocket, status);
+        });
+
+        pgwizSocket.ev.on('messages.reaction', async (reaction) => {
+            if (Array.isArray(reaction)) {
+                for (const r of reaction) {
+                    if (r?.key?.remoteJid === 'status@broadcast') {
+                        await handleStatus(pgwizSocket, r);
+                    }
+                }
+            } else if (reaction?.key?.remoteJid === 'status@broadcast') {
+                await handleStatus(pgwizSocket, reaction);
+            }
         });
 
         
@@ -1009,7 +1041,7 @@ setInterval(() => {
     //  console.log('🧹 Temp folder auto-cleaned');
 }, 1 * 60 * 60 * 1000);
 
-// Auto-clear session files every 3 minutes to prevent memory leaks and encryption conflicts
+// Auto-clear session temporary files every 10 minutes to prevent disk bloat (never delete active auth keys or sync states!)
 setInterval(() => {
     try {
         const sessionDir = path.join(process.cwd(), 'session');
@@ -1019,20 +1051,27 @@ setInterval(() => {
         let clearedCount = 0;
 
         for (const file of files) {
-            if (file === 'creds.json') continue; // Never delete creds
-            try {
-                fs.unlinkSync(path.join(sessionDir, file));
-                clearedCount++;
-            } catch { }
+            if (file === 'creds.json') continue;
+            if (file.startsWith('app-state-sync-key-')) continue;
+            if (file.startsWith('pre-key-')) continue;
+            if (file.startsWith('session-')) continue;
+            if (file.startsWith('sender-key-')) continue;
+            // Only remove temporary cache/dump files
+            if (file.endsWith('.tmp') || file.endsWith('.bak') || file.includes('temp')) {
+                try {
+                    fs.unlinkSync(path.join(sessionDir, file));
+                    clearedCount++;
+                } catch { }
+            }
         }
 
         if (clearedCount > 0) {
-            console.log(chalk.gray(`🧹 Auto-cleared ${clearedCount} session files`));
+            console.log(chalk.gray(`🧹 Auto-cleared ${clearedCount} temporary session files`));
         }
     } catch (err) {
         // Silently fail, not critical
     }
-}, 3 * 60 * 1000); // Every 3 minutes (2-4 minute range as requested)
+}, 10 * 60 * 1000);
 
 // CPU throttling detection and monitoring
 setInterval(() => {

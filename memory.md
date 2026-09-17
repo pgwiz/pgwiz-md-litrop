@@ -80,3 +80,21 @@ The following downloaders were audited and flagged as currently non-functional d
   - `CMD_REACT_EMOJI` / `COMMAND_REACT_EMOJI`: Emoji used for bot command execution reaction.
   - Runtime management supported via `.pgvars` and `.autostatus reaction <emoji|random|list>`.
 
+---
+
+### 🛡️ WhatsApp Socket & Connection Stability Principles:
+* **Presence Pulse vs Protocol Keepalives**: WhatsApp servers disconnect or rate-limit companion WebSockets (codes 428 / 515 / 440) if application-level presence (`<presence type="available"/>`) is flooded frequently (e.g. 8s). Companion socket keepalives are handled at the protocol frame level via `keepAliveIntervalMs: 10000`. A gentle 60s pulse strictly guarded by `sock.ws.readyState === 1` preserves always-online state safely.
+* **Interval Lifecycle on Disconnect**: Leaked intervals hammering closed WebSockets prevent clean TCP teardown and flood error streams. Timers (`alwaysOnlineInterval`, `presenceHeartbeatInterval`) must be explicitly cleared in the `connection === 'close'` handler.
+* **Session Directory Key Protection**: Indiscriminate unlinking in `./session` destroys active cryptographic Signal ratchet keys. `pre-key-*`, `session-*`, `sender-key-*`, and `app-state-sync-key-*` must NEVER be deleted while the session is alive; doing so results in fatal "Bad MAC" and private key desynchronization errors.
+* **Fast Reconnect on Code 515**: Disconnect reason 515 (`restartRequired`) should initiate an immediate 2-second reconnect backoff instead of standard long delays.
+
+---
+
+### 🤖 Conversational AI Mode & Reply-to-All (`repal` / `repan`):
+* **Group Persona Customization**: Group chats support any of the 10 AI persona modes (`gen-co`, `gen-co-em`, `prof-tech`, `socratic`, `eli5`, `concise`, `code-mentor`, `creative`, `zen`, `medieval`) and 5 depth levels (1-5).
+* **Reply-to-All Controls**:
+  - `repal` (`replyAll: true`): Bot replies to all messages in the group without requiring @mentions or quote replies.
+  - `repan` (`replyAll: false`): Standard mode requiring direct @mention or quote reply.
+  - Flexible invocation: `.aimode <mode> <level> repal`, `.aimode repal`, `.aimode repan`, or dedicated shortcuts `.repal` and `.repan`.
+* **Security & Authorization**: Group configuration changes are strictly restricted to group admins and bot owner/sudo.
+

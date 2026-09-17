@@ -26,24 +26,24 @@ async function isAlwaysOnlineEnabled() {
     return isEn;
 }
 
-// Sustained 8-second keepalive loop (WhatsApp presence expires in ~10s)
+// Gentle keepalive heartbeat (WhatsApp presence maintains stable companion state without flooding)
 function startAlwaysOnlineLoop(sock) {
     stopAlwaysOnlineLoop();
-    if (!sock) return;
+    if (!sock || !sock.ws || sock.ws.readyState !== 1) return;
 
-    // Send immediately
+    // Send initial presence if socket is open
     sendOnlinePresence(sock);
 
-    // Re-send every 8s to beat WhatsApp 10s expiration
+    // Refresh every 60 seconds (safe interval that keeps presence active without rate limits or socket desync)
     global.alwaysOnlineInterval = setInterval(() => {
-        if (!global.alwaysOnlineState || !sock) {
+        if (!global.alwaysOnlineState || !sock || !sock.ws || sock.ws.readyState !== 1) {
             stopAlwaysOnlineLoop();
             return;
         }
         sendOnlinePresence(sock);
-    }, 8000);
+    }, 60000);
 
-    console.log('[PRESENCE] 🟢 Sustained Always-Online 8s keepalive active');
+    console.log('[PRESENCE] 🟢 Always-Online 60s keepalive pulse active');
 }
 
 function stopAlwaysOnlineLoop(sock = null) {
@@ -51,44 +51,25 @@ function stopAlwaysOnlineLoop(sock = null) {
         clearInterval(global.alwaysOnlineInterval);
         global.alwaysOnlineInterval = null;
     }
-    if (sock) {
+    if (sock && sock.ws && sock.ws.readyState === 1) {
         sendOfflinePresence(sock);
     }
 }
 
 async function sendOnlinePresence(sock) {
-    if (!sock) return;
+    if (!sock || !sock.ws || sock.ws.readyState !== 1) return;
     try {
         const ghostMode = await store.getSetting('global', 'stealthMode');
         if (ghostMode && ghostMode.enabled) return;
 
-        const me = sock?.authState?.creds?.me || sock?.user;
-        const name = String(me?.name || settings.botName || 'PGWIZ-MD').replace(/@/g, '');
-        if (me && !me.name) me.name = name;
-
         await sock.sendPresenceUpdate('available').catch(() => {});
-        if (typeof sock.sendNode === 'function') {
-            await sock.sendNode({
-                tag: 'presence',
-                attrs: { name, type: 'available' }
-            }).catch(() => {});
-        }
     } catch {}
 }
 
 async function sendOfflinePresence(sock) {
-    if (!sock) return;
+    if (!sock || !sock.ws || sock.ws.readyState !== 1) return;
     try {
-        const me = sock?.authState?.creds?.me || sock?.user;
-        const name = String(me?.name || settings.botName || 'PGWIZ-MD').replace(/@/g, '');
-
         await sock.sendPresenceUpdate('unavailable').catch(() => {});
-        if (typeof sock.sendNode === 'function') {
-            await sock.sendNode({
-                tag: 'presence',
-                attrs: { name, type: 'unavailable' }
-            }).catch(() => {});
-        }
     } catch {}
 }
 
@@ -115,7 +96,7 @@ module.exports = {
                     '*Status:* ' + (isCurrentOnline ? '✅ Enabled (Online 24/7 Keepalive)' : '❌ Disabled (Standard Offline)') + '\n' +
                     '*Stealth Mode:* ' + (ghostActive ? '👻 Active' : '❌ Inactive') + '\n\n' +
                     '*Commands:*\n' +
-                    '• `.alwaysonline on` - Stay online 24/7 continuously (auto-refreshes every 8s)\n' +
+                    '• `.alwaysonline on` - Stay online 24/7 continuously (smooth keepalive pulse)\n' +
                     '• `.alwaysonline off` - Go offline when idle (releases phone push notifications)';
                 return await sock.sendMessage(chatId, { text: statusText, ...channelInfo }, { quoted: message });
             }
@@ -131,7 +112,7 @@ module.exports = {
                 }
 
                 return await sock.sendMessage(chatId, {
-                    text: '✅ *Always-Online is now ENABLED!*\n\nBot will now broadcast sustained online presence (auto-refreshing every 8s to beat WhatsApp 10s expiry).',
+                    text: '✅ *Always-Online is now ENABLED!*\n\nBot will now maintain continuous online presence stably without WebSocket congestion.',
                     ...channelInfo
                 }, { quoted: message });
             }

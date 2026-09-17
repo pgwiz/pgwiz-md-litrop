@@ -575,7 +575,7 @@ async function executeReactionStrategy(sock, strategyNum, statusKey, emoji) {
     switch (Number(strategyNum)) {
         case 1: {
             // Strategy 1: Classic Upstream Relay to status@broadcast
-            const statusJidList = [rawParticipant].filter(j => j && j !== 'status@broadcast');
+            const statusJidList = [statusKey.remoteJid, rawParticipant].filter(Boolean);
             return await sock.relayMessage('status@broadcast', {
                 reactionMessage: {
                     key: reactionKey,
@@ -583,7 +583,7 @@ async function executeReactionStrategy(sock, strategyNum, statusKey, emoji) {
                 }
             }, {
                 messageId: statusKey.id,
-                statusJidList: statusJidList.length > 0 ? statusJidList : [rawParticipant]
+                statusJidList
             });
         }
         case 2: {
@@ -754,8 +754,21 @@ async function handleStatusUpdate(sock, status) {
         const config = await readConfig();
         if (!config.view && !config.react) return;
 
-        const msgs = status.messages || (status.key ? [status] : (status.reaction?.key ? [status.reaction] : []));
+        let msgs = [];
+        if (Array.isArray(status)) {
+            msgs = status;
+        } else if (status?.messages && Array.isArray(status.messages)) {
+            msgs = status.messages;
+        } else if (status?.reaction?.key) {
+            msgs = [status.reaction];
+        } else if (status?.key) {
+            msgs = [status];
+        }
         if (!msgs || msgs.length === 0) return;
+
+        if (reactedStatusKeys.size > 2000) {
+            reactedStatusKeys.clear();
+        }
 
         const ignoreList = await getCachedIgnoreList();
 
@@ -793,11 +806,22 @@ async function handleStatusUpdate(sock, status) {
                 continue;
             }
 
-            // Step 1: Send Read Receipt (single receipt, no duplicate fallthrough)
+            // Step 1: Send Read Receipt (prefer native readMessages with rate-limit retry)
             if (config.view) {
                 try {
-                    const nowSec = Math.floor(Date.now() / 1000).toString();
-                    if (typeof sock.sendNode === 'function') {
+                    if (typeof sock.readMessages === 'function') {
+                        try {
+                            await sock.readMessages([key]);
+                        } catch (readErr) {
+                            if (readErr?.message?.includes('rate-overlimit')) {
+                                await new Promise(r => setTimeout(r, 2000));
+                                await sock.readMessages([key]);
+                            } else {
+                                throw readErr;
+                            }
+                        }
+                    } else if (typeof sock.sendNode === 'function') {
+                        const nowSec = Math.floor(Date.now() / 1000).toString();
                         await sock.sendNode({
                             tag: 'receipt',
                             attrs: {
@@ -808,14 +832,13 @@ async function handleStatusUpdate(sock, status) {
                                 t: nowSec
                             }
                         });
-                    } else if (typeof sock.readMessages === 'function') {
-                        await sock.readMessages([key]);
                     }
                     statusStats.totalViewed++;
                     if (historyEntry) historyEntry.viewStatus = 'viewed';
                     console.log(`[AUTOSTATUS] 👀 Viewed status ${key.id} from ${key.participant || 'contact'}`);
-                } catch (_) {
+                } catch (err) {
                     if (historyEntry) historyEntry.viewStatus = 'failed';
+                    console.error(`[AUTOSTATUS] ❌ Failed to view status ${key.id}:`, err.message);
                 }
             } else {
                 if (historyEntry) historyEntry.viewStatus = 'disabled';

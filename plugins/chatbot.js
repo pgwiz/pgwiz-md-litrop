@@ -330,6 +330,7 @@ function parseAiModeArgs(args) {
     let explicitAction = null; // 'on', 'off', 'status', 'info', 'reset', 'level', 'mode', 'help'
     let parsedMode = null;
     let parsedLevel = null;
+    let parsedReplyAll = null; // true for 'repal', false for 'repan'
     let invalidJidAttempt = null;
     const unrecognized = [];
 
@@ -338,6 +339,16 @@ function parseAiModeArgs(args) {
         const raw = String(rawArgs[i] || '').trim();
         if (!raw) continue;
         const lower = raw.toLowerCase();
+
+        // 0. Reply-to-all flags
+        if (['repal', 'replyall', 'reply-all', 'replyallon', 'repalon'].includes(lower)) {
+            parsedReplyAll = true;
+            continue;
+        }
+        if (['repan', 'replynone', 'reply-none', 'replyalloff', 'noreplyall', 'repaloff'].includes(lower)) {
+            parsedReplyAll = false;
+            continue;
+        }
 
         // 1. If mode or 'on' was already parsed, and raw is 1-5 followed by a multi-token phone or direct JID:
         if ((parsedMode || explicitAction === 'on') && !parsedLevel && /^[1-5]$/.test(raw) && i + 1 < rawArgs.length) {
@@ -482,7 +493,7 @@ function parseAiModeArgs(args) {
     }
 
     // If only a target JID was supplied without explicit action or settings, default to 'status' query
-    if (targetJid && !explicitAction && !parsedMode && !parsedLevel && unrecognized.length === 0) {
+    if (targetJid && !explicitAction && !parsedMode && !parsedLevel && parsedReplyAll === null && unrecognized.length === 0) {
         explicitAction = 'status';
     }
 
@@ -491,6 +502,7 @@ function parseAiModeArgs(args) {
         explicitAction,
         parsedMode,
         parsedLevel,
+        parsedReplyAll,
         invalidJidAttempt,
         unrecognized
     };
@@ -509,15 +521,17 @@ async function getAiConfig(chatId) {
         if (data && typeof data === 'object') {
             return {
                 enabled: !!data.enabled,
-                mode: chatId.endsWith('@g.us') ? 'gen-co' : (data.mode || 'gen-co'),
-                level: chatId.endsWith('@g.us') ? 3 : (typeof data.level === 'number' ? data.level : 3)
+                mode: data.mode || 'gen-co',
+                level: typeof data.level === 'number' ? data.level : 3,
+                replyAll: !!data.replyAll
             };
         }
         if (typeof data === 'boolean') {
             return {
                 enabled: data,
                 mode: 'gen-co',
-                level: 3
+                level: 3,
+                replyAll: false
             };
         }
     } catch (e) {
@@ -526,7 +540,8 @@ async function getAiConfig(chatId) {
     return {
         enabled: false,
         mode: 'gen-co',
-        level: 3
+        level: 3,
+        replyAll: false
     };
 }
 
@@ -535,11 +550,11 @@ async function getAiConfig(chatId) {
  */
 async function saveAiConfig(chatId, config) {
     try {
-        const isGroup = chatId.endsWith('@g.us');
         const toSave = {
             enabled: !!config.enabled,
-            mode: isGroup ? 'gen-co' : (config.mode || 'gen-co'),
-            level: isGroup ? 3 : (typeof config.level === 'number' ? config.level : 3)
+            mode: config.mode || 'gen-co',
+            level: typeof config.level === 'number' ? config.level : 3,
+            replyAll: !!config.replyAll
         };
         await store.saveSetting(chatId, SETTING_KEY, toSave);
         return true;
@@ -747,11 +762,11 @@ async function handleChatbotResponse(sock, chatId, message, userMessage, senderI
 
         // Group chats logic
         if (isGroup) {
-            // Group chats: ONLY respond if bot is explicitly mentioned or replied to
+            // Check if Reply-to-All is active or bot is explicitly addressed
+            const isReplyAll = !!config.replyAll;
             const addressed = isBotAddressedInGroup(sock, message, actualMsg, userMessage);
-            if (!addressed) return;
+            if (!isReplyAll && !addressed) return;
 
-            // Group chats: Strictly restricted to conversational mode (gen-co)
             const botId = sock.user?.id || sock.user?.jid || '';
             const botNumber = (botId || '').split(':')[0].split('@')[0];
             const botLid = sock.user?.lid || '';
@@ -768,6 +783,7 @@ async function handleChatbotResponse(sock, chatId, message, userMessage, senderI
             if (!promptText && media) {
                 promptText = media.caption ? media.caption : `Hello! What do you think of this ${media.type}?`;
             } else if (!promptText) {
+                if (isReplyAll) return; // In reply-to-all mode, do not react to empty stanzas
                 promptText = 'Hello!';
             }
 
@@ -784,10 +800,13 @@ async function handleChatbotResponse(sock, chatId, message, userMessage, senderI
                 await sock.sendPresenceUpdate('composing', chatId);
             } catch {}
 
+            const targetMode = config.mode || 'gen-co';
+            const targetLevel = typeof config.level === 'number' ? config.level : 3;
+
             const result = await callAiChat({
                 message: promptText,
-                mode: 'gen-co',
-                level: 3,
+                mode: targetMode,
+                level: targetLevel,
                 history
             });
 
@@ -800,9 +819,11 @@ async function handleChatbotResponse(sock, chatId, message, userMessage, senderI
                 await sock.sendMessage(chatId, { text: result.message }, { quoted: message });
             } else {
                 console.error(`[AI-MODE] Group response failed: ${result.error}`);
-                await sock.sendMessage(chatId, {
-                    text: "⚠️ I'm currently having trouble connecting to the AI service. Please try again in a moment!"
-                }, { quoted: message }).catch(() => {});
+                if (addressed) {
+                    await sock.sendMessage(chatId, {
+                        text: "⚠️ I'm currently having trouble connecting to the AI service. Please try again in a moment!"
+                    }, { quoted: message }).catch(() => {});
+                }
             }
             return;
         }
@@ -904,6 +925,14 @@ async function handler(sock, message, args, context = {}) {
         }
     }
 
+    // Check if invoked via repal or repan alias directly
+    const invokedCmd = (context.commandName || '').toLowerCase().trim();
+    if (invokedCmd === 'repal' && !args.some(a => a.toLowerCase() === 'repal')) {
+        args = ['repal', ...args];
+    } else if (invokedCmd === 'repan' && !args.some(a => a.toLowerCase() === 'repan')) {
+        args = ['repan', ...args];
+    }
+
     // Parse all-in-one argument string
     const parsed = parseAiModeArgs(args);
 
@@ -942,12 +971,13 @@ async function handler(sock, message, args, context = {}) {
         const isMutating = parsed.explicitAction === 'on' ||
                            parsed.explicitAction === 'off' ||
                            parsed.explicitAction === 'reset' ||
+                           parsed.parsedReplyAll !== null ||
                            !!parsed.parsedMode ||
                            !!parsed.parsedLevel;
 
         if (isMutating && !isOwnerOrSudoCheck && !isSenderAdmin) {
             return sock.sendMessage(currentChatId, {
-                text: '❌ *Permission Denied*: Only group admins or the bot owner can configure AI Mode for this group.'
+                text: '❌ *Permission Denied*: Only group admins or the bot owner can configure AI Mode or Reply-to-All for this group.'
             }, { quoted: message });
         }
     }
@@ -957,6 +987,9 @@ async function handler(sock, message, args, context = {}) {
     // 2. DISABLE AI MODE (.aimode off [jid])
     if (parsed.explicitAction === 'off') {
         config.enabled = false;
+        if (parsed.parsedReplyAll === false) {
+            config.replyAll = false;
+        }
         await saveAiConfig(targetChatId, config);
         conversationHistory.delete(targetChatId);
 
@@ -975,6 +1008,9 @@ async function handler(sock, message, args, context = {}) {
         const modeObj = MODES[config.mode] || MODES['gen-co'];
         const statusIcon = config.enabled ? '✅ Enabled' : '❌ Disabled';
         const levelDesc = DEPTH_LEVELS[config.level] || DEPTH_LEVELS[3];
+        const replyAllStatus = config.replyAll
+            ? '✅ *Active* (`repal` - replies to all messages)'
+            : '❌ *Inactive* (`repan` - mentions/replies only)';
 
         let msgText = `*🤖 CONVERSATIONAL AI MODE STATUS*\n\n` +
                       `• *Target Chat:* \`${targetChatId}\`${isRemoteTarget ? ' (Remote Target)' : ' (Current Chat)'}\n` +
@@ -982,13 +1018,17 @@ async function handler(sock, message, args, context = {}) {
                       `• *Chat Type:* ${targetIsGroup ? 'Group Chat' : 'Private Direct Message'}\n` +
                       `• *Current Mode:* *${modeObj.name}* (\`${modeObj.slug}\`)\n` +
                       `• *Tagline:* _${modeObj.tagline}_\n` +
-                      `• *Depth Level:* Level ${config.level} (${levelDesc})\n\n`;
+                      `• *Depth Level:* Level ${config.level} (${levelDesc})\n`;
 
         if (targetIsGroup) {
-            msgText += `*Group Policy:*\n` +
-                       `Group chats are strictly locked to Conversational Mode (\`gen-co\`) and respond only when mentioned (@bot) or replied to.`;
+            msgText += `• *Reply to All:* ${replyAllStatus}\n\n` +
+                       `*Group Triggers:*\n` +
+                       (config.replyAll
+                           ? `Bot automatically replies to *all messages* in the group without requiring @mentions.`
+                           : `Bot replies *only when mentioned* (@bot) or replied to.`) +
+                       `\n\n_Use \`.aimode <mode> [level] [repal|repan]\` to configure._`;
         } else {
-            msgText += `*Private DM Customization:*\n` +
+            msgText += `\n*Private DM Customization:*\n` +
                        `Use \`.aimode <mode> [level] [jid]\` to customize persona mode or depth level.`;
         }
 
@@ -999,6 +1039,7 @@ async function handler(sock, message, args, context = {}) {
     if (parsed.explicitAction === 'reset') {
         config.mode = 'gen-co';
         config.level = 3;
+        config.replyAll = false;
         await saveAiConfig(targetChatId, config);
         conversationHistory.delete(targetChatId);
 
@@ -1007,18 +1048,13 @@ async function handler(sock, message, args, context = {}) {
             text: `🔄 *AI Mode Reset to Defaults${targetDesc}!*\n\n` +
                   `• Mode reset to *General Conversational* (\`gen-co\`).\n` +
                   `• Depth level reset to Level 3 (Comprehensive).\n` +
+                  `• Reply-to-All reset to Inactive (\`repan\`).\n` +
                   `• Conversation memory cleared.`
         }, { quoted: message });
     }
 
     // 5. DEPTH LEVEL MENU (.aimode level [jid] without specifying level)
     if (parsed.explicitAction === 'level' && !parsed.parsedLevel) {
-        if (targetIsGroup) {
-            return sock.sendMessage(currentChatId, {
-                text: `⚠️ *Group Restriction*: Group chats are strictly locked to default conversational settings. Depth level adjustment is available in private direct messages only.`
-            }, { quoted: message });
-        }
-
         let lvlList = `*Available Depth Levels (1 - 5):*\n\n`;
         for (let i = 1; i <= 5; i++) {
             lvlList += `• *Level ${i}*: ${DEPTH_LEVELS[i]}\n`;
@@ -1029,65 +1065,68 @@ async function handler(sock, message, args, context = {}) {
 
     // 6. PERSONA MODES MENU (.aimode mode [jid] without specifying slug)
     if (parsed.explicitAction === 'mode' && !parsed.parsedMode) {
-        if (targetIsGroup) {
-            return sock.sendMessage(currentChatId, {
-                text: `⚠️ *Group Restriction*: Group chats are strictly restricted to *Conversational Mode* (\`gen-co\`). Persona customization is available in private direct messages only.`
-            }, { quoted: message });
-        }
-
-        let modeList = `*🎭 Available Persona Modes (Private DMs):*\n\n`;
+        let modeList = `*🎭 Available Persona Modes:*\n\n`;
         let idx = 1;
         for (const [slug, m] of Object.entries(MODES)) {
             modeList += `${idx++}. *${m.name}* (\`${slug}\`)\n   _${m.tagline}_\n`;
         }
-        modeList += `\n*Usage:* \`.aimode <mode> [level] [jid]\` (e.g. \`.aimode eli5 2\`)`;
+        modeList += `\n*Usage:* \`.aimode <mode> [level] [repal|repan] [jid]\` (e.g. \`.aimode eli5 2 repal\`)`;
         return sock.sendMessage(currentChatId, { text: modeList }, { quoted: message });
     }
 
     // 7. ENABLE / ALL-IN-ONE CONFIGURATION
-    // Triggers when 'on', or a mode is provided, or a level is provided
-    if (parsed.explicitAction === 'on' || parsed.parsedMode || parsed.parsedLevel) {
-        config.enabled = true;
-
-        // GROUP TARGET LOGIC
-        if (targetIsGroup) {
-            config.mode = 'gen-co';
-            config.level = 3;
-            await saveAiConfig(targetChatId, config);
-
-            const targetDesc = isRemoteTarget ? ` for Group \`${targetChatId}\`` : ` for this Group`;
-            let groupMsg = `✅ *AI Mode Activated${targetDesc}!*\n\n` +
-                           `• *Mode:* Conversational (\`gen-co\`) [Group Policy]\n` +
-                           `• *Depth Level:* Level 3 (Comprehensive)\n` +
-                           `• *Trigger:* Mention me (@bot) or reply to any of my messages.\n` +
-                           `• Powered by Conversational AI.`;
-
-            if ((parsed.parsedMode && parsed.parsedMode !== 'gen-co') || (parsed.parsedLevel && parsed.parsedLevel !== 3)) {
-                groupMsg += `\n\n_📌 Note: Group chats remain locked to Conversational Mode (\`gen-co\`) and Level 3. Persona styling applies to private direct messages._`;
-            }
-
-            return sock.sendMessage(currentChatId, { text: groupMsg }, { quoted: message });
+    // Triggers when 'on', or a mode is provided, or a level is provided, or reply-to-all flag is toggled
+    if (parsed.explicitAction === 'on' || parsed.parsedMode || parsed.parsedLevel || parsed.parsedReplyAll !== null) {
+        if (parsed.explicitAction === 'on') {
+            config.enabled = true;
         }
 
-        // PRIVATE DM TARGET LOGIC
         if (parsed.parsedMode) {
             config.mode = parsed.parsedMode;
+            config.enabled = true;
         }
+
         if (parsed.parsedLevel) {
             config.level = parsed.parsedLevel;
+            config.enabled = true;
+        }
+
+        if (parsed.parsedReplyAll !== null) {
+            config.replyAll = parsed.parsedReplyAll;
+            if (parsed.parsedReplyAll === true) {
+                config.enabled = true;
+            }
         }
 
         await saveAiConfig(targetChatId, config);
 
         const currentModeObj = MODES[config.mode] || MODES['gen-co'];
         const targetDesc = isRemoteTarget ? ` for \`${targetChatId}\`` : '';
+        const levelDesc = DEPTH_LEVELS[config.level] || DEPTH_LEVELS[3];
 
+        if (targetIsGroup) {
+            const replyAllStatus = config.replyAll
+                ? '✅ *Active* (`repal` - replies to all messages)'
+                : '❌ *Inactive* (`repan` - mentions/replies only)';
+
+            let groupMsg = `✅ *AI Mode Updated${targetDesc}!*\n\n` +
+                           `• *Persona Mode:* *${currentModeObj.name}* (\`${currentModeObj.slug}\`)\n` +
+                           `• *Tagline:* _${currentModeObj.tagline}_\n` +
+                           `• *Depth Level:* Level ${config.level} / 5 (${levelDesc})\n` +
+                           `• *Reply to All:* ${replyAllStatus}\n` +
+                           `• *Trigger:* ${config.replyAll ? 'All group messages' : 'Mention me (@bot) or reply to any of my messages'}.\n\n` +
+                           `_Tip: Use \`.aimode <mode> <level> repal\` to set mode and reply-to-all together, or \`.aimode repan\` to disable reply-to-all._`;
+
+            return sock.sendMessage(currentChatId, { text: groupMsg }, { quoted: message });
+        }
+
+        // Private DM Target
         return sock.sendMessage(currentChatId, {
             text: `✅ *AI Mode Activated${targetDesc}!*\n\n` +
                   `• *Persona Mode:* *${currentModeObj.name}* (\`${currentModeObj.slug}\`)\n` +
                   `• *Category:* ${currentModeObj.category}\n` +
                   `• *Tagline:* _${currentModeObj.tagline}_\n` +
-                  `• *Depth Level:* Level ${config.level} / 5\n\n` +
+                  `• *Depth Level:* Level ${config.level} / 5 (${levelDesc})\n\n` +
                   `*Direct Message Behavior:*\n` +
                   `• Automatically replies to all incoming text messages.\n` +
                   `• Sending media (photos, videos, stickers, voice notes) triggers witty roasts & humorous remarks!\n` +
@@ -1103,23 +1142,25 @@ async function handler(sock, message, args, context = {}) {
     help += `*${isRemoteTarget ? 'Target Chat' : 'Current Chat'}:* \`${targetChatId}\`${isRemoteTarget ? ' (Remote Target)' : ''}\n` +
             `*Status:* ${config.enabled ? '✅ Active' : '❌ Inactive'}\n` +
             `*Active Mode:* ${MODES[config.mode]?.name || 'General Conversational'} (\`${config.mode}\`)\n` +
-            `*Depth Level:* Level ${config.level} / 5\n\n` +
+            `*Depth Level:* Level ${config.level} / 5\n` +
+            (targetIsGroup ? `*Reply to All:* ${config.replyAll ? '✅ Active (`repal`)' : '❌ Inactive (`repan`)'}\n\n` : `\n`) +
             `*Commands:*\n` +
             `• \`.aimode on [mode] [level] [jid]\` - Enable & configure AI mode\n` +
             `• \`.aimode off [jid]\` - Disable AI mode\n` +
             `• \`.aimode status [jid]\` - View status & settings\n` +
             `• \`.aimode reset [jid]\` - Reset settings & clear chat memory\n` +
-            `• \`.aimode default 1 [jid]\` - Set default conversational mode & level 1\n` +
-            `• \`.aimode <mode> [level] [jid]\` - Set persona mode & depth level\n` +
+            `• \`.aimode <mode> [level] [repal|repan] [jid]\` - Set persona mode & depth level\n` +
+            `• \`.aimode repal\` (or \`.repal\`) - Enable Reply-to-All in group (replies to all messages)\n` +
+            `• \`.aimode repan\` (or \`.repan\`) - Disable Reply-to-All in group (replies only on mention)\n` +
             `• \`.aimode level <1-5> [jid]\` - Adjust response depth level\n\n` +
             `*Admin & Owner JID Targeting:*\n` +
             `• Target any chat by phone number or JID:\n` +
             `  - \`.aimode default 1 254712345678\`\n` +
             `  - \`.aimode on tech 3 254712345678@s.whatsapp.net\`\n` +
-            `  - \`.aimode eli5 2 120363025123456789@g.us\`\n` +
+            `  - \`.aimode eli5 2 repal 120363025123456789@g.us\`\n` +
             `  - \`.aimode off 254712345678\`\n` +
             `  - \`.aimode status 120363025123456789@g.us\`\n\n` +
-            `*🎭 Available Persona Modes (Private DMs):*\n` +
+            `*🎭 Available Persona Modes:*\n` +
             `1. \`gen-co\` (or \`default\`, \`general\`) - Balanced daily assistant\n` +
             `2. \`gen-co-em\` (or \`emoji\`, \`fun\`) - Vibrant with emojis\n` +
             `3. \`prof-tech\` (or \`tech\`, \`pro\`) - Analytical engineering consultant\n` +
@@ -1131,19 +1172,20 @@ async function handler(sock, message, args, context = {}) {
             `9. \`zen\` (or \`peace\`, \`calm\`) - Mindful clarity, stillness & wisdom\n` +
             `10. \`medieval\` (or \`knight\`, \`royal\`) - Chivalric prose & archaic flair\n\n` +
             `*👥 Group Policy:*\n` +
-            `• Group chats remain locked to Conversational Mode (\`gen-co\`).\n` +
-            `• Responds only when explicitly mentioned (@bot) or replied to.\n` +
-            `• Admins can toggle AI mode on/off or view status remotely via JID.`;
+            `• Group admins / owner can configure custom persona modes and depth levels.\n` +
+            `• Default behavior: responds only when explicitly mentioned (@bot) or replied to.\n` +
+            `• Use \`.aimode repal\` (or \`.repal\`) to reply to ALL group messages without mentions.\n` +
+            `• Use \`.aimode repan\` (or \`.repan\`) to turn off reply-to-all.`;
 
     return sock.sendMessage(currentChatId, { text: help }, { quoted: message });
 }
 
 module.exports = {
     command: 'chatbot',
-    aliases: ['aimode', 'chatgpt', 'chatbots', 'autochat', 'achat'],
+    aliases: ['aimode', 'chatgpt', 'chatbots', 'autochat', 'achat', 'repal', 'repan'],
     category: 'ai',
-    description: 'Toggle and configure Conversational AI mode for private DMs or group chats',
-    usage: '.aimode [on|off|status|default 1|<mode> [level] [jid]]',
+    description: 'Toggle and configure Conversational AI mode for private DMs or group chats with custom modes and reply-to-all (repal/repan)',
+    usage: '.aimode [on|off|status|<mode> [level] [repal|repan] [jid]]',
 
     handler,
     handleChatbotResponse,

@@ -2,6 +2,26 @@
 
 All notable changes to the PGWIZ-MD multi-device WhatsApp bot project are documented in this file.
 
+## [4.4.0] - 2026-09-17
+
+### Added & Enhanced
+- **Group AI Persona Customization & Reply-to-All (`.aimode`, `repal`, `repan`)**:
+  - Group chats can now be configured with any of the 10 AI persona modes and 5 depth levels (previously locked to `gen-co` level 3).
+  - Added Reply-to-All toggle: `repal` (replies to all messages without requiring @mention or quote) and `repan` (restores mention/reply requirement).
+  - Combined commands supported: e.g., `.aimode tech 4 repal`, `.aimode repal`, `.aimode repan`, as well as direct command aliases `.repal` and `.repan`.
+  - Enforced strict authorization: only group admins or bot owner/sudo can alter group AI configurations.
+- **Socket Stability & Long-Running Connection Hardening**:
+  - Eliminated connection drops and 428/515/440 disconnect loops caused by tight 8-second presence spam.
+  - Presence pulse relaxed to 60-second gentle keepalive and guarded with `sock.ws.readyState === 1` checks.
+  - Leaked interval cleanup: timers (`alwaysOnlineInterval`, `presenceHeartbeatInterval`) are systematically cleared upon socket closure (`connection === 'close'`).
+  - Added 2-second fast reconnect backoff on `DisconnectReason.restartRequired` (code 515).
+  - Fixed session directory pruning to preserve all active cryptographic Signal ratchet keys (`pre-key-*`, `session-*`, `sender-key-*`, `app-state-sync-key-*`), permanently fixing "Bad MAC" and private key desynchronization errors.
+  - Deduplication cache cleanup interval lifted to global singleton to prevent timer leaks across reconnect cycles.
+- **AutoStatus Enhancements & Upstream Parity**:
+  - Standardized Strategy 1 `statusJidList` to include `[statusKey.remoteJid, rawParticipant]` matching Baileys companion specifications.
+  - Enhanced status view pipeline to prioritize native `sock.readMessages([key])` with exponential backoff on `rate-overlimit`.
+  - Added incoming `messages.reaction` event listener in main socket loop to handle status reactions.
+
 ## [4.3.0] - 2026-09-17
 
 ### Added
