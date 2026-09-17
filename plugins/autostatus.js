@@ -41,12 +41,109 @@ const STRATEGY_DEFAULT_EMOJIS = {
     12: '😍'
 };
 
+function parseEmojiList(input) {
+    if (!input) return [];
+    if (Array.isArray(input)) {
+        return input
+            .map(s => (typeof s === 'string' ? s.trim() : String(s).trim()))
+            .filter(s => s && /\p{Extended_Pictographic}/u.test(s));
+    }
+    let str = String(input).trim();
+    if (!str) return [];
+
+    const lower = str.toLowerCase();
+    if (lower === 'random' || lower === 'none' || lower === 'false' || lower === 'off' || lower === 'disabled') {
+        return [];
+    }
+
+    // Strip wrapping quotes if any
+    if ((str.startsWith('"') && str.endsWith('"')) || (str.startsWith("'") && str.endsWith("'"))) {
+        str = str.slice(1, -1).trim();
+    }
+
+    // JSON array
+    if (str.startsWith('[') && str.endsWith(']')) {
+        try {
+            const parsed = JSON.parse(str);
+            if (Array.isArray(parsed)) {
+                const cleaned = parsed
+                    .map(s => String(s).trim())
+                    .filter(s => s && /\p{Extended_Pictographic}/u.test(s));
+                if (cleaned.length > 0) return cleaned;
+            }
+        } catch (_) {
+            try {
+                const parsed = JSON.parse(str.replace(/'/g, '"'));
+                if (Array.isArray(parsed)) {
+                    const cleaned = parsed
+                        .map(s => String(s).trim())
+                        .filter(s => s && /\p{Extended_Pictographic}/u.test(s));
+                    if (cleaned.length > 0) return cleaned;
+                }
+            } catch (_) {}
+        }
+    }
+
+    // Delimited formats (comma, semicolon, pipe, slash, whitespace)
+    if (/[,;|/\s]+/.test(str)) {
+        const parts = str
+            .split(/[,;|/\s]+/)
+            .map(s => s.trim())
+            .filter(s => s && /\p{Extended_Pictographic}/u.test(s));
+        if (parts.length > 0) return parts;
+    }
+
+    // Grapheme cluster segmentation (contiguous emojis "❤️🔥✨💯" or single emoji "💯")
+    if (typeof Intl !== 'undefined' && Intl.Segmenter) {
+        try {
+            const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+            const segments = Array.from(segmenter.segment(str), s => s.segment.trim())
+                .filter(s => s && /\p{Extended_Pictographic}/u.test(s));
+            if (segments.length > 0) return segments;
+        } catch (_) {}
+    }
+
+    // Fallback regex match
+    const matches = str.match(/\p{Extended_Pictographic}/gu);
+    if (matches && matches.length > 0) {
+        return matches.map(s => s.trim()).filter(Boolean);
+    }
+
+    return [];
+}
+
+const HARDCODED_FALLBACK_EMOJIS = ['❤️', '🔥', '✨', '💯', '🌟', '⚡', '😍', '👏', '💖', '🥰', '👍', '🎉'];
+
+function getEnvStatusEmojis() {
+    const raw = process.env.AUTO_STATUS_EMOJIS ?? process.env.STATUS_EMOJIS ?? process.env.AUTO_REACT_STATUS_EMOJIS ?? process.env.STATUS_REACTION_EMOJIS;
+    return parseEmojiList(raw);
+}
+
+function getEnvStatusReaction() {
+    return (process.env.AUTO_STATUS_REACTION ?? process.env.STATUS_REACTION ?? process.env.AUTO_STATUS_EMOJI ?? process.env.STATUS_EMOJI ?? '').trim();
+}
+
+function resolveDefaultReaction() {
+    const envReaction = getEnvStatusReaction();
+    if (envReaction) {
+        if (envReaction.toLowerCase() === 'random') return 'random';
+        const parsed = parseEmojiList(envReaction);
+        if (parsed.length > 1) return 'random';
+        if (parsed.length === 1) return parsed[0];
+        return envReaction;
+    }
+    const envEmojis = getEnvStatusEmojis();
+    if (envEmojis.length > 1) return 'random';
+    if (envEmojis.length === 1) return envEmojis[0];
+    return '💯';
+}
+
 const DEFAULTS = {
     view: true,
     react: true,
-    reaction: '💯',
+    reaction: resolveDefaultReaction(),
     strategy: 10,
-    emojis: ['❤️', '🔥', '✨', '💯', '🌟', '⚡', '😍', '👏', '💖', '🥰', '👍', '🎉']
+    emojis: getEnvStatusEmojis().length > 0 ? getEnvStatusEmojis() : HARDCODED_FALLBACK_EMOJIS
 };
 
 if (!HAS_DB && !fs.existsSync(configPath)) {
@@ -109,12 +206,40 @@ async function readConfig() {
             } catch {}
         }
 
+        const envReactionRaw = getEnvStatusReaction();
+        const envEmojisList = getEnvStatusEmojis();
+
+        // 1. Emoji pool: Env has absolute priority over DB/file
+        let effectiveEmojis = DEFAULTS.emojis;
+        if (envEmojisList.length > 0) {
+            effectiveEmojis = envEmojisList;
+        } else if (Array.isArray(data.emojis) && data.emojis.length > 0) {
+            const parsedStored = parseEmojiList(data.emojis);
+            if (parsedStored.length > 0) effectiveEmojis = parsedStored;
+        }
+
+        // 2. Reaction emoji / mode: Env has absolute priority
+        let effectiveReaction = DEFAULTS.reaction;
+        if (envReactionRaw) {
+            if (envReactionRaw.toLowerCase() === 'random') {
+                effectiveReaction = 'random';
+            } else {
+                const parsed = parseEmojiList(envReactionRaw);
+                effectiveReaction = parsed.length > 1 ? 'random' : (parsed[0] || envReactionRaw);
+            }
+        } else if (envEmojisList.length > 0) {
+            // When user specifies an emoji list in env and no fixed reaction emoji, use random
+            effectiveReaction = (data.reaction && data.reaction !== '💯') ? data.reaction : 'random';
+        } else if (data.reaction) {
+            effectiveReaction = data.reaction;
+        }
+
         _cachedConfig = {
             view: hasEnvView ? parseEnvBool(envViewRaw, true) : (data.view !== undefined ? parseEnvBool(data.view, true) : (data.enabled !== undefined ? parseEnvBool(data.enabled, true) : true)),
             react: hasEnvReact ? parseEnvBool(envReactRaw, true) : (data.react !== undefined ? parseEnvBool(data.react, true) : (data.reactOn !== undefined ? parseEnvBool(data.reactOn, true) : true)),
-            reaction: data.reaction || '💯',
+            reaction: effectiveReaction,
             strategy: hasEnvStrategy ? parseInt(envStrategyRaw, 10) : (Number(data.strategy) || 10),
-            emojis: data.emojis || DEFAULTS.emojis
+            emojis: effectiveEmojis
         };
         _cachedConfigTime = now;
         return _cachedConfig;
@@ -131,6 +256,11 @@ async function writeConfig(config) {
         if (config.view !== undefined) process.env.AUTO_STATUS_VIEW = String(config.view);
         if (config.react !== undefined) process.env.AUTO_STATUS_REACT = String(config.react);
         if (config.strategy !== undefined) process.env.AUTO_STATUS_STRATEGY = String(config.strategy);
+        if (config.reaction !== undefined) process.env.AUTO_STATUS_REACTION = String(config.reaction);
+        if (config.emojis !== undefined) {
+            const emList = Array.isArray(config.emojis) ? config.emojis : parseEmojiList(config.emojis);
+            process.env.AUTO_STATUS_EMOJIS = emList.join(',');
+        }
 
         if (HAS_DB) {
             await store.saveSetting('global', 'autoStatus', config);
@@ -175,10 +305,53 @@ async function isStatusReactionEnabled() {
     return cfg.react !== false;
 }
 
-function getStatusEmoji(cfg) {
-    const envEmoji = process.env.STATUS_REACTION || process.env.STATUS_EMOJI;
-    if (envEmoji && envEmoji.trim() !== '') return envEmoji.trim();
-    return cfg.reaction || '💚';
+function getStatusEmoji(cfg = {}) {
+    const envReactionRaw = getEnvStatusReaction();
+    const envEmojisList = getEnvStatusEmojis();
+
+    // 1. Single or list reaction emoji explicitly set in env
+    if (envReactionRaw) {
+        if (envReactionRaw.toLowerCase() === 'random') {
+            const pool = envEmojisList.length > 0 ? envEmojisList : ((Array.isArray(cfg?.emojis) && cfg.emojis.length > 0) ? cfg.emojis : DEFAULTS.emojis);
+            return pool[Math.floor(Math.random() * pool.length)];
+        }
+        const parsed = parseEmojiList(envReactionRaw);
+        if (parsed.length === 1) {
+            return parsed[0];
+        }
+        if (parsed.length > 1) {
+            return parsed[Math.floor(Math.random() * parsed.length)];
+        }
+        return envReactionRaw;
+    }
+
+    // 2. Emoji pool set in env (e.g. AUTO_STATUS_EMOJIS or STATUS_EMOJIS) -> pick randomly
+    if (envEmojisList.length > 0) {
+        return envEmojisList[Math.floor(Math.random() * envEmojisList.length)];
+    }
+
+    // 3. Fallback to cfg.reaction if set and not 'random'
+    const confReaction = cfg?.reaction || DEFAULTS.reaction;
+    if (confReaction) {
+        if (String(confReaction).toLowerCase() === 'random') {
+            const pool = (Array.isArray(cfg?.emojis) && cfg.emojis.length > 0) ? cfg.emojis : DEFAULTS.emojis;
+            return pool[Math.floor(Math.random() * pool.length)];
+        }
+        const parsed = parseEmojiList(confReaction);
+        if (parsed.length === 1) {
+            return parsed[0];
+        }
+        if (parsed.length > 1) {
+            return parsed[Math.floor(Math.random() * parsed.length)];
+        }
+    }
+
+    // 4. Config emoji pool
+    if (Array.isArray(cfg?.emojis) && cfg.emojis.length > 0) {
+        return cfg.emojis[Math.floor(Math.random() * cfg.emojis.length)];
+    }
+
+    return '💯';
 }
 
 // Track reacted statuses to prevent duplicate reaction stanzas
@@ -664,11 +837,17 @@ module.exports = {
                         : `\n✅ *Bot Read Receipts:* *${rr}* (Views visible to status posters)`;
                 } catch (_) {}
 
+                let emojiDisplay = cfg.reaction;
+                if (cfg.reaction === 'random') {
+                    emojiDisplay = `🎲 Random (${(cfg.emojis || []).slice(0, 8).join(' ')}${cfg.emojis?.length > 8 ? '...' : ''})`;
+                }
+
                 return await sock.sendMessage(chatId, {
                     text: `📱 *AutoStatus Settings*\n\n` +
                         `👁️ *Auto View:* *${cfg.view ? 'ON' : 'OFF'}* (Views status updates immediately)\n` +
                         `💫 *Auto React:* *${cfg.react ? 'ON' : 'OFF'}* (Reacts to status updates)\n` +
-                        `✨ *Reaction Emoji:* ${cfg.reaction}\n` +
+                        `✨ *Reaction Emoji:* ${emojiDisplay}\n` +
+                        `🎨 *Emoji Pool:* ${(cfg.emojis || []).join(' ')}\n` +
                         `⚙️ *Reaction Strategy:* *Strategy ${cfg.strategy}* (${activeStrategyName})\n` +
                         `🗄️ *Storage:* ${HAS_DB ? 'Database' : 'File System'}\n` +
                         `🚫 *Ignored Contacts:* ${ignoreList.length}` +
@@ -677,7 +856,7 @@ module.exports = {
                         `• \`.autostatus view on/off\` - Toggle status viewing\n` +
                         `• \`.autostatus react on/off\` - Toggle status reaction\n` +
                         `• \`.autostatus strategy <1-12>\` - Set reaction strategy (1 to 12)\n` +
-                        `• \`.autostatus reaction <emoji>\` - Set status reaction emoji\n` +
+                        `• \`.autostatus reaction <emoji|random|list>\` - Set reaction emoji or emoji pool\n` +
                         `• \`.autostatus readreceipts on/off\` - Toggle WhatsApp read receipts privacy\n` +
                         `• \`.autostatus on/off\` - Global toggle\n` +
                         `• \`.autostatus ignore <number>\` - Exclude contact\n` +
@@ -958,14 +1137,55 @@ module.exports = {
                 return await sock.sendMessage(chatId, { text: 'Usage: `.autostatus react on/off`', ...channelInfo }, { quoted: message });
             }
 
-            if (sub === 'reaction' || sub === 'emoji') {
-                const emoji = args.slice(1).join(' ').trim();
-                if (!emoji) {
-                    return await sock.sendMessage(chatId, { text: `Current reaction: ${cfg.reaction}\nUsage: \`.autostatus reaction <emoji>\``, ...channelInfo }, { quoted: message });
+            if (sub === 'reaction' || sub === 'emoji' || sub === 'emojis') {
+                const input = args.slice(1).join(' ').trim();
+                if (!input) {
+                    const currentDisplay = cfg.reaction === 'random'
+                        ? `🎲 Random (Pool: ${(cfg.emojis || []).join(' ')})`
+                        : cfg.reaction;
+                    return await sock.sendMessage(chatId, {
+                        text: `✨ *AutoStatus Reaction Emoji Settings:*\n\n` +
+                            `• *Current Reaction:* ${currentDisplay}\n` +
+                            `• *Active Emoji Pool:* ${(cfg.emojis || []).join(' ')}\n\n` +
+                            `*Usage:*\n` +
+                            `• \`.autostatus reaction ❤️\` - Set a single reaction emoji\n` +
+                            `• \`.autostatus reaction random\` - Randomize using active emoji pool\n` +
+                            `• \`.autostatus reaction ❤️,🔥,✨,💯,👍\` - Update emoji pool & randomize`,
+                        ...channelInfo
+                    }, { quoted: message });
                 }
-                cfg.reaction = emoji;
-                await writeConfig(cfg);
-                return await sock.sendMessage(chatId, { text: `✅ AutoStatus reaction emoji set to ${emoji}`, ...channelInfo }, { quoted: message });
+
+                if (input.toLowerCase() === 'random') {
+                    cfg.reaction = 'random';
+                    await writeConfig(cfg);
+                    return await sock.sendMessage(chatId, {
+                        text: `✅ AutoStatus reaction set to *Random*!\nBot will react using the emoji pool: ${(cfg.emojis || []).join(' ')}`,
+                        ...channelInfo
+                    }, { quoted: message });
+                }
+
+                const parsed = parseEmojiList(input);
+                if (parsed.length > 1) {
+                    cfg.emojis = parsed;
+                    cfg.reaction = 'random';
+                    await writeConfig(cfg);
+                    return await sock.sendMessage(chatId, {
+                        text: `✅ AutoStatus emoji pool updated (${parsed.length} emojis) and set to *Random*!\nPool: ${parsed.join(' ')}`,
+                        ...channelInfo
+                    }, { quoted: message });
+                } else if (parsed.length === 1) {
+                    cfg.reaction = parsed[0];
+                    await writeConfig(cfg);
+                    return await sock.sendMessage(chatId, {
+                        text: `✅ AutoStatus reaction emoji set to ${parsed[0]}`,
+                        ...channelInfo
+                    }, { quoted: message });
+                } else {
+                    return await sock.sendMessage(chatId, {
+                        text: `❌ Could not detect valid emojis in: "${input}". Please provide valid emoji(s).`,
+                        ...channelInfo
+                    }, { quoted: message });
+                }
             }
 
             if (sub === 'readreceipts' || sub === 'readreceipt') {
@@ -1075,6 +1295,8 @@ module.exports = {
                     view: config.view,
                     react: config.react,
                     reaction: config.reaction,
+                    emojis: config.emojis,
+                    effectiveEmojiSample: getStatusEmoji(config),
                     strategy: config.strategy,
                     strategyName: STRATEGY_DESCRIPTIONS[config.strategy] || 'Unknown Strategy',
                     ignoreList,
@@ -1110,6 +1332,8 @@ module.exports = {
     reactToStatus,
     readConfig,
     writeConfig,
+    getStatusEmoji,
+    parseEmojiList,
     STRATEGY_DESCRIPTIONS,
     STRATEGY_DEFAULT_EMOJIS,
     statusStats,

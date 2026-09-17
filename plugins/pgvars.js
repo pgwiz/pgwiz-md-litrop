@@ -51,8 +51,8 @@ function getAllRuntimeEnv() {
     // Standard bot keys to prioritize
     const importantKeys = [
         'SESSION_ID', 'BOT_NAME', 'OWNER_NUMBER', 'PREFIX', 'MODE', 'WORK_TYPE', 'ALWAYS_ONLINE',
-        'AUTO_REACT', 'AUTOREACT', 'AUTO_REACTION',
-        'AUTO_STATUS_VIEW', 'AUTO_STATUS_REACT', 'STATUS_EMOJIS', 'AUTO_STATUS_SAVE', 'AUTO_STATUS_DOWNLOAD',
+        'AUTO_REACT', 'AUTOREACT', 'AUTO_REACTION', 'AUTO_REACT_EMOJIS',
+        'AUTO_STATUS_VIEW', 'AUTO_STATUS_REACT', 'STATUS_EMOJIS', 'AUTO_STATUS_EMOJIS', 'STATUS_REACTION', 'AUTO_STATUS_REACTION', 'STATUS_EMOJI', 'AUTO_STATUS_EMOJI', 'AUTO_STATUS_SAVE', 'AUTO_STATUS_DOWNLOAD',
         'MONGO_URL', 'POSTGRES_URL', 'MYSQL_URL', 'DB_URL',
         'HKEY', 'HEROKU_API_KEY', 'HAPP', 'HEROKU_APP_NAME',
         'KOYEB_API_TOKEN', 'KOYEB_SERVICE_NAME', 'KOYEB_SERVICE_ID',
@@ -261,7 +261,8 @@ module.exports = {
             const allEnv = getAllRuntimeEnv();
             const autoView = allEnv.AUTO_STATUS_VIEW ?? 'true';
             const autoReact = allEnv.AUTO_STATUS_REACT ?? 'true';
-            const emojis = allEnv.STATUS_EMOJIS || '❤️,🔥,✨,💯,🌟,⚡';
+            const emojis = allEnv.AUTO_STATUS_EMOJIS || allEnv.STATUS_EMOJIS || '❤️,🔥,✨,💯,🌟,⚡';
+            const statusReaction = allEnv.AUTO_STATUS_REACTION || allEnv.STATUS_REACTION || allEnv.AUTO_STATUS_EMOJI || allEnv.STATUS_EMOJI || '';
             const mode = allEnv.MODE || allEnv.WORK_TYPE || 'public';
             const prefix = allEnv.PREFIX || '.';
             const alwaysOn = allEnv.ALWAYS_ONLINE || 'false';
@@ -273,7 +274,11 @@ module.exports = {
             text += '• *`ALWAYS_ONLINE`*: `' + alwaysOn + '`\n';
             text += '• *`AUTO_STATUS_VIEW`*: `' + autoView + '`\n';
             text += '• *`AUTO_STATUS_REACT`*: `' + autoReact + '`\n';
-            text += '• *`STATUS_EMOJIS`*: `' + emojis + '`\n\n';
+            text += '• *`STATUS_EMOJIS`*: `' + emojis + '`\n';
+            if (statusReaction) {
+                text += '• *`STATUS_REACTION`*: `' + statusReaction + '`\n';
+            }
+            text += '\n';
             text += '*🛠️ Commands:*\n';
             text += '• `.pgvars list` - Show all active variables\n';
             text += '• `.pgvars set KEY=VALUE` - Change variable lively\n';
@@ -597,8 +602,16 @@ module.exports = {
                     const cur = await store.getSetting('global', 'autoStatus') || {};
                     cur.reactOn = parsed;
                     await store.saveSetting('global', 'autoStatus', cur).catch(() => {});
-                } else if (key === 'STATUS_EMOJIS') {
+                } else if (key === 'STATUS_EMOJIS' || key === 'AUTO_STATUS_EMOJIS') {
                     await store.saveSetting('global', 'statusEmojis', value).catch(() => {});
+                    const cur = await store.getSetting('global', 'autoStatus') || {};
+                    cur.emojis = value;
+                    await store.saveSetting('global', 'autoStatus', cur).catch(() => {});
+                } else if (key === 'STATUS_REACTION' || key === 'AUTO_STATUS_REACTION' || key === 'STATUS_EMOJI' || key === 'AUTO_STATUS_EMOJI') {
+                    await store.saveSetting('global', 'statusReaction', value).catch(() => {});
+                    const cur = await store.getSetting('global', 'autoStatus') || {};
+                    cur.reaction = value;
+                    await store.saveSetting('global', 'autoStatus', cur).catch(() => {});
                 } else if (key === 'ALWAYS_ONLINE') {
                     await store.saveSetting('global', 'alwaysOnline', parseEnvBool(value, false)).catch(() => {});
                 }

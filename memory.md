@@ -73,3 +73,9 @@ The following downloaders were audited and flagged as currently non-functional d
 * **Status Reaction**: Multi-Device status reactions require `sock.sendMessage('status@broadcast', { react: { text: emoji, key: reactionKey } }, { statusJidList })` alongside `sock.relayMessage(...)`.
 * **LID (Linked Identity) & Phone Number Support**: `reactionKey.participant` must preserve the raw author JID (especially `@lid` accounts), and `statusJidList` must include both raw and normalized participant JIDs (excluding `'status@broadcast'`).
 * **Privacy Prerequisite**: The status author MUST have the bot's phone number saved in their contacts, otherwise WhatsApp servers never fan out the status stanza to the bot.
+* **Environment-Driven Emojis**:
+  - `AUTO_STATUS_EMOJIS` / `STATUS_EMOJIS`: Flexible pool (comma-separated, space-separated, JSON array, or grapheme clusters).
+  - `AUTO_STATUS_REACTION` / `STATUS_REACTION`: Fixed single reaction emoji, or `"random"` to randomize across pool. Takes priority over hardcoded defaults.
+  - `AUTO_REACT_EMOJIS`: Custom fallback list for smart message auto-reactions.
+  - Runtime management supported via `.pgvars` and `.autostatus reaction <emoji|random|list>`.
+
