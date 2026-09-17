@@ -873,7 +873,9 @@ async function reactToStatus(sock, statusKey, customEmoji = null, customStrategy
         const strat = Number(customStrategy) || Number(cfg.strategy) || 1;
 
         await executeReactionStrategy(sock, strat, statusKey, emoji);
-        console.log(`[AUTOSTATUS] ✅ Reacted to status ${statusKey.id} from ${statusKey.participant || 'contact'} with ${emoji} (Strategy ${strat})`);
+        if (process.env.VERBOSE_LOGS === 'true' || process.env.DEBUG === 'true') {
+            console.log(`[AUTOSTATUS] ✅ Reacted to status ${statusKey.id} from ${statusKey.participant || 'contact'} with ${emoji} (Strategy ${strat})`);
+        }
         return true;
     } catch (error) {
         console.error(`[AUTOSTATUS] ❌ Error reacting to status (Strategy ${customStrategy || 'default'}):`, error.message);
@@ -928,7 +930,9 @@ async function handleStatusUpdate(sock, status) {
             });
 
             if (isFromMe) {
-                console.log(`[AUTOSTATUS] ℹ️ Received own status broadcast ${msgId} (fromMe: true)`);
+                if (process.env.VERBOSE_LOGS === 'true' || process.env.DEBUG === 'true') {
+                    console.log(`[AUTOSTATUS] ℹ️ Received own status broadcast ${msgId} (fromMe: true)`);
+                }
                 continue;
             }
 
@@ -983,7 +987,9 @@ async function handleStatusUpdate(sock, status) {
                     }
                     statusStats.totalViewed++;
                     if (historyEntry) historyEntry.viewStatus = 'viewed';
-                    console.log(`[AUTOSTATUS] 👀 Viewed status ${key.id} from ${key.participant || 'contact'}`);
+                    if (process.env.VERBOSE_LOGS === 'true' || process.env.DEBUG === 'true') {
+                        console.log(`[AUTOSTATUS] 👀 Viewed status ${key.id} from ${key.participant || 'contact'}`);
+                    }
                 } catch (err) {
                     if (historyEntry) historyEntry.viewStatus = 'failed';
                     console.error(`[AUTOSTATUS] ❌ Failed to view status ${key.id}:`, err.message);

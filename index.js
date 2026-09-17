@@ -155,8 +155,27 @@ const shouldSuppress = (args) => {
     return false;
 };
 
+const isVerbose = process.env.VERBOSE_LOGS === 'true' || process.env.LOG_LEVEL === 'verbose' || process.env.DEBUG === 'true';
+
 console.log = (...args) => {
     if (shouldSuppress(args)) return;
+    if (!isVerbose) {
+        const str = args.map(a => typeof a === 'string' ? a : (a?.message || '')).join(' ');
+        const isCritical = str.includes('❌') ||
+                           str.includes('Error') ||
+                           str.includes('ERROR') ||
+                           str.includes('Pairing Code') ||
+                           str.includes('SESSION CONFLICT') ||
+                           str.includes('critical') ||
+                           str.includes('CRITICAL');
+        if (!isCritical) return;
+    }
+    originalConsoleLog.apply(console, args);
+};
+
+console.info = (...args) => {
+    if (shouldSuppress(args)) return;
+    if (!isVerbose) return;
     originalConsoleLog.apply(console, args);
 };
 
@@ -176,6 +195,11 @@ console.error = (...args) => {
 
 console.warn = (...args) => {
     if (shouldSuppress(args)) return;
+    if (!isVerbose) {
+        const str = args.map(a => typeof a === 'string' ? a : (a?.message || '')).join(' ');
+        const isCritical = str.includes('critical') || str.includes('CRITICAL') || str.includes('OOM') || str.includes('CONFLICT');
+        if (!isCritical) return;
+    }
     originalConsoleWarn.apply(console, args);
 };
 
