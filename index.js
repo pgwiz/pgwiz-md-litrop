@@ -848,6 +848,15 @@ async function startPgwizDev() {
                     printLog('warning', `Failed to initialize always-online: ${e.message}`);
                 }
 
+                // Active socket & session keepalive heartbeat (prevents idle NAT drop & companion dormancy)
+                try {
+                    if (typeof pgwizSocket.startKeepAlive === 'function') {
+                        pgwizSocket.startKeepAlive(45000);
+                    }
+                } catch (e) {
+                    printLog('warning', `Failed to start socket keepalive: ${e.message}`);
+                }
+
                 const sendStartupMsg = process.env.STARTUP_MESSAGE !== 'false' && process.env.SEND_STARTUP_MESSAGE !== 'false';
                 if (sendStartupMsg && !global.hasSentStartupNotification) {
                     global.hasSentStartupNotification = true;
@@ -914,6 +923,11 @@ async function startPgwizDev() {
             }
 
             if (connection === 'close') {
+                try {
+                    if (typeof pgwizSocket?.stopKeepAlive === 'function') {
+                        pgwizSocket.stopKeepAlive();
+                    }
+                } catch (_) {}
                 try {
                     const { stopAlwaysOnlineLoop } = require('./plugins/alwaysonline');
                     stopAlwaysOnlineLoop();
