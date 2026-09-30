@@ -504,6 +504,7 @@ async function startPgwizDev() {
             msgRetryCounterCache,
             placeholderResendCache,
             patchMessageBeforeSending: (message) => {
+                if (!message || typeof message !== 'object') return message;
                 const requiresPatch = !!(
                     message.buttonsMessage ||
                     message.templateMessage ||
