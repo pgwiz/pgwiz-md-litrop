@@ -465,8 +465,9 @@ async function startPgwizDev() {
 
         const { useSQLiteAuthState } = require('./lib/sqliteAuthState');
         const { state, saveCreds } = await useSQLiteAuthState();
-        // Create retry counter cache with short TTL (10 seconds) so old messages don't stay cached
-        const msgRetryCounterCache = new NodeCache({ stdTTL: 300, checkperiod: 60 });
+        // Create retry counter cache and placeholder resend cache with 1h TTL
+        const msgRetryCounterCache = new NodeCache({ stdTTL: 3600, checkperiod: 120, useClones: false });
+        const placeholderResendCache = new NodeCache({ stdTTL: 3600, checkperiod: 120, useClones: false });
 
         const hasRegisteredCreds = state.creds && state.creds.registered !== undefined;
         printLog('info', `Credentials loaded. Registered: ${state.creds?.registered || false}`);
@@ -481,7 +482,8 @@ async function startPgwizDev() {
         const isAlwaysOnline = await isAlwaysOnlineEnabled();
         const shouldMarkOnline = !isGhostActive && isAlwaysOnline;
 
-        const pgwizSocket = makeWASocket({
+        let pgwizSocket;
+        pgwizSocket = makeWASocket({
             version,
             logger: pino({ level: 'silent' }, nullStream), // Silent logger with null stream
             printQRInTerminal: !pairingCode,
@@ -493,27 +495,36 @@ async function startPgwizDev() {
             markOnlineOnConnect: shouldMarkOnline,
             generateHighQualityLinkPreview: true,
             syncFullHistory: false,
-            shouldSyncHistoryMessage: () => false, // Disable history sync for real-time only
-            retryRequestDelayMs: 2500,
-            maxMsgRetryCount: 3, // Reduce retry delay from 5s to 2s
+            shouldSyncHistoryMessage: () => false, // STRICT REQUIREMENT: Keep exactly as it is
+            retryRequestDelayMs: 250,
+            maxMsgRetryCount: 5,
             fireInitQueries: true,
-            getMessage: async (key) => {
-                try {
-                    // Add a 3 second timeout so we don't get stuck waiting for old messages
-                    const timeoutPromise = new Promise((_, reject) =>
-                        setTimeout(() => reject(new Error('timeout')), 3000)
-                    );
-
-                    let jid = jidNormalizedUser(key.remoteJid);
-                    const loadPromise = store.loadMessage(jid, key.id);
-                    const msg = await Promise.race([loadPromise, timeoutPromise]);
-                    return msg?.message || "";
-                } catch (err) {
-                    // If timeout or error, return empty string - Baileys will skip this message
-                    return "";
-                }
-            },
+            enableAutoSessionRecreation: true,
+            getMessage: async (key) => pgwizSocket?.getMessage ? pgwizSocket.getMessage(key) : undefined,
             msgRetryCounterCache,
+            placeholderResendCache,
+            patchMessageBeforeSending: (message) => {
+                const requiresPatch = !!(
+                    message.buttonsMessage ||
+                    message.templateMessage ||
+                    message.listMessage ||
+                    message.interactiveMessage
+                );
+                if (requiresPatch) {
+                    message = {
+                        viewOnceMessage: {
+                            message: {
+                                messageContextInfo: {
+                                    deviceListMetadataVersion: 2,
+                                    deviceListMetadata: {},
+                                },
+                                ...message,
+                            },
+                        },
+                    };
+                }
+                return message;
+            },
             defaultQueryTimeoutMs: 60000,
             connectTimeoutMs: 60000,
             keepAliveIntervalMs: 10000, // Aggressive keep-alive for stability
@@ -857,6 +868,15 @@ async function startPgwizDev() {
                     printLog('warning', `Failed to start socket keepalive: ${e.message}`);
                 }
 
+                // Proactive pre-key maintenance (prevents "Waiting for this message" caused by exhausted pre-keys)
+                try {
+                    if (typeof pgwizSocket.startPreKeyMaintenance === 'function') {
+                        pgwizSocket.startPreKeyMaintenance();
+                    }
+                } catch (e) {
+                    printLog('warning', `Failed to start pre-key maintenance: ${e.message}`);
+                }
+
                 const sendStartupMsg = process.env.STARTUP_MESSAGE !== 'false' && process.env.SEND_STARTUP_MESSAGE !== 'false';
                 if (sendStartupMsg && !global.hasSentStartupNotification) {
                     global.hasSentStartupNotification = true;
@@ -926,6 +946,9 @@ async function startPgwizDev() {
                 try {
                     if (typeof pgwizSocket?.stopKeepAlive === 'function') {
                         pgwizSocket.stopKeepAlive();
+                    }
+                    if (typeof pgwizSocket?.stopPreKeyMaintenance === 'function') {
+                        pgwizSocket.stopPreKeyMaintenance();
                     }
                 } catch (_) {}
                 try {
