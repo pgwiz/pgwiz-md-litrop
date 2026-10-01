@@ -832,9 +832,6 @@ async function handleStatusUpdate(sock, status) {
         const config = await readConfig();
         if (!config.view && !config.react) return;
 
-        // Upstream GlobalTech standard settling delay: allows status media/metadata to stabilize on WhatsApp edge servers
-        await new Promise(r => setTimeout(r, 1000));
-
         let msgs = [];
         if (Array.isArray(status)) {
             msgs = status;
@@ -889,14 +886,17 @@ async function handleStatusUpdate(sock, status) {
                 continue;
             }
 
-            // Step 1: Send Read Receipt (explicit type='read' guarantees status viewer tray appearance)
+            // Step 1: Send Read Receipt (Clean single receipt transmission with fallback to prevent stream ack collisions)
             if (config.view) {
                 try {
-                    const nowSec = Math.floor(Date.now() / 1000).toString();
                     const authorJid = key.participant || key.remoteJid;
 
-                    // Direct binary node transmission: forces explicit type="read" receipt to status@broadcast
-                    if (typeof sock.sendNode === 'function') {
+                    if (typeof sock.readMessages === 'function') {
+                        await sock.readMessages([key]);
+                    } else if (typeof sock.sendReceipt === 'function') {
+                        await sock.sendReceipt('status@broadcast', authorJid, [key.id], 'read').catch(() => {});
+                    } else if (typeof sock.sendNode === 'function') {
+                        const nowSec = Math.floor(Date.now() / 1000).toString();
                         await sock.sendNode({
                             tag: 'receipt',
                             attrs: {
@@ -909,22 +909,6 @@ async function handleStatusUpdate(sock, status) {
                         }).catch(() => {});
                     }
 
-                    // Direct sendReceipt API with explicit 'read' type
-                    if (typeof sock.sendReceipt === 'function') {
-                        await sock.sendReceipt('status@broadcast', authorJid, [key.id], 'read').catch(() => {});
-                    }
-
-                    // Standard readMessages fallback with rate-limit retry
-                    if (typeof sock.readMessages === 'function') {
-                        try {
-                            await sock.readMessages([key]);
-                        } catch (readErr) {
-                            if (readErr?.message?.includes('rate-overlimit')) {
-                                await new Promise(r => setTimeout(r, 2000));
-                                await sock.readMessages([key]).catch(() => {});
-                            }
-                        }
-                    }
                     statusStats.totalViewed++;
                     if (historyEntry) historyEntry.viewStatus = 'viewed';
                     if (process.env.VERBOSE_LOGS === 'true' || process.env.DEBUG === 'true') {
@@ -938,7 +922,7 @@ async function handleStatusUpdate(sock, status) {
                 if (historyEntry) historyEntry.viewStatus = 'disabled';
             }
 
-            // Step 2: Natural Pacing Pause (500ms) between view and react
+            // Step 2: Natural Real-Time Pacing Pause (500ms) between view and react
             if (config.view && config.react) {
                 await new Promise(r => setTimeout(r, 500));
             }
@@ -974,7 +958,7 @@ async function handleStatusUpdate(sock, status) {
 
             // Inter-status pacing delay when multiple statuses arrive in the same upsert
             if (msgs.length > 1 && i < msgs.length - 1) {
-                await new Promise(r => setTimeout(r, 1000));
+                await new Promise(r => setTimeout(r, 250));
             }
         }
     } catch (error) {

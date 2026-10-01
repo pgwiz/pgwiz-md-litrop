@@ -854,7 +854,7 @@ async function startPgwizDev() {
                     if (isOnline && !(ghostMode && ghostMode.enabled)) {
                         startAlwaysOnlineLoop(pgwizSocket);
                     } else if (!ghostMode || !ghostMode.enabled) {
-                        stopAlwaysOnlineLoop(pgwizSocket);
+                        stopAlwaysOnlineLoop(pgwizSocket, false);
                     }
                 } catch (e) {
                     printLog('warning', `Failed to initialize always-online: ${e.message}`);
@@ -863,7 +863,7 @@ async function startPgwizDev() {
                 // Active socket & session keepalive heartbeat (prevents idle NAT drop & companion dormancy)
                 try {
                     if (typeof pgwizSocket.startKeepAlive === 'function') {
-                        pgwizSocket.startKeepAlive(45000);
+                        pgwizSocket.startKeepAlive(25000);
                     }
                 } catch (e) {
                     printLog('warning', `Failed to start socket keepalive: ${e.message}`);

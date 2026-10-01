@@ -54,12 +54,12 @@ function startAlwaysOnlineLoop(sock) {
     console.log('[PRESENCE] 🟢 Always-Online 90s keepalive pulse active');
 }
 
-function stopAlwaysOnlineLoop(sock = null) {
+function stopAlwaysOnlineLoop(sock = null, forceOffline = false) {
     if (global.alwaysOnlineInterval) {
         clearInterval(global.alwaysOnlineInterval);
         global.alwaysOnlineInterval = null;
     }
-    if (sock && sock.ws && sock.ws.readyState === 1) {
+    if (forceOffline && sock && sock.ws && sock.ws.readyState === 1) {
         sendOfflinePresence(sock);
     }
 }
@@ -130,7 +130,7 @@ module.exports = {
                 process.env.ALWAYS_ONLINE = 'false';
                 await store.saveSetting('global', 'presenceConfig', { alwaysOnline: false });
 
-                stopAlwaysOnlineLoop(sock);
+                stopAlwaysOnlineLoop(sock, true);
                 await sock.sendPresenceUpdate('unavailable').catch(() => {});
 
                 return await sock.sendMessage(chatId, {
