@@ -12,7 +12,7 @@ const HAS_DB = !!(MONGO_URL || POSTGRES_URL || MYSQL_URL || SQLITE_URL);
 const configPath = path.join(__dirname, '../data/autoStatus.json');
 
 const STRATEGY_DESCRIPTIONS = {
-    1: 'Dual-JID Native Broadcast React (Fortunatus & PGWIZ Standard)',
+    1: 'Pure Broadcast Relay (GlobalTech & Fortunatus Standard)',
     2: 'Fresh ID Broadcast Relay (Multi-Device List)',
     3: 'Broadcast Relay (Direct Target List)',
     4: 'Native Broadcast React (sendMessage to status@broadcast)',
@@ -278,8 +278,6 @@ async function readConfig() {
             activeStrategy = parseInt(envStrategyRaw, 10);
         } else if (data.strategy !== undefined && data.strategy !== null) {
             activeStrategy = Number(data.strategy);
-            // Auto-migrate legacy Strategy 10 to Strategy 1 (GlobalTech verified standard)
-            if (activeStrategy === 10) activeStrategy = 1;
         }
 
         _cachedConfig = {
@@ -595,30 +593,33 @@ async function executeReactionStrategy(sock, strategyNum, statusKey, emoji) {
 
     switch (Number(strategyNum)) {
         case 1: {
-            // Strategy 1: Fortunatus-Exact Raw Key React
-            // Use the RAW statusKey from the Baileys event directly — do NOT rebuild it.
-            // WhatsApp requires the exact server-generated key (includes participantPn, etc).
-            // Prefer participantPn (phone JID) over LID for statusJidList.
+            // Strategy 1: Pure Broadcast Relay (GlobalTech & Fortunatus Standard)
+            // Relays reactionMessage directly to status@broadcast with exact status key.
+            // Avoids sock.sendMessage's client-side pairwise Signal session checks that cause "No sessions" on stranger LIDs.
             const phoneTarget = statusKey.participantPn || phoneJid;
-            const botJid = userPhone || userLid;
-            const jidSet = new Set();
-            if (phoneTarget && phoneTarget !== 'status@broadcast') jidSet.add(phoneTarget);
-            if (rawParticipant && rawParticipant !== 'status@broadcast') jidSet.add(rawParticipant);
-            if (botJid) jidSet.add(botJid);
-            const statusJidList = Array.from(jidSet).filter(Boolean);
+            const targets = Array.from(new Set([rawParticipant, phoneTarget])).filter(j => j && j !== 'status@broadcast');
+            const statusJidList = targets.length > 0 ? targets : [rawParticipant];
 
-            return await sock.sendMessage('status@broadcast', {
-                react: {
+            return await sock.relayMessage('status@broadcast', {
+                reactionMessage: {
+                    key: {
+                        remoteJid: 'status@broadcast',
+                        id: statusKey.id,
+                        participant: rawParticipant,
+                        fromMe: false
+                    },
                     text: emoji,
-                    key: statusKey   // <- raw Baileys key, exactly like Fortunatus' mek.key
+                    senderTimestampMs: nowMs
                 }
             }, {
-                statusJidList: statusJidList.length > 0 ? statusJidList : [rawParticipant]
+                messageId: statusKey.id,
+                statusJidList
             });
         }
         case 2: {
-            // Strategy 2: Fresh generated Message ID Relay to status@broadcast with multi-identifier list
-            const statusJidList = Array.from(new Set([rawParticipant, phoneJid, userPhone, userLid])).filter(j => j && j !== 'status@broadcast');
+            // Strategy 2: Fresh generated Message ID Relay to status@broadcast
+            const targets = Array.from(new Set([rawParticipant, phoneJid])).filter(j => j && j !== 'status@broadcast');
+            const statusJidList = targets.length > 0 ? targets : [rawParticipant];
             return await sock.relayMessage('status@broadcast', {
                 reactionMessage: {
                     key: reactionKey,
@@ -626,7 +627,7 @@ async function executeReactionStrategy(sock, strategyNum, statusKey, emoji) {
                     senderTimestampMs: nowMs
                 }
             }, {
-                statusJidList: statusJidList.length > 0 ? statusJidList : [rawParticipant]
+                statusJidList
             });
         }
         case 3: {
@@ -675,8 +676,9 @@ async function executeReactionStrategy(sock, strategyNum, statusKey, emoji) {
             });
         }
         case 6: {
-            // Strategy 6: Broadcast Relay with multi-identifier statusJidList and senderTimestampMs
-            const statusJidList = Array.from(new Set([rawParticipant, phoneJid, userPhone, userLid])).filter(j => j && j !== 'status@broadcast');
+            // Strategy 6: Broadcast Relay with senderTimestampMs
+            const targets = Array.from(new Set([rawParticipant, phoneJid])).filter(j => j && j !== 'status@broadcast');
+            const statusJidList = targets.length > 0 ? targets : [rawParticipant];
             return await sock.relayMessage('status@broadcast', {
                 reactionMessage: {
                     key: reactionKey,
@@ -684,7 +686,7 @@ async function executeReactionStrategy(sock, strategyNum, statusKey, emoji) {
                     senderTimestampMs: nowMs
                 }
             }, {
-                statusJidList: statusJidList.length > 0 ? statusJidList : [rawParticipant]
+                statusJidList
             });
         }
         case 7: {
@@ -812,13 +814,25 @@ async function reactToStatus(sock, statusKey, customEmoji = null, customStrategy
         const emoji = customEmoji || getStatusEmoji(cfg);
         const strat = Number(customStrategy) || Number(cfg.strategy) || 1;
 
-        await executeReactionStrategy(sock, strat, statusKey, emoji);
+        try {
+            await executeReactionStrategy(sock, strat, statusKey, emoji);
+        } catch (stratErr) {
+            // Graceful fallback to pure broadcast relay (Strategy 1) if chosen strategy hit errors
+            if (strat !== 1) {
+                await executeReactionStrategy(sock, 1, statusKey, emoji);
+            } else {
+                throw stratErr;
+            }
+        }
+
         if (process.env.VERBOSE_LOGS === 'true' || process.env.DEBUG === 'true') {
             console.log(`[AUTOSTATUS] ✅ Reacted to status ${statusKey.id} from ${statusKey.participant || 'contact'} with ${emoji} (Strategy ${strat})`);
         }
         return true;
     } catch (error) {
-        console.error(`[AUTOSTATUS] ❌ Error reacting to status (Strategy ${customStrategy || 'default'}):`, error.message);
+        if (process.env.VERBOSE_LOGS === 'true' || process.env.DEBUG === 'true') {
+            console.error(`[AUTOSTATUS] ⚠️ Reaction skipped for ${statusKey.id}:`, error.message);
+        }
         return false;
     }
 }

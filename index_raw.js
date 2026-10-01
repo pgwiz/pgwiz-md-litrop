@@ -415,6 +415,13 @@ async function initializeSession() {
 
     const txt = global.SESSION_ID || process.env.SESSION_ID;
 
+    // 1. If existing valid session exists and no force reset, skip remote download to avoid 429 rate-limiting
+    const forceReset = String(process.env.FORCE_SESSION_RESET || '').toLowerCase() === 'true';
+    if (!forceReset && hasValidSession()) {
+        printLog('success', 'Existing valid session found. Using saved credentials');
+        return true;
+    }
+
     if (!txt) {
         printLog('warning', 'No SESSION_ID found in environment variables');
         if (hasValidSession()) {
@@ -425,25 +432,24 @@ async function initializeSession() {
         return false;
     }
 
-    // Always refresh session from service to prevent staleness
+    // 2. Fetch or decode credentials from SESSION_ID
     try {
-        printLog('info', 'Refreshing session credentials from PGWIZ service...');
+        printLog('info', 'Initializing session credentials from SESSION_ID...');
         await SaveCreds(txt);
-        await delay(1500);
+        await delay(1000);
 
         if (hasValidSession()) {
-            printLog('success', 'Session refreshed and verified');
-            await delay(500);
+            printLog('success', 'Session credentials initialized and verified');
             return true;
         } else {
-            printLog('error', 'Session file not valid after refresh');
+            printLog('error', 'Session file not valid after initialization');
             return false;
         }
     } catch (error) {
-        printLog('error', `Error refreshing session: ${error.message}`);
+        printLog('error', `Error initializing session: ${error.message}`);
         // Fall back to existing session if available
         if (hasValidSession()) {
-            printLog('warning', 'Using existing session (refresh failed)');
+            printLog('warning', 'Using existing session (remote fetch failed)');
             return true;
         }
         return false;
@@ -974,7 +980,19 @@ async function startPgwizDev() {
 
                 printLog('error', `Connection closed - Status: ${statusCode || 'unknown'} (${lastDisconnect?.error?.message || 'Unknown'})`);
 
-                if (statusCode === DisconnectReason.loggedOut || statusCode === 401) {
+                const isConflict = statusCode === 440 || errorMsg.includes('conflict');
+
+                if (isConflict) {
+                    console.log(chalk.bold.redBright('⚠️  SESSION CONFLICT (Status 440 / Conflict)'));
+                    console.log(chalk.red('   Another bot instance is currently connected with this SESSION_ID.'));
+                    console.log(chalk.red('   Waiting 15 seconds for conflicting instance to release before reconnecting...'));
+                    printLog('connection', 'Waiting 15 seconds for conflicting instance to release before reconnecting...');
+                    await delay(15000);
+                    startPgwizDev();
+                    return;
+                }
+
+                if ((statusCode === DisconnectReason.loggedOut || statusCode === 401) && !errorMsg.includes('stream errored') && !errorMsg.includes('conflict')) {
                     try {
                         rmSync('./session', { recursive: true, force: true });
                         printLog('warning', 'Session logged out. Session files cleared.');
@@ -982,14 +1000,18 @@ async function startPgwizDev() {
                         printLog('error', `Error deleting session: ${error.message}`);
                     }
                     if (process.env.SESSION_ID) {
-                        printLog('connection', 'SESSION_ID detected in environment. Downloading fresh session in 3s...');
-                        await delay(3000);
-                        await initializeSession();
+                        printLog('connection', 'SESSION_ID detected in environment. Initializing session in 8s...');
+                        await delay(8000);
+                        const initialized = await initializeSession();
+                        if (!initialized) {
+                            printLog('warning', 'Session initialization delayed. Retrying in 15s...');
+                            await delay(15000);
+                        }
                         startPgwizDev();
                         return;
                     } else {
-                        printLog('connection', 'Restarting for fresh pairing in 3s...');
-                        await delay(3000);
+                        printLog('connection', 'Restarting for fresh pairing in 5s...');
+                        await delay(5000);
                         startPgwizDev();
                         return;
                     }
@@ -1006,16 +1028,6 @@ async function startPgwizDev() {
                         await initializeSession();
                     }
                     await delay(3000);
-                    startPgwizDev();
-                    return;
-                }
-
-                if (statusCode === 440) {
-                    console.log(chalk.bold.redBright('⚠️  SESSION CONFLICT (Status 440)'));
-                    console.log(chalk.red('   Another bot instance is currently connected with this SESSION_ID.'));
-                    console.log(chalk.red('   Please ensure other running terminals or cloud instances are stopped.'));
-                    printLog('connection', 'Reconnecting in 15 seconds...');
-                    await delay(15000);
                     startPgwizDev();
                     return;
                 }
