@@ -515,7 +515,7 @@ async function startPgwizDev() {
                     message.buttonsMessage ||
                     message.templateMessage ||
                     message.listMessage ||
-                    message.interactiveMessage
+                    false // interactiveMessage is sent unwrapped with <biz> nodes (see lib/customBaileys.js)
                 );
                 if (requiresPatch) {
                     message = {
