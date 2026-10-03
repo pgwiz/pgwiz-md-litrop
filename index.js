@@ -563,6 +563,15 @@ async function startPgwizDev() {
             return originalSendNode.call(this, node);
         };
 
+        // In-memory stealth-mode cache (avoids a DB round-trip on every receipt/presence/query call)
+        let _ghostCache = { v: null, t: 0 };
+        const getGhostModeCached = async () => {
+            if (Date.now() - _ghostCache.t < 3000) return _ghostCache.v;
+            const v = await store.getSetting('global', 'stealthMode').catch(() => null);
+            _ghostCache = { v, t: Date.now() };
+            return v;
+        };
+
         const originalSendPresenceUpdate = pgwizSocket.sendPresenceUpdate;
         const originalReadMessages = pgwizSocket.readMessages;
         const originalSendReceipt = pgwizSocket.sendReceipt;
@@ -571,7 +580,7 @@ async function startPgwizDev() {
         pgwizSocket.sendPresenceUpdate = async function (...args) {
             if (!this.ws || this.ws.readyState !== 1) return;
             const [presenceType, jid] = args;
-            const ghostMode = await store.getSetting('global', 'stealthMode');
+            const ghostMode = await getGhostModeCached();
             if (ghostMode && ghostMode.enabled) return;
 
             const alwaysOnline = await isAlwaysOnlineEnabled();
@@ -590,7 +599,7 @@ async function startPgwizDev() {
         };
 
         pgwizSocket.readMessages = async function (...args) {
-            const ghostMode = await store.getSetting('global', 'stealthMode');
+            const ghostMode = await getGhostModeCached();
             if (ghostMode && ghostMode.enabled) {
                 return;
             }
@@ -599,7 +608,7 @@ async function startPgwizDev() {
 
         if (originalSendReceipt) {
             pgwizSocket.sendReceipt = async function (...args) {
-                const ghostMode = await store.getSetting('global', 'stealthMode');
+                const ghostMode = await getGhostModeCached();
                 if (ghostMode && ghostMode.enabled) {
                     return;
                 }
@@ -609,7 +618,7 @@ async function startPgwizDev() {
 
         if (originalSendReadReceipt) {
             pgwizSocket.sendReadReceipt = async function (...args) {
-                const ghostMode = await store.getSetting('global', 'stealthMode');
+                const ghostMode = await getGhostModeCached();
                 if (ghostMode && ghostMode.enabled) {
                     return;
                 }
@@ -619,7 +628,8 @@ async function startPgwizDev() {
 
         const originalQuery = pgwizSocket.query;
         pgwizSocket.query = async function (node, ...args) {
-            const ghostMode = await store.getSetting('global', 'stealthMode');
+            const isReceiptNode = node && (node.tag === 'receipt' || (node.attrs && (node.attrs.type === 'read' || node.attrs.type === 'read-self')));
+            const ghostMode = isReceiptNode ? await getGhostModeCached() : null;
             if (ghostMode && ghostMode.enabled) {
                 if (node && node.tag === 'receipt') {
                     return;
@@ -632,7 +642,7 @@ async function startPgwizDev() {
         };
 
         pgwizSocket.isGhostMode = async () => {
-            const ghostMode = await store.getSetting('global', 'stealthMode');
+            const ghostMode = await getGhostModeCached();
             return ghostMode && ghostMode.enabled;
         };
 
@@ -1054,21 +1064,8 @@ async function startPgwizDev() {
             await handleGroupParticipantUpdate(pgwizSocket, update);
         });
 
-        pgwizSocket.ev.on('status.update', async (status) => {
-            await handleStatus(pgwizSocket, status);
-        });
-
-        pgwizSocket.ev.on('messages.reaction', async (reaction) => {
-            if (Array.isArray(reaction)) {
-                for (const r of reaction) {
-                    if (r?.key?.remoteJid === 'status@broadcast') {
-                        await handleStatus(pgwizSocket, r);
-                    }
-                }
-            } else if (reaction?.key?.remoteJid === 'status@broadcast') {
-                await handleStatus(pgwizSocket, reaction);
-            }
-        });
+        // NOTE: 'messages.reaction' / 'status.update' are intentionally NOT routed to autostatus:
+        // reaction events are not statuses and caused false reactions (e.g. on status delete).
 
         
         return pgwizSocket;

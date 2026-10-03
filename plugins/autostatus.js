@@ -611,9 +611,7 @@ async function executeReactionStrategy(sock, strategyNum, statusKey, emoji) {
                     text: emoji,
                     senderTimestampMs: nowMs
                 }
-            }, {
-                messageId: statusKey.id,
-                statusJidList
+            }, {                statusJidList
             });
         }
         case 2: {
@@ -670,9 +668,7 @@ async function executeReactionStrategy(sock, strategyNum, statusKey, emoji) {
                     text: emoji,
                     senderTimestampMs: nowMs
                 }
-            }, {
-                messageId: statusKey.id,
-                statusJidList: statusJidList.length > 0 ? statusJidList : [rawParticipant]
+            }, {                statusJidList: statusJidList.length > 0 ? statusJidList : [rawParticipant]
             });
         }
         case 6: {
@@ -699,9 +695,7 @@ async function executeReactionStrategy(sock, strategyNum, statusKey, emoji) {
                     groupingKey: rawParticipant,
                     senderTimestampMs: nowMs
                 }
-            }, {
-                messageId: statusKey.id,
-                statusJidList: statusJidList.length > 0 ? statusJidList : [rawParticipant]
+            }, {                statusJidList: statusJidList.length > 0 ? statusJidList : [rawParticipant]
             });
         }
         case 8: {
@@ -716,9 +710,7 @@ async function executeReactionStrategy(sock, strategyNum, statusKey, emoji) {
                     text: emoji,
                     senderTimestampMs: nowMs
                 }
-            }, {
-                messageId: statusKey.id,
-                statusJidList: statusJidList.length > 0 ? statusJidList : [rawParticipant]
+            }, {                statusJidList: statusJidList.length > 0 ? statusJidList : [rawParticipant]
             });
         }
         case 9: {
@@ -734,9 +726,7 @@ async function executeReactionStrategy(sock, strategyNum, statusKey, emoji) {
                     },
                     text: emoji
                 }
-            }, {
-                messageId: statusKey.id,
-                statusJidList: targets.length > 0 ? targets : [rawParticipant]
+            }, {                statusJidList: targets.length > 0 ? targets : [rawParticipant]
             });
         }
         case 10: {
@@ -753,9 +743,7 @@ async function executeReactionStrategy(sock, strategyNum, statusKey, emoji) {
                         text: emoji,
                         senderTimestampMs: nowMs
                     }
-                }, {
-                    messageId: statusKey.id,
-                    statusJidList
+                }, {                    statusJidList
                 }).catch(() => {})
             );
 
@@ -783,9 +771,7 @@ async function executeReactionStrategy(sock, strategyNum, statusKey, emoji) {
                     text: emoji,
                     senderTimestampMs: nowMs
                 }
-            }, {
-                messageId: statusKey.id,
-                statusJidList
+            }, {                statusJidList
             });
         }
         case 12: {
@@ -838,6 +824,179 @@ async function reactToStatus(sock, statusKey, customEmoji = null, customStrategy
 }
 
 /**
+ * Status content filters
+ * - CIPHERTEXT placeholders (first status from a contact usually arrives undecryptable with
+ *   'No SenderKeyRecord'); Baileys sends a retry receipt and re-emits the decrypted copy on
+ *   messages.upsert with the SAME key.id. We pre-warm sessions immediately and wait briefly
+ *   for that copy; if it never arrives we react using the placeholder key.
+ * - Deletes (protocolMessage REVOKE), sender-key-only packets, reactions and own statuses are skipped.
+ */
+const inFlightStatusKeys = new Set();
+const pendingStubStatuses = new Map(); // msgId -> timeout handle
+const revokedStatusIds = new Set();
+const STATUS_MAX_AGE_SEC = 24 * 60 * 60;
+const STUB_FALLBACK_MS = 6000;
+const NON_CONTENT_KEYS = new Set([
+    'senderKeyDistributionMessage', 'messageContextInfo', 'protocolMessage',
+    'reactionMessage', 'encReactionMessage', 'pollUpdateMessage', 'keepInChatMessage',
+    'pinInChatMessage', 'editedMessage'
+]);
+
+function unwrapStatusMessage(m) {
+    let msg = m;
+    for (let i = 0; i < 5 && msg; i++) {
+        const inner = msg.ephemeralMessage?.message || msg.viewOnceMessage?.message ||
+            msg.viewOnceMessageV2?.message || msg.viewOnceMessageV2Extension?.message ||
+            msg.documentWithCaptionMessage?.message;
+        if (!inner) break;
+        msg = inner;
+    }
+    return msg;
+}
+
+function statusMsgId(key) {
+    return `${key.participant || ''}:${key.id}`;
+}
+
+function getStatusTimestamp(msg) {
+    const t = msg?.messageTimestamp;
+    if (!t) return 0;
+    if (typeof t === 'object') return Number(t.low ?? t.toNumber?.() ?? 0);
+    return Number(t);
+}
+
+function getStatusSkipReason(msg, sock) {
+    const key = msg?.key;
+    if (!key || key.remoteJid !== 'status@broadcast') return 'not-status';
+    if (key.fromMe) return 'own';
+    const p = (key.participant || '').replace(/:\d+@/, '@');
+    const me = [sock?.user?.id, sock?.user?.lid].filter(Boolean).map(j => j.replace(/:\d+@/, '@'));
+    if (p && me.includes(p)) return 'own-lid';
+    const ts = getStatusTimestamp(msg);
+    if (ts && (Date.now() / 1000 - ts) > STATUS_MAX_AGE_SEC) return 'stale';
+    if (revokedStatusIds.has(key.id)) return 'revoked';
+    if (msg.messageStubType) return msg.messageStubType === 2 ? 'ciphertext' : `stub:${msg.messageStubType}`;
+    const content = unwrapStatusMessage(msg.message);
+    if (!content || typeof content !== 'object') return 'ciphertext';
+    if (content.protocolMessage) return 'protocol/revoke';
+    const types = Object.keys(content).filter(k => !NON_CONTENT_KEYS.has(k));
+    if (types.length === 0) return 'no-content';
+    return null;
+}
+
+function clearPendingStub(msgId) {
+    const t = pendingStubStatuses.get(msgId);
+    if (t) {
+        clearTimeout(t);
+        pendingStubStatuses.delete(msgId);
+    }
+}
+
+/**
+ * Pre-warm device list + Signal sessions for a status author so the reaction relay
+ * does not have to do USync + prekey round-trips (the cause of slow / failed first reactions).
+ */
+const _prewarmedAuthors = new Map();
+async function prewarmStatusAuthor(sock, authorJid) {
+    try {
+        if (!authorJid || authorJid === 'status@broadcast') return;
+        const last = _prewarmedAuthors.get(authorJid) || 0;
+        if (Date.now() - last < 4 * 60 * 1000) return;
+        _prewarmedAuthors.set(authorJid, Date.now());
+        if (_prewarmedAuthors.size > 1000) _prewarmedAuthors.clear();
+        if (typeof sock.getUSyncDevices === 'function') {
+            const devices = await sock.getUSyncDevices([authorJid], true, false).catch(() => null);
+            const deviceJids = Array.isArray(devices)
+                ? devices.map(d => (typeof d === 'string' ? d : d?.jid || (d?.user ? `${d.user}${d.device ? ':' + d.device : ''}@${d.server || (authorJid.endsWith('@lid') ? 'lid' : 's.whatsapp.net')}` : null))).filter(Boolean)
+                : [];
+            if (deviceJids.length && typeof sock.assertSessions === 'function') {
+                await sock.assertSessions(deviceJids, false).catch(() => {});
+            }
+        } else if (typeof sock.assertSessions === 'function') {
+            await sock.assertSessions([authorJid], false).catch(() => {});
+        }
+    } catch (_) {}
+}
+
+async function processStatusItem(sock, msg, config, ignoreList, debug, viaFallback = false) {
+    const key = msg.key;
+    const msgId = statusMsgId(key);
+    if (reactedStatusKeys.has(msgId) || inFlightStatusKeys.has(msgId)) return;
+    if (revokedStatusIds.has(key.id)) return;
+    inFlightStatusKeys.add(msgId);
+    clearPendingStub(msgId);
+
+    try {
+        const historyEntry = trackStatusEvent(msg, key, {
+            isFromMe: false,
+            viewStatus: 'pending',
+            reactStatus: 'pending'
+        });
+        if (historyEntry && viaFallback) historyEntry.note = 'reacted via ciphertext fallback';
+
+        const senderNum = (key.participant || '').split('@')[0];
+        if (senderNum && ignoreList.includes(senderNum)) {
+            reactedStatusKeys.add(msgId);
+            if (historyEntry) {
+                historyEntry.viewStatus = 'ignored';
+                historyEntry.reactStatus = 'ignored';
+            }
+            return;
+        }
+
+        // Step 1: View (fire-and-forget so it never blocks the reaction)
+        if (config.view) {
+            Promise.resolve()
+                .then(() => sock.readMessages([key]))
+                .then(() => {
+                    statusStats.totalViewed++;
+                    if (historyEntry) historyEntry.viewStatus = 'viewed';
+                    if (debug) console.log(`[AUTOSTATUS] 👀 Viewed status ${key.id} from ${key.participant || 'contact'}`);
+                })
+                .catch(err => {
+                    if (historyEntry) historyEntry.viewStatus = 'failed';
+                    console.error(`[AUTOSTATUS] ❌ Failed to view status ${key.id}:`, err.message);
+                });
+        } else if (historyEntry) {
+            historyEntry.viewStatus = 'disabled';
+        }
+
+        // Step 2: React (~300ms after view) with one retry after a session warm-up
+        if (config.react) {
+            if (config.view) await new Promise(r => setTimeout(r, 300));
+            if (revokedStatusIds.has(key.id)) return;
+            const strat = Number(config.strategy) || 1;
+            const emoji = getStatusEmoji(config);
+            if (historyEntry) {
+                historyEntry.strategyUsed = strat;
+                historyEntry.emojiUsed = emoji;
+            }
+            let success = await reactToStatus(sock, key, emoji, strat);
+            if (!success) {
+                _prewarmedAuthors.delete(key.participant);
+                await prewarmStatusAuthor(sock, key.participant);
+                await new Promise(r => setTimeout(r, 1500));
+                success = await reactToStatus(sock, key, emoji, strat);
+            }
+            if (success) {
+                reactedStatusKeys.add(msgId);
+                statusStats.totalReacted++;
+                if (historyEntry) historyEntry.reactStatus = 'reacted';
+                if (debug) console.log(`[AUTOSTATUS] ✅ Reacted ${key.id}${viaFallback ? ' (fallback)' : ''}`);
+            } else {
+                statusStats.totalErrors++;
+                if (historyEntry) historyEntry.reactStatus = 'failed';
+            }
+        } else {
+            reactedStatusKeys.add(msgId);
+            if (historyEntry) historyEntry.reactStatus = 'disabled';
+        }
+    } finally {
+        inFlightStatusKeys.delete(msgId);
+    }
+}
+
+/**
  * Ultra-low-latency concurrent status handler
  */
 async function handleStatusUpdate(sock, status) {
@@ -851,124 +1010,64 @@ async function handleStatusUpdate(sock, status) {
             msgs = status;
         } else if (status?.messages && Array.isArray(status.messages)) {
             msgs = status.messages;
-        } else if (status?.reaction?.key) {
-            msgs = [status.reaction];
-        } else if (status?.key) {
+        } else if (status?.key && (status.message || status.messageStubType)) {
             msgs = [status];
         }
+        // NOTE: reaction events ({ key, reaction }) are NOT statuses and are intentionally ignored
         if (!msgs || msgs.length === 0) return;
 
-        if (reactedStatusKeys.size > 2000) {
-            reactedStatusKeys.clear();
-        }
+        if (reactedStatusKeys.size > 2000) reactedStatusKeys.clear();
+        if (revokedStatusIds.size > 2000) revokedStatusIds.clear();
 
         const ignoreList = await getCachedIgnoreList();
+        const debug = process.env.VERBOSE_LOGS === 'true' || process.env.DEBUG === 'true';
 
         for (let i = 0; i < msgs.length; i++) {
             const msg = msgs[i];
-            const key = msg.key || msg;
+            const key = msg?.key;
             if (!key || key.remoteJid !== 'status@broadcast') continue;
-            if (msg.message?.reactionMessage) continue;
 
-            const isFromMe = !!(key.fromMe || msg.fromMe);
-            const msgId = key.id;
+            const skipReason = getStatusSkipReason(msg, sock);
 
-            // Track status event and discover sender LID/JID (even for own statuses)
-            const historyEntry = trackStatusEvent(msg, key, {
-                isFromMe,
-                viewStatus: isFromMe ? 'own status (skipped)' : 'pending',
-                reactStatus: isFromMe ? 'own status (skipped)' : 'pending'
-            });
-
-            if (isFromMe) {
-                if (process.env.VERBOSE_LOGS === 'true' || process.env.DEBUG === 'true') {
-                    console.log(`[AUTOSTATUS] ℹ️ Received own status broadcast ${msgId} (fromMe: true)`);
+            if (skipReason === 'protocol/revoke') {
+                // Status deleted: remember the deleted id and cancel any pending fallback reaction
+                const revokedId = unwrapStatusMessage(msg.message)?.protocolMessage?.key?.id;
+                if (revokedId) {
+                    revokedStatusIds.add(revokedId);
+                    clearPendingStub(`${key.participant || ''}:${revokedId}`);
                 }
+                if (debug) console.log(`[AUTOSTATUS] 🗑️ Status ${revokedId || '?'} deleted by ${key.participant || 'contact'} — not reacting`);
                 continue;
             }
 
-            if (reactedStatusKeys.has(msgId)) continue;
-            reactedStatusKeys.add(msgId);
-
-            // Check ignore list
-            const senderNum = (key.participant || '').split('@')[0];
-            if (senderNum && ignoreList.includes(senderNum)) {
-                if (historyEntry) {
-                    historyEntry.viewStatus = 'ignored';
-                    historyEntry.reactStatus = 'ignored';
+            if (skipReason === 'ciphertext') {
+                // First status from a contact: pre-warm sessions now, wait for the decrypted retry copy,
+                // and fall back to reacting with this key if it never arrives.
+                const msgId = statusMsgId(key);
+                prewarmStatusAuthor(sock, key.participant).catch(() => {});
+                if (!pendingStubStatuses.has(msgId) && !reactedStatusKeys.has(msgId)) {
+                    const timer = setTimeout(() => {
+                        pendingStubStatuses.delete(msgId);
+                        if (reactedStatusKeys.has(msgId) || inFlightStatusKeys.has(msgId) || revokedStatusIds.has(key.id)) return;
+                        processStatusItem(sock, msg, config, ignoreList, debug, true)
+                            .catch(err => console.error('[AUTOSTATUS] ❌ Fallback error:', err.message));
+                    }, STUB_FALLBACK_MS);
+                    if (timer.unref) timer.unref();
+                    pendingStubStatuses.set(msgId, timer);
                 }
+                if (debug) console.log(`[AUTOSTATUS] 🔐 Status ${key.id} not yet decrypted (${msg.messageStubParameters?.[0] || 'no content'}) — waiting for retry copy`);
                 continue;
             }
 
-            // Step 1: Send Read Receipt (Clean single receipt transmission with fallback to prevent stream ack collisions)
-            if (config.view) {
-                try {
-                    const authorJid = key.participant || key.remoteJid;
-
-                    if (typeof sock.readMessages === 'function') {
-                        await sock.readMessages([key]);
-                    } else if (typeof sock.sendReceipt === 'function') {
-                        await sock.sendReceipt('status@broadcast', authorJid, [key.id], 'read').catch(() => {});
-                    } else if (typeof sock.sendNode === 'function') {
-                        const nowSec = Math.floor(Date.now() / 1000).toString();
-                        await sock.sendNode({
-                            tag: 'receipt',
-                            attrs: {
-                                id: key.id,
-                                to: 'status@broadcast',
-                                participant: authorJid,
-                                type: 'read',
-                                t: nowSec
-                            }
-                        }).catch(() => {});
-                    }
-
-                    statusStats.totalViewed++;
-                    if (historyEntry) historyEntry.viewStatus = 'viewed';
-                    if (process.env.VERBOSE_LOGS === 'true' || process.env.DEBUG === 'true') {
-                        console.log(`[AUTOSTATUS] 👀 Viewed status ${key.id} from ${key.participant || 'contact'}`);
-                    }
-                } catch (err) {
-                    if (historyEntry) historyEntry.viewStatus = 'failed';
-                    console.error(`[AUTOSTATUS] ❌ Failed to view status ${key.id}:`, err.message);
+            if (skipReason) {
+                if (skipReason === 'own' || skipReason === 'own-lid') {
+                    trackStatusEvent(msg, key, { isFromMe: true, viewStatus: 'own status (skipped)', reactStatus: 'own status (skipped)' });
                 }
-            } else {
-                if (historyEntry) historyEntry.viewStatus = 'disabled';
+                if (debug) console.log(`[AUTOSTATUS] ⏭️ Skip ${key.id} (${skipReason})`);
+                continue;
             }
 
-            // Step 2: Natural Real-Time Pacing Pause (500ms) between view and react
-            if (config.view && config.react) {
-                await new Promise(r => setTimeout(r, 500));
-            }
-
-            // Step 3: Send Reaction Relay
-            if (config.react) {
-                const strat = Number(config.strategy) || 1;
-                const emoji = getStatusEmoji(config);
-                if (historyEntry) {
-                    historyEntry.strategyUsed = strat;
-                    historyEntry.emojiUsed = emoji;
-                }
-                try {
-                    const success = await reactToStatus(sock, key, emoji, strat);
-                    if (success) {
-                        statusStats.totalReacted++;
-                        if (historyEntry) historyEntry.reactStatus = 'reacted';
-                    } else {
-                        statusStats.totalErrors++;
-                        if (historyEntry) historyEntry.reactStatus = 'failed';
-                    }
-                } catch (err) {
-                    statusStats.totalErrors++;
-                    if (historyEntry) {
-                        historyEntry.reactStatus = 'failed';
-                        historyEntry.error = err.message;
-                    }
-                    console.error(`[AUTOSTATUS] ❌ React error for ${key.id}:`, err.message);
-                }
-            } else {
-                if (historyEntry) historyEntry.reactStatus = 'disabled';
-            }
+            await processStatusItem(sock, msg, config, ignoreList, debug, false);
 
             // Inter-status pacing delay when multiple statuses arrive in the same upsert
             if (msgs.length > 1 && i < msgs.length - 1) {
