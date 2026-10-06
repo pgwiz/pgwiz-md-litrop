@@ -515,7 +515,7 @@ async function startPgwizDev() {
                     message.buttonsMessage ||
                     message.templateMessage ||
                     message.listMessage ||
-                    false // interactiveMessage is sent unwrapped with <biz> nodes (see lib/customBaileys.js)
+                    message.interactiveMessage
                 );
                 if (requiresPatch) {
                     message = {
@@ -534,7 +534,7 @@ async function startPgwizDev() {
             },
             defaultQueryTimeoutMs: 60000,
             connectTimeoutMs: 60000,
-            keepAliveIntervalMs: 10000, // Aggressive keep-alive for stability
+            keepAliveIntervalMs: 30000, // Standard 30s interval: gives 35s deadman window, preventing false 408 disconnects
         });
 
         // Apply Custom Baileys Monkey-Patch Enhancement Layer (Status Shield, Newsletters, Interactive Buttons, Presence)
@@ -638,6 +638,24 @@ async function startPgwizDev() {
                     return;
                 }
             }
+
+            const isPassiveOrPing = node && (
+                (node.tag === 'iq' && node.attrs?.xmlns === 'passive') ||
+                (node.tag === 'iq' && node.attrs?.xmlns === 'w:p')
+            );
+
+            if (isPassiveOrPing) {
+                try {
+                    return await originalQuery.apply(this, [node, ...args]);
+                } catch (err) {
+                    const isTimeout = err?.output?.statusCode === 408 || String(err?.message || '').toLowerCase().includes('timed out');
+                    if (isTimeout) {
+                        return undefined;
+                    }
+                    throw err;
+                }
+            }
+
             return originalQuery.apply(this, [node, ...args]);
         };
 
@@ -1252,7 +1270,12 @@ process.on('uncaughtException', (err) => {
 });
 
 process.on('unhandledRejection', (err) => {
-    if (err?.message?.includes('Connection Closed') || err?.output?.statusCode === 428 || err?.message?.includes('rate-overlimit')) return;
+    if (!err) return;
+    const msg = String(err?.message || '');
+    const code = err?.output?.statusCode;
+    if (code === 408 || msg.includes('Timed Out') || msg.includes('Request Time-out')) return;
+    if (code === 428 || msg.includes('Connection Closed') || msg.includes('rate-overlimit')) return;
+    if (err?.data?.stack?.includes('sendPassiveIq') || err?.stack?.includes('sendPassiveIq')) return;
     printLog('error', `Unhandled Rejection: ${err?.message || err}`);
     if (err?.stack) console.error(err.stack);
 });
