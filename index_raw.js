@@ -977,8 +977,11 @@ async function startPgwizDev() {
                     global.presenceHeartbeatInterval = null;
                 }
 
-                // Explicitly terminate old WebSocket so it doesn't linger and trigger 440 Session Conflict
+                // Explicitly terminate old WebSocket and clear event listeners so it doesn't linger or leak memory
                 try {
+                    if (pgwizSocket?.ev) {
+                        pgwizSocket.ev.removeAllListeners?.();
+                    }
                     if (pgwizSocket?.ws) {
                         pgwizSocket.ws.removeAllListeners?.();
                         pgwizSocket.ws.close?.();
