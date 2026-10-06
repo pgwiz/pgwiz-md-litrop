@@ -101,3 +101,37 @@ The following downloaders were audited and flagged as currently non-functional d
   - Flexible invocation: `.aimode <mode> <level> repal`, `.aimode repal`, `.aimode repan`, or dedicated shortcuts `.repal` and `.repan`.
 * **Security & Authorization**: Group configuration changes are strictly restricted to group admins and bot owner/sudo.
 
+---
+
+### 💬 Keith MD Rich AI-Response Messages & Interactive Buttons Engine:
+* **Architecture & Strategy**:
+  - Instead of replacing `@whiskeysockets/baileys` with external packages, all Keith MD rich response and native flow primitives are implemented natively in `lib/richMessages.js` and `lib/customBaileys.js`.
+  - Retains 100% stability with SQLite stores, libsignal encryption, and credentials while matching Keith MD capabilities.
+* **Why Rich Messages Arrived Blank (Root Cause & Fix)**:
+  - In WhatsApp's `botForwardedMessage` protocol, clients render content strictly from the `submessages` array inside `richResponseMessage`.
+  - Previous implementations had empty/hardcoded `submessages: []` and lacked `messageContextInfo.botMetadata.verificationMetadata.proofs`.
+  - The ported engine populates real submessages (types 2=text, 3=inline image, 4=table, 5=code, 8=latex) with cryptographic proofs.
+* **Why Native Flow Buttons Failed ("Did Nothing")**:
+  - `patchMessageBeforeSending` in `index_raw.js` was wrapping `interactiveMessage` in `viewOnceMessage` with `deviceListMetadataVersion: 2`. Modern WhatsApp clients silently ignore or drop interactive messages wrapped in view-once.
+  - Fix: Passed messages through cleanly (`patchMessageBeforeSending: msg => msg`) and used Keith's direct `{ interactiveMessage }` payload with `messageParamsJson: ''` and `<biz>` stanza nodes.
+* **Universal Button Fallback (`ButtonV2`)**:
+  - Implemented classic `ButtonV2` (`buttonsMessage` with `headerType: 6` location header), which renders across all WhatsApp clients including older versions where native flow buttons are disabled.
+* **Test Suite**:
+  - 14 test cases in `plugins/testbutton.js` (`.testbtn 1-14` / `.testrich 1-7`).
+
+---
+
+### ⏱️ Connection Disconnects: 50-Minute Cycles (Stream Errored ack 500) & Passive IQ 408 Timeouts:
+* **Periodic 50-Minute Disconnect Pattern (`Status: 500 Stream Errored (ack)`)**:
+  - **Symptom**: Disconnection occurs exactly every ~50 minutes (3,000 seconds: 12:41, 13:31, 14:21, 15:11...).
+  - **Root Cause**: WhatsApp companion WebSockets negotiate stream tokens with a ~50-minute TTL. During token refresh, if active keepalive timers fire aggressive application-level pings or presence updates concurrently, an ack mismatch occurs and WhatsApp drops the stream with error 500.
+  - **Fix Mechanics**:
+    1. Deadman Watchdog Keepalive: Keepalive is strictly passive. Pings are only sent if the socket has been completely silent for >45 seconds (`silenceMs > 45000`), ending ping collisions.
+    2. Reconnect Backoff: Disconnects with status 500 automatically reconnect within 2-5 seconds without wiping credentials or Signal pre-keys.
+* **Passive IQ 408 Timeout (`sendPassiveIq` Timed Out)**:
+  - **Symptom**: `Error: Timed Out` (Status 408) occurring at `sendPassiveIq` -> `query` -> `waitForMessage` -> `promiseTimeout`.
+  - **Root Cause**: On login (`CB:success`), Baileys fires `sendPassiveIq('active')` to notify the server that the companion device is active. Under network congestion or cloud container latency, WhatsApp servers occasionally delay or omit the IQ ack, exceeding `defaultQueryTimeoutMs`. This threw an unhandled promise rejection that crashed the bot.
+  - **Fix Mechanics**:
+    1. Intercepted `sock.query` in `customBaileys.js` and `index_raw.js` to absorb passive IQ and ping 408 timeouts (`return undefined`), preventing rejection propagation.
+    2. Filtered out benign 408 rejections in `process.on('unhandledRejection')` across `index_raw.js` and `lightweight_store.js`.
+
