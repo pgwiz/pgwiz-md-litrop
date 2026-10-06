@@ -2,6 +2,24 @@
 
 All notable changes to the PGWIZ-MD multi-device WhatsApp bot project are documented in this file.
 
+## [4.7.0] - 2026-10-06
+
+### Added & Enhanced
+- **Keith MD Rich Message Engine & Primitives**:
+  - Ported complete rich AI-response engine into `lib/richMessages.js` supporting structured tables (`sendTable`, `sendTableV2`), bulleted lists (`sendList`), syntax-highlighted code blocks (`sendCodeBlock`, `sendCodeBlockV2`), link cards (`sendLink`, `sendLinkV2`), LaTeX formulas (`sendLatex`, `sendLatexImage`), and combined multi-type rich messages (`sendRichMessage`).
+  - Added `messageContextInfo.botMetadata.verificationMetadata.proofs` and real submessage serialization, solving the WhatsApp client issue where rich messages previously arrived blank.
+  - Implemented `ButtonV2` classic button builder (`buttonsMessage` with location header type 6) for universal compatibility across older WhatsApp clients.
+  - Added `sock.btn` builder helpers (`btn.reply`, `btn.url`, `btn.copy`, `btn.call`, `btn.list`).
+- **Interactive UI Test Suite (`.testbtn` / `.testbuttons` / `.testrich`)**:
+  - Expanded `plugins/testbutton.js` to 14 interactive test cases covering Native Flow Buttons (Cases 1–5), Classic ButtonV2 (Case 6), Custom Dynamic Buttons (Case 7), and Keith MD Rich Messages (Cases 8–14).
+
+### Fixed
+- **Native Flow Buttons Dropping / Ignored Client-Side**:
+  - Removed forced `viewOnceMessage` wrapping in `index_raw.js`'s `patchMessageBeforeSending` and `buildNativeFlowMessage`, aligning with Keith Baileys standards so modern WhatsApp clients properly render interactive native flow buttons.
+- **Connection Keepalive Ping Storms & 408 Timeouts**:
+  - Replaced aggressive ping flooding with a deadman watchdog (45s silence threshold), ending stream error 500 disconnects.
+  - Absorbed passive IQ and query 408 timeouts in `sock.query` and `customBaileys.js`.
+
 ## [4.6.1] - 2026-09-19
 
 ### Changed
@@ -25,7 +43,7 @@ All notable changes to the PGWIZ-MD multi-device WhatsApp bot project are docume
   - Implemented MEGA phone pairing route parity on session scanner (`web-qr-pair`): `GET /pair?number=...` now seamlessly returns `{ code: "XXXX-XXXX", sessionId }`.
   - Added session persistence to `sessions/<id>/creds.json`, Supabase sync, and frontend polling completion flag so the web UI transitions cleanly to "Session Ready!".
   - Added direct base64 `PGWIZ~...` and `MEGA~...` prefixed session decoding in `lib/session.js`.
-  - Added `plugins/pair.js` with primary PGWIZ cloud session scanner endpoint and automatic fallback.
+  - Updated `plugins/pair.js` with primary PGWIZ cloud session scanner endpoint and automatic fallback.
 
 ## [4.5.0] - 2026-09-17
 
