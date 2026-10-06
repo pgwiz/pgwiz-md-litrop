@@ -510,26 +510,8 @@ async function startPgwizDev() {
             msgRetryCounterCache,
             placeholderResendCache,
             patchMessageBeforeSending: (message) => {
-                if (!message || typeof message !== 'object') return message;
-                const requiresPatch = !!(
-                    message.buttonsMessage ||
-                    message.templateMessage ||
-                    message.listMessage ||
-                    message.interactiveMessage
-                );
-                if (requiresPatch) {
-                    message = {
-                        viewOnceMessage: {
-                            message: {
-                                messageContextInfo: {
-                                    deviceListMetadataVersion: 2,
-                                    deviceListMetadata: {},
-                                },
-                                ...message,
-                            },
-                        },
-                    };
-                }
+                // Keith Baileys standard: do not forcibly wrap interactiveMessage or buttons in viewOnceMessage
+                // as that causes modern WhatsApp clients to drop or hide native flow buttons.
                 return message;
             },
             defaultQueryTimeoutMs: 60000,
