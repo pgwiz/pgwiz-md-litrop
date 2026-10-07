@@ -56,6 +56,7 @@ ${DIVIDER}
 ${DIVIDER}
 🕐 *Updated:* ${repoData.updated}
 🤖 *Version:* ${version}
+🔗 *Link:* ${repoData.url}
 ${DIVIDER}`;
 
     const buttons = [
@@ -76,26 +77,27 @@ ${DIVIDER}`;
       }
     ];
 
+    const { buttons: _ignoredButtons, ...safeChannelInfo } = channelInfo;
+
     try {
       if (typeof sock.sendButtons === 'function') {
         return await sock.sendButtons(chatId, {
-          title: `*✩ ${botName} REPOSITORY ✩*`,
           text: repoText,
           footer: botName,
           buttons,
-          ...channelInfo
+          ...safeChannelInfo
         }, message);
       }
       return await sock.sendMessage(chatId, {
         text: repoText,
         buttons,
         footer: botName,
-        ...channelInfo
+        ...safeChannelInfo
       }, { quoted: message });
     } catch {
       return await sock.sendMessage(chatId, {
         text: repoText,
-        ...channelInfo
+        ...safeChannelInfo
       }, { quoted: message });
     }
   }

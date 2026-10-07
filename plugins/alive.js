@@ -52,13 +52,22 @@ module.exports = {
     const channelInfo = context.channelInfo || {};
 
     try {
-      let commandCount = 68;
+      let commandCount = 0;
       try {
         const commandHandler = require('../lib/commandHandler');
         if (commandHandler && commandHandler.commands && commandHandler.commands.size > 0) {
           commandCount = commandHandler.commands.size;
         }
       } catch {}
+      if (!commandCount) {
+        try {
+          const fs = require('fs');
+          const path = require('path');
+          commandCount = fs.readdirSync(path.join(__dirname, '../plugins')).filter(f => f.endsWith('.js')).length;
+        } catch {
+          commandCount = 69;
+        }
+      }
 
       const uptimeText = getUptimeString();
       const timeText = getTimeString();

@@ -9,11 +9,13 @@ All notable changes to the PGWIZ-MD multi-device WhatsApp bot project are docume
   - Eliminated ambiguous and noisy ASCII art borders and inconsistent box characters.
   - Standardized on clean `*✩ {BOTNAME} {TITLE} ✩*` header format and uniform 13-character dividers (`━━━━━━━━━━━━━`) optimized for mobile screens.
   - Implemented real-time colored status indicators (🟢, 🟡, 🔴) for system health and network latency.
-  - Updated `.status` / `.system` / `.alive` / `.botstatus` (`plugins/alive.js`) with structured telemetry (Uptime, Plugins, RAM, CPU, Time, Version).
+  - Updated `.status` / `.system` / `.alive` / `.botstatus` (`plugins/alive.js`) with structured telemetry (Uptime, Plugins, RAM, CPU, Time, Version) and dynamic filesystem plugin count fallback.
   - Enhanced `.ping` / `.speed` / `.speedtest` (`plugins/ping.js`) with dynamic latency color indicators and clean web ping diagnostics.
   - Refactored primary menu and command info lookups (`plugins/menu.js`) into clean, consistent sections.
-  - Redesigned `.owner` (`plugins/owner.js`) and `.repo` (`plugins/repo.js`) with Native Flow action buttons (GitHub Repo, Official Channel, Support Group, Chat Owner, Website).
-  - Modernized secondary management and telemetry cards across `.version`, `.jid`, `.save`, `.sudo`, `.mode`, `.getcode`, `.gitinfo`, `.anticall`, and `.pmblocker`.
+  - Fixed Native Flow action buttons in `.owner` (`plugins/owner.js`) and `.repo` (`plugins/repo.js`), preventing `channelInfo` object spread from clobbering custom multi-button arrays, eliminating duplicate card headers, and sanitizing phone URLs.
+  - Added fallback clickable repository link in `.repo` text body for non-button client environments.
+  - Modernized secondary management and telemetry cards across `.version`, `.jid`, `.save`, `.sudo`, `.mode`, `.getcode`, `.gitinfo`, `.anticall`, `.pmblocker`, `.welcome`, `.tiktok`, and `lib/welcome.js`.
+  - Added defensive prefix defaults to `lib/commandHandler.js` to guard against missing argument errors.
 
 ## [4.8.0] - 2026-10-07
 

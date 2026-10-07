@@ -18,7 +18,8 @@ module.exports = {
       const botOwner = settings.botOwner || 'pgwiz';
       const version = settings.version || '5.2.0';
       const channelLink = settings.channelLink || 'https://whatsapp.com/channel/0029Va8cpObHwXbDoZE9VY3K';
-      const ownerNum = (Array.isArray(settings.ownerNumber) && settings.ownerNumber[0]) || '254789462334';
+      const rawOwnerNum = (Array.isArray(settings.ownerNumber) && settings.ownerNumber[0]) || '254789462334';
+      const cleanOwnerNumber = String(rawOwnerNum).replace(/[^0-9]/g, '') || '254789462334';
 
       const ownerText = `*✩ ${botName} OWNER ✩*
 ${DIVIDER}
@@ -35,7 +36,7 @@ ${DIVIDER}`;
         {
           type: 'url',
           text: '💬 Chat Owner',
-          url: `https://wa.me/${ownerNum}`
+          url: `https://wa.me/${cleanOwnerNumber}`
         },
         {
           type: 'url',
@@ -54,26 +55,27 @@ ${DIVIDER}`;
         }
       ];
 
+      const { buttons: _ignoredButtons, ...safeChannelInfo } = channelInfo;
+
       try {
         if (typeof sock.sendButtons === 'function') {
           return await sock.sendButtons(chatId, {
-            title: `*✩ ${botName} OWNER ✩*`,
             text: ownerText,
             footer: botName,
             buttons,
-            ...channelInfo
+            ...safeChannelInfo
           }, message);
         }
         return await sock.sendMessage(chatId, {
           text: ownerText,
           buttons,
           footer: botName,
-          ...channelInfo
+          ...safeChannelInfo
         }, { quoted: message });
       } catch {
         return await sock.sendMessage(chatId, {
           text: ownerText,
-          ...channelInfo
+          ...safeChannelInfo
         }, { quoted: message });
       }
 

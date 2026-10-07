@@ -98,12 +98,19 @@ ${DIVIDER}`;
       const stats = CommandHandler.getDiagnostics();
       const uptimeText = getUptimeString();
       const timeText = formatTime();
+      const totalPlugins = CommandHandler.commands.size || (() => {
+        try {
+          return fs.readdirSync(path.join(__dirname, '../plugins')).filter(f => f.endsWith('.js')).length;
+        } catch {
+          return 69;
+        }
+      })();
 
       let menuText = `*✩ ${botName} MENU ✩*
 ${DIVIDER}
 🟢 *Status:* ACTIVE
 ⏱️ *Uptime:* ${uptimeText}
-🔌 *Plugins:* ${CommandHandler.commands.size}
+🔌 *Plugins:* ${totalPlugins}
 ⚙️ *Prefix:* ${prefix}
 🕐 *Time:* ${timeText}
 🤖 *Version:* ${version}

@@ -316,24 +316,22 @@ module.exports = {
         throw new Error('No downloadable video stream found for this TikTok.');
       }
 
+      const botName = (settings.botName || 'PGWIZ-MD').toUpperCase();
+      const DIVIDER = '━━━━━━━━━━━━━';
       const caption =
-`🎵 *TikTok Downloader*
-━━━━━━━━━━━━━━━━━━━
+`*✩ ${botName} TIKTOK ✩*
+${DIVIDER}
 👤 *Author:* ${data.author} ${data.username ? '(@' + data.username + ')' : ''}
 ⏱️ *Duration:* ${data.duration}
 ❤️ *Likes:* ${Number(data.likes).toLocaleString()}
 💬 *Comments:* ${Number(data.comments).toLocaleString()}
 🔁 *Shares:* ${Number(data.shares).toLocaleString()}
 👀 *Views:* ${Number(data.views).toLocaleString()}
-
+${DIVIDER}
 🎧 *Sound:* ${data.sound}
-
-📝 *Caption:*
-${data.title || 'No caption'}
-
+📝 *Caption:* ${data.title || 'No caption'}
 ✨ *Source:* ${data.provider}
-━━━━━━━━━━━━━━━━━━━
-> *Downloaded via ${settings.botName || 'PGWIZ-MD'}*`;
+${DIVIDER}`;
 
       let sent = false;
       // Step A: Attempt Direct URL Stream (fastest, zero container RAM usage)

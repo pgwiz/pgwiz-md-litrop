@@ -212,4 +212,7 @@ The following downloaders were audited and flagged as currently non-functional d
 - **Header Standard**: `*✩ {BOTNAME} {TITLE} ✩*` where `{BOTNAME}` is dynamic via `(settings.botName || 'PGWIZ-MD').toUpperCase()`.
 - **Divider Standard**: `━━━━━━━━━━━━━` (exactly 13 `━` characters) ensures uniform, pixel-aligned card boundaries on all mobile viewports without line breaks.
 - **Color Indicators**: Dynamic status dots (`🟢` optimal/active, `🟡` warning/moderate, `🔴` critical/error) applied across status, latency, and feature toggles.
-- **Interactive Action Buttons**: Multiple native-flow CTA URL buttons attached to `.owner` and `.repo` (`sendNativeFlowButtons` / `buttons` array) with automated text-message fallback.
+- **Interactive Action Buttons**: Multiple native-flow CTA URL buttons attached to `.owner` and `.repo` (`buttons` array via `sock.sendButtons` / `sock.sendMessage`) with automated text-message fallback. When spreading `channelInfo`, destruct `const { buttons: _b, ...safeChannelInfo } = channelInfo;` to prevent overriding custom button arrays.
+- **Dynamic Plugin Counting**: Evaluates `commandHandler.commands.size` with directory `.js` scan fallback to ensure 100% accurate plugin count metrics across light and main variants.
+- **Clean Format Coverage**: Alive/Status, Ping/Speed, Menu/Help, Owner, Repo, Version, JID, Save, Sudo, Mode, Getcode, Gitinfo, Anticall, PMBlocker, Welcome, TikTok, and Welcome/Goodbye Setup.
+
