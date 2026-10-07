@@ -10,7 +10,7 @@
  * - Case 3: Telephony Call Action Buttons
  * - Case 4: Hybrid Native Flow (All 4 Primitive Types Combined)
  * - Case 5: Single Select List Menu (Sections & Interactive Rows)
- * - Case 6: Classic ButtonV2 (buttonsMessage with Location Header Type 6)
+ * - Case 6: Clean Buttons (Just Message Content & Buttons; append 'loc' for Location Header)
  * - Case 7: Dynamic User-Generated Custom Buttons
  * - Case 8: Keith MD Rich Table (sendTable / sendTableV2)
  * - Case 9: Keith MD Rich List (sendList)
@@ -229,20 +229,23 @@ module.exports = {
         }
 
         // ==========================================
-        // TEST CASE 6: Classic ButtonV2 (buttonsMessage)
+        // TEST CASE 6: Clean Buttons (Just Message Content & Buttons)
+        // Append 'loc' or 'location' to test legacy location header
         // ==========================================
         if (subCommand === '6' || subCommand === 'classic' || subCommand === 'v2') {
+            const withLocation = args.includes('loc') || args.includes('location');
             if (typeof sock.sendButtonV2 === 'function') {
                 return await sock.sendButtonV2(chatId, {
-                    title: '⚡ CLASSIC BUTTONS V2',
-                    subtitle: 'Legacy Location Header Type 6',
-                    text: 'Testing classic buttonsMessage architecture. Compatible across all WhatsApp clients:',
-                    footer: 'PGWIZ-MD • Classic Button Engine',
+                    text: 'Testing clean buttons: just the message content and interactive buttons without any location card or AI tag.',
+                    footer: 'PGWIZ-MD • Clean Buttons Engine',
                     buttons: [
                         { text: '🏓 Ping Latency', id: '.ping' },
                         { text: '📊 System Status', id: '.alive' },
                         { text: '🤖 AI Mode Status', id: '.aimode status' }
-                    ]
+                    ],
+                    location: withLocation,
+                    title: withLocation ? '⚡ CLASSIC BUTTONS V2' : '',
+                    subtitle: withLocation ? 'Legacy Location Header Type 6' : ''
                 }, message);
             }
             return await sock.sendMessage(chatId, { text: '⚠️ sock.sendButtonV2 is not available on this socket.' }, { quoted: message });
