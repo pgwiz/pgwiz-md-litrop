@@ -146,3 +146,7 @@ All notable changes to the PGWIZ-MD multi-device WhatsApp bot project are docume
 - **Facebook Downloader (`.fb`)**: Integrated multi-engine fallbacks (Gifted, GuruAPI, GTech) with ascending quality sorting for fast SD delivery.
 - **Instagram Downloader (`.instagram`)**: Added GuruAPI fallback and improved error handling for Reels and posts.
 - **Command Context Architecture**: Updated `messageHandler.js` and `messageHandler_raw.js` to compute `invokedCmd` and pass `command`, `invokedCmd`, and `usedPrefix` inside `context`.
+- **Autostatus Human Delay & Anti-Ban Protection**:
+  - Introduced natural human delay (total 3.5s – 8.0s) in `plugins/autostatus.js` split between viewing (2.0s – 4.5s) and reacting (1.5s – 3.5s).
+  - Configurable via environment variables (`AUTO_STATUS_VIEW_DELAY_MIN/MAX` and `AUTO_STATUS_REACT_DELAY_MIN/MAX`).
+  - Added revocation guards before view and reaction steps so deleted statuses are cleanly aborted and never reacted to.

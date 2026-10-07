@@ -139,3 +139,15 @@ The following downloaders were audited and flagged as currently non-functional d
     1. Intercepted `sock.query` in `customBaileys.js` and `index_raw.js` to absorb passive IQ and ping 408 timeouts (`return undefined`), preventing rejection propagation.
     2. Filtered out benign 408 rejections in `process.on('unhandledRejection')` across `index_raw.js` and `lightweight_store.js`.
 
+---
+
+### 🛡️ Autostatus Human Delay & Account Anti-Ban Protection:
+* **The Problem**: Instant viewing (0ms) and reacting (300ms) upon receipt of `status@broadcast` is an unnatural bot signature flagged by WhatsApp's behavioral heuristics. Additionally, if the author posted a status with a typo and immediately deleted it within 1–2 seconds, the bot reacted before the revoke stanza was processed, exposing bot automation.
+* **The Solution**:
+  1. **Randomized Human Jitter (3.5s – 8.0s total)**:
+     - View delay: 2.0s – 4.5s (`AUTO_STATUS_VIEW_DELAY_MIN` to `AUTO_STATUS_VIEW_DELAY_MAX`). Emulates the user seeing the notification and opening the status.
+     - Reaction delay: 1.5s – 3.5s (`AUTO_STATUS_REACT_DELAY_MIN` to `AUTO_STATUS_REACT_DELAY_MAX`). Emulates viewing the status media and tapping an emoji reaction.
+  2. **Revocation Abort Guard**:
+     - Status revocation events populate `revokedStatusIds`.
+     - During the delay intervals, if `revokedStatusIds.has(key.id)` is detected, processing aborts immediately. The bot never marks deleted statuses as viewed or reacts to them.
+

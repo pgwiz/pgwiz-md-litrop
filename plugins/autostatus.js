@@ -944,14 +944,28 @@ async function processStatusItem(sock, msg, config, ignoreList, debug, viaFallba
             return;
         }
 
-        // Step 1: View (fire-and-forget so it never blocks the reaction)
+        // Natural human delay & pacing (3 to 8 seconds total) to simulate human behavior and prevent automated bot detection bans
+        // 1. Initial view delay: 2,000ms - 4,500ms (simulate noticing status and opening story)
+        // 2. Reaction delay: 1,500ms - 3,500ms (simulate viewing story and tapping emoji reaction)
+        const minViewDelay = parseInt(process.env.AUTO_STATUS_VIEW_DELAY_MIN || '2000', 10);
+        const maxViewDelay = parseInt(process.env.AUTO_STATUS_VIEW_DELAY_MAX || '4500', 10);
+        const minReactDelay = parseInt(process.env.AUTO_STATUS_REACT_DELAY_MIN || '1500', 10);
+        const maxReactDelay = parseInt(process.env.AUTO_STATUS_REACT_DELAY_MAX || '3500', 10);
+
+        const viewDelayMs = Math.floor(Math.random() * (maxViewDelay - minViewDelay + 1)) + minViewDelay;
+        const reactDelayMs = Math.floor(Math.random() * (maxReactDelay - minReactDelay + 1)) + minReactDelay;
+
+        // Step 1: Humanized View Delay
         if (config.view) {
+            await new Promise(r => setTimeout(r, viewDelayMs));
+            if (revokedStatusIds.has(key.id)) return; // Abort if deleted during delay
+
             Promise.resolve()
                 .then(() => sock.readMessages([key]))
                 .then(() => {
                     statusStats.totalViewed++;
                     if (historyEntry) historyEntry.viewStatus = 'viewed';
-                    if (debug) console.log(`[AUTOSTATUS] 👀 Viewed status ${key.id} from ${key.participant || 'contact'}`);
+                    if (debug) console.log(`[AUTOSTATUS] 👀 Viewed status ${key.id} from ${key.participant || 'contact'} (after ${(viewDelayMs / 1000).toFixed(1)}s)`);
                 })
                 .catch(err => {
                     if (historyEntry) historyEntry.viewStatus = 'failed';
@@ -961,10 +975,12 @@ async function processStatusItem(sock, msg, config, ignoreList, debug, viaFallba
             historyEntry.viewStatus = 'disabled';
         }
 
-        // Step 2: React (~300ms after view) with one retry after a session warm-up
+        // Step 2: Humanized React Delay (combined total 3.5s - 8.0s)
         if (config.react) {
-            if (config.view) await new Promise(r => setTimeout(r, 300));
-            if (revokedStatusIds.has(key.id)) return;
+            const actualReactDelay = config.view ? reactDelayMs : (viewDelayMs + reactDelayMs);
+            await new Promise(r => setTimeout(r, actualReactDelay));
+            if (revokedStatusIds.has(key.id)) return; // Abort if deleted during delay
+
             const strat = Number(config.strategy) || 1;
             const emoji = getStatusEmoji(config);
             if (historyEntry) {
@@ -982,7 +998,8 @@ async function processStatusItem(sock, msg, config, ignoreList, debug, viaFallba
                 reactedStatusKeys.add(msgId);
                 statusStats.totalReacted++;
                 if (historyEntry) historyEntry.reactStatus = 'reacted';
-                if (debug) console.log(`[AUTOSTATUS] ✅ Reacted ${key.id}${viaFallback ? ' (fallback)' : ''}`);
+                const totalDelaySec = (((config.view ? viewDelayMs : 0) + actualReactDelay) / 1000).toFixed(1);
+                if (debug) console.log(`[AUTOSTATUS] ✅ Reacted ${key.id}${viaFallback ? ' (fallback)' : ''} with ${emoji} (after ${totalDelaySec}s)`);
             } else {
                 statusStats.totalErrors++;
                 if (historyEntry) historyEntry.reactStatus = 'failed';
