@@ -1,6 +1,8 @@
 const settings = require('../settings');
 const store = require('../lib/lightweight_store');
 
+const DIVIDER = '━━━━━━━━━━━━━';
+
 module.exports = {
   command: 'version',
   aliases: ['v', 'ver', 'botversion', 'variant'],
@@ -18,15 +20,19 @@ module.exports = {
     const uptimeStr = `${hours}h ${minutes}m ${seconds}s`;
 
     const channelInfo = context.channelInfo || require('../lib/messageConfig').channelInfo;
+    const botName = (settings.botName || 'PGWIZ-MD').toUpperCase();
+    const version = settings.version || '5.2.0';
 
-    const text = `⚡ *${(settings.botName || 'PGWIZ-MD').toUpperCase()} EDITION & VERSION*
-
-📦 *Edition:* \`Lightweight Edition (pgwiz-md-litrop)\`
-🚀 *Version:* \`v${settings.version}\`
-🤖 *Bot Name:* *${settings.botName}*
-🌍 *Active Mode:* \`${mode.toUpperCase()}\`
-⏱️ *Uptime:* *${uptimeStr}*
-🔗 *Repository:* https://github.com/pgwiz/pgwiz-md-litrop`;
+    const text = `*✩ ${botName} VERSION ✩*
+${DIVIDER}
+📦 *Edition:* Lightweight Edition (pgwiz-md-litrop)
+🚀 *Version:* v${version}
+🤖 *Bot:* ${botName}
+🌍 *Mode:* ${mode.toUpperCase()}
+⏱️ *Uptime:* ${uptimeStr}
+${DIVIDER}
+🔗 *Repository:* https://github.com/pgwiz/pgwiz-md-litrop
+${DIVIDER}`;
 
     await sock.sendMessage(chatId, {
       text: text,

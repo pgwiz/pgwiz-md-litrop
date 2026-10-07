@@ -206,3 +206,10 @@ The following downloaders were audited and flagged as currently non-functional d
      - `sock.isOwner(jid)`
   3. **Context & Message Shortcuts**:
      - Decorated in `lib/messageHandler.js`: `message.reply`, `message.react`, `context.reply`, `context.react`, `context.getBuffer`, `context.downloadMedia`, `context.parseQuoted`.
+
+
+## 📐 Clean Card Aesthetic & Menu Standardization
+- **Header Standard**: `*✩ {BOTNAME} {TITLE} ✩*` where `{BOTNAME}` is dynamic via `(settings.botName || 'PGWIZ-MD').toUpperCase()`.
+- **Divider Standard**: `━━━━━━━━━━━━━` (exactly 13 `━` characters) ensures uniform, pixel-aligned card boundaries on all mobile viewports without line breaks.
+- **Color Indicators**: Dynamic status dots (`🟢` optimal/active, `🟡` warning/moderate, `🔴` critical/error) applied across status, latency, and feature toggles.
+- **Interactive Action Buttons**: Multiple native-flow CTA URL buttons attached to `.owner` and `.repo` (`sendNativeFlowButtons` / `buttons` array) with automated text-message fallback.

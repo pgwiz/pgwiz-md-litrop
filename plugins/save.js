@@ -1,6 +1,8 @@
 const store = require('../lib/lightweight_store');
+const settings = require('../settings');
 
 const MAX_SAVED = 50;
+const DIVIDER = '━━━━━━━━━━━━━';
 
 async function loadSaved(userId) {
   const saved = await store.getSetting(userId, 'savedMessages');
@@ -22,15 +24,20 @@ module.exports = {
     const chatId = context.chatId || message.key.remoteJid;
     const senderId = message.key.participant || message.key.remoteJid;
     const action = (args[0] || '').toLowerCase();
+    const botName = (settings.botName || 'PGWIZ-MD').toUpperCase();
 
     const saved = await loadSaved(senderId);
 
     if (action === 'list' || action === 'all') {
       if (saved.length === 0) {
-        return await sock.sendMessage(chatId, { text: '🗒️ No saved items yet.' }, { quoted: message });
+        return await sock.sendMessage(chatId, { 
+          text: `*✩ ${botName} SAVED ITEMS ✩*\n${DIVIDER}\n🗒️ No saved items yet.\n${DIVIDER}` 
+        }, { quoted: message });
       }
-      const lines = saved.map(item => `*${item.id}.* ${item.text}`);
-      return await sock.sendMessage(chatId, { text: `🗂️ *Saved Items*\n\n${lines.join('\n')}` }, { quoted: message });
+      const lines = saved.map(item => `• *${item.id}.* ${item.text}`);
+      return await sock.sendMessage(chatId, { 
+        text: `*✩ ${botName} SAVED ITEMS ✩*\n${DIVIDER}\n${lines.join('\n')}\n${DIVIDER}` 
+      }, { quoted: message });
     }
 
     if (action === 'del' || action === 'delete' || action === 'remove') {
@@ -58,7 +65,7 @@ module.exports = {
     const text = quotedText || args.join(' ');
     if (!text) {
       return await sock.sendMessage(chatId, {
-        text: '❌ Provide text to save or reply to a message.\n\nExample:\n• `.save remember this`\n• Reply to a message and type `.save`'
+        text: `*✩ ${botName} SAVE ✩*\n${DIVIDER}\nProvide text to save or reply to a message.\n• \`.save <text>\`\n• Reply to message and send \`.save\`\n${DIVIDER}`
       }, { quoted: message });
     }
 
@@ -76,7 +83,7 @@ module.exports = {
     await persistSaved(senderId, updated);
 
     await sock.sendMessage(chatId, {
-      text: `✅ Saved item ${entry.id}.\n\nUse \`.save list\` to view saved items.`
+      text: `✅ *Saved item #${entry.id}.*\nUse \`.save list\` to view all saved items.`
     }, { quoted: message });
   }
 };

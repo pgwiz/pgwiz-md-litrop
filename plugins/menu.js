@@ -4,155 +4,154 @@ const store = require('../lib/lightweight_store');
 const fs = require('fs');
 const path = require('path');
 
-const menuEmojis = ['✨', '🌟', '⭐', '💫', '🎯', '🎨', '🎪', '🎭'];
-const activeEmojis = ['✅', '🟢', '💚', '✔️', '☑️'];
-const disabledEmojis = ['❌', '🔴', '⛔', '🚫', '❎'];
-const fastEmojis = ['⚡', '🚀', '💨', '⏱️', '🔥'];
-const slowEmojis = ['🐢', '🐌', '⏳', '⌛', '🕐'];
-const categoryEmojis = {
-  general: ['📱', '🔧', '⚙️', '🛠️'],
-  owner: ['👑', '🔱', '💎', '🎖️'],
-  admin: ['🛡️', '⚔️', '🔐', '👮'],
-  group: ['👥', '👫', '🧑‍🤝‍🧑', '👨‍👩‍👧‍👦'],
-  download: ['📥', '⬇️', '💾', '📦'],
-  ai: ['🤖', '🧠', '💭', '🎯'],
-  search: ['🔍', '🔎', '🕵️', '📡'],
-  apks: ['📲', '📦', '💿', '🗂️'],
-  info: ['ℹ️', '📋', '📊', '📄'],
-  fun: ['🎮', '🎲', '🎰', '🎪'],
-  stalk: ['👀', '🔭', '🕵️', '🎯'],
-  games: ['🎮', '🕹️', '🎯', '🏆'],
-  images: ['🖼️', '📸', '🎨', '🌄'],
-  menu: ['📜', '📋', '📑', '📚'],
-  tools: ['🔨', '🔧', '⚡', '🛠️'],
-  stickers: ['🎭', '😀', '🎨', '🖼️'],
-  quotes: ['💬', '📖', '✍️', '💭'],
-  music: ['🎵', '🎶', '🎧', '🎤'],
-  utility: ['📂', '🔧', '⚙️', '🛠️']
-};
-
-function getRandomEmoji(arr) {
-  return arr[Math.floor(Math.random() * arr.length)];
-}
-
-function getCategoryEmoji(category) {
-  const emojis = categoryEmojis[category.toLowerCase()] || ['📂', '📁', '🗂️', '📋'];
-  return getRandomEmoji(emojis);
-}
+const DIVIDER = '━━━━━━━━━━━━━';
 
 function formatTime() {
-  const now = new Date();
-  const options = {
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-    timeZone: settings.timeZone || 'UTC'
-  };
-  return now.toLocaleTimeString('en-US', options);
+  try {
+    const now = new Date();
+    const options = {
+      hour: 'numeric',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: true,
+      timeZone: settings.timeZone || 'Africa/Nairobi'
+    };
+    return now.toLocaleTimeString('en-US', options);
+  } catch {
+    return new Date().toLocaleTimeString('en-US');
+  }
 }
 
-async function getMenuChannelInfo() {
-  const custom = await store.getSetting('global', 'menuChannel');
-  return {
-    newsletterJid: custom?.newsletterJid || settings.newsletterJid || '120363179639202475@newsletter',
-    newsletterName: custom?.newsletterName || settings.newsletterName || settings.botName || 'PGWIZ-MD'
-  };
+function getUptimeString() {
+  let uptime = Math.floor(process.uptime());
+  const days = Math.floor(uptime / 86400);
+  uptime %= 86400;
+  const hours = Math.floor(uptime / 3600);
+  uptime %= 3600;
+  const minutes = Math.floor(uptime / 60);
+  const seconds = uptime % 60;
+
+  const parts = [];
+  if (days) parts.push(`${days}d`);
+  if (hours) parts.push(`${hours}h`);
+  if (minutes) parts.push(`${minutes}m`);
+  if (seconds || parts.length === 0) parts.push(`${seconds}s`);
+  return parts.join(' ');
 }
 
 module.exports = {
   command: 'menu',
-  aliases: ['help', 'smenu', 'shelp', 'smart'],
+  aliases: ['help', 'commands', 'smenu', 'shelp', 'smart', 'list', 'h'],
   category: 'general',
-  description: 'Interactive smart menu with live status',
-  usage: '.menu',
+  description: 'Interactive clean menu with live status and command list',
+  usage: '.menu [command]',
   isPrefixless: true,
 
   async handler(sock, message, args, context = {}) {
     const chatId = context.chatId || message.key.remoteJid;
+    const channelInfo = context.channelInfo || {};
+    const prefix = settings.prefixes ? settings.prefixes[0] : '.';
+    const botName = (settings.botName || 'PGWIZ-MD').toUpperCase();
+    const version = settings.version || '5.2.0';
+    const imagePath = path.join(__dirname, '../assets/bot_image.jpg');
 
+    // 1. Single Command Lookup
+    if (args.length) {
+      const searchTerm = args[0].toLowerCase();
+      
+      let cmd = CommandHandler.commands.get(searchTerm);
+      if (!cmd && CommandHandler.aliases.has(searchTerm)) {
+        const mainCommand = CommandHandler.aliases.get(searchTerm);
+        cmd = CommandHandler.commands.get(mainCommand);
+      }
+      
+      if (!cmd) {
+        return await sock.sendMessage(chatId, { 
+          text: `*✩ ${botName} HELP ✩*\n${DIVIDER}\n❌ Command *${args[0]}* not found.\nUse *${prefix}menu* to browse commands.\n${DIVIDER}`,
+          ...channelInfo
+        }, { quoted: message });
+      }
+
+      const text = `*✩ ${botName} COMMAND INFO ✩*
+${DIVIDER}
+⚡ *Command:* ${prefix}${cmd.command}
+📝 *Description:* ${cmd.description || 'No description provided'}
+📖 *Usage:* ${cmd.usage || `${prefix}${cmd.command}`}
+🏷️ *Category:* ${cmd.category || 'general'}
+🔖 *Aliases:* ${cmd.aliases?.length ? cmd.aliases.map(a => prefix + a).join(', ') : 'None'}
+${DIVIDER}`;
+
+      if (fs.existsSync(imagePath)) {
+        return await sock.sendMessage(chatId, {
+          image: { url: imagePath },
+          caption: text,
+          ...channelInfo
+        }, { quoted: message });
+      }
+
+      return await sock.sendMessage(chatId, { text, ...channelInfo }, { quoted: message });
+    }
+
+    // 2. Full Categorized Menu
     try {
-      const menuChannel = await getMenuChannelInfo();
-      const imagePath = path.join(__dirname, '../assets/bot_image.jpg');
-      const thumbnail = fs.existsSync(imagePath) ? fs.readFileSync(imagePath) : null;
-
-      const categories = Array.from(CommandHandler.categories.keys());
+      const categories = Array.from(CommandHandler.categories.keys()).sort();
       const stats = CommandHandler.getDiagnostics();
+      const uptimeText = getUptimeString();
+      const timeText = formatTime();
 
-      const menuEmoji = getRandomEmoji(menuEmojis);
-
-      const activeEmoji = getRandomEmoji(activeEmojis);
-      const disabledEmoji = getRandomEmoji(disabledEmojis);
-      const fastEmoji = getRandomEmoji(fastEmojis);
-      const slowEmoji = getRandomEmoji(slowEmojis);
-
-      let menuText = `${menuEmoji} *${settings.botName || 'PGWIZ-MD'}* ${menuEmoji}\n\n`;
-      menuText += `┏━━━━━━━━━━━━━━━━┓\n`;
-      menuText += `┃ 📱 *Bot:* ${settings.botName || 'PGWIZ-MD'}\n`;
-      menuText += `┃ 🔖 *Version:* ${settings.version || '1.0.0'}\n`;
-      menuText += `┃ 👤 *Owner:* ${settings.botOwner || 'Unknown'}\n`;
-      menuText += `┃ ⏰ *Time:* ${formatTime()}\n`;
-      menuText += `┃ ℹ️ *Prefix:* ${settings.prefixes ? settings.prefixes.join(', ') : '.'}\n`;
-      menuText += `┃ 📊 *Plugins:* ${CommandHandler.commands.size}\n`;
-      menuText += `┗━━━━━━━━━━━━━━━━┛\n\n`;
+      let menuText = `*✩ ${botName} MENU ✩*
+${DIVIDER}
+🟢 *Status:* ACTIVE
+⏱️ *Uptime:* ${uptimeText}
+🔌 *Plugins:* ${CommandHandler.commands.size}
+⚙️ *Prefix:* ${prefix}
+🕐 *Time:* ${timeText}
+🤖 *Version:* ${version}
+${DIVIDER}\n\n`;
 
       const topCmds = stats.slice(0, 3).filter(s => s.usage > 0);
       if (topCmds.length > 0) {
-        menuText += `🔥 *TOP COMMANDS:*\n`;
+        menuText += `*✩ TOP COMMANDS ✩*\n${DIVIDER}\n`;
         topCmds.forEach((c, i) => {
           const rank = i === 0 ? '🥇' : i === 1 ? '🥈' : '🥉';
-          menuText += `${rank} .${c.command} • ${c.usage} uses\n`;
+          menuText += `${rank} *${prefix}${c.command}* (${c.usage} uses)\n`;
         });
-        menuText += `\n`;
+        menuText += `${DIVIDER}\n\n`;
       }
 
       for (const cat of categories) {
-        const catEmoji = getCategoryEmoji(cat);
-        menuText += `${catEmoji} *${cat.toUpperCase()}*\n`;
-        menuText += `┌─────────────────\n`;
-
         const catCmds = CommandHandler.getCommandsByCategory(cat);
+        if (!catCmds || catCmds.length === 0) continue;
 
-        catCmds.forEach((cmdName, index) => {
-          const isLast = index === catCmds.length - 1;
-          const prefix = isLast ? '└' : '├';
-
+        menuText += `*✩ ${cat.toUpperCase()} ✩*\n${DIVIDER}\n`;
+        catCmds.forEach((cmdName) => {
           const isOff = CommandHandler.disabledCommands.has(cmdName.toLowerCase());
-          const cmdStats = stats.find(s => s.command === cmdName.toLowerCase());
-
-          const statusIcon = isOff ? disabledEmoji : activeEmoji;
-
-          let speedTag = '';
-          if (cmdStats && !isOff) {
-            const ms = parseFloat(cmdStats.average_speed);
-            if (ms > 0 && ms < 100) speedTag = ` ${fastEmoji}`;
-            else if (ms > 1000) speedTag = ` ${slowEmoji}`;
-          }
-
-          menuText += `${prefix}─ ${statusIcon} .${cmdName}${speedTag}\n`;
+          const dot = isOff ? '🔴' : '🟢';
+          menuText += `${dot} *${prefix}${cmdName}*\n`;
         });
-        menuText += `\n`;
+        menuText += `${DIVIDER}\n\n`;
       }
 
-      menuText += `┌────────────────\n`;
-      menuText += `├  💡 *LEGEND*\n`;
-      menuText += `├─ ${activeEmoji} Active Command\n`;
-      menuText += `├─ ${disabledEmoji} Disabled Command\n`;
-      menuText += `├─ ${fastEmoji} Fast Response\n`;
-      menuText += `├─ ${slowEmoji} Slow Response\n`;
-      menuText += `⁠└────────────────`;
+      menuText = menuText.trim();
 
-      const messageOptions = {
-        image: thumbnail,
-        caption: menuText,
-        ...channelInfo
-      };
-
-      await sock.sendMessage(chatId, messageOptions, { quoted: message });
+      if (fs.existsSync(imagePath)) {
+        await sock.sendMessage(chatId, {
+          image: { url: imagePath },
+          caption: menuText,
+          ...channelInfo
+        }, { quoted: message });
+      } else {
+        await sock.sendMessage(chatId, {
+          text: menuText,
+          ...channelInfo
+        }, { quoted: message });
+      }
 
     } catch (error) {
       console.error('Menu Error:', error);
       await sock.sendMessage(chatId, {
-        text: `❌ *Menu Error*\n\n${error.message}`
+        text: `*✩ ${botName} MENU ✩*\n${DIVIDER}\n❌ Error generating menu: ${error.message}\n${DIVIDER}`,
+        ...channelInfo
       }, { quoted: message });
     }
   }

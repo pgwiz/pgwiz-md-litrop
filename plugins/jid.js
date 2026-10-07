@@ -1,3 +1,7 @@
+const settings = require('../settings');
+
+const DIVIDER = '━━━━━━━━━━━━━';
+
 module.exports = {
   command: 'jid',
   aliases: ['userid', 'id', 'getjid', 'gid', 'groupid'],
@@ -9,6 +13,7 @@ module.exports = {
     const chatId = context.chatId || message.key.remoteJid;
     const isGroup = chatId.endsWith('@g.us');
     const invoked = (context.invokedCmd || context.command || '').toLowerCase();
+    const botName = (settings.botName || 'PGWIZ-MD').toUpperCase();
 
     // 1. Group ID shortcut (.gid / .groupid)
     if (invoked === 'gid' || invoked === 'groupid') {
@@ -25,7 +30,7 @@ module.exports = {
       } catch (e) {}
 
       return await sock.sendMessage(chatId, {
-        text: `🆔 *Group ID:* \`${chatId}\`${groupName ? `\n🏷️ *Name:* ${groupName}` : ''}`
+        text: `*✩ ${botName} GROUP ID ✩*\n${DIVIDER}\n🆔 *JID:* \`${chatId}\`${groupName ? `\n🏷️ *Name:* ${groupName}` : ''}\n${DIVIDER}`
       }, { quoted: message });
     }
 
@@ -65,40 +70,35 @@ module.exports = {
 
     if (resolved.includes('@g.us')) {
       idType = 'GROUP';
-      idDetails = '(Group JID)';
+      idDetails = 'Group Chat';
     } else if (resolved.includes('@s.whatsapp.net')) {
-      idType = 'USER (Phone)';
-      idDetails = `(Regular user, ${cleanId})`;
+      idType = 'USER';
+      idDetails = `Direct User (${cleanId})`;
     } else if (resolved.includes('@lid')) {
       idType = 'USER (LID)';
-      idDetails = '(Linked ID - internal WhatsApp ID)';
+      idDetails = 'Linked ID';
     } else if (resolved.includes(':')) {
       idType = 'BROADCAST';
-      idDetails = '(Broadcast/Newsletter)';
+      idDetails = 'Broadcast';
     } else if (resolved.includes('@newsletter')) {
-      idType = 'NEWSLETTER';
-      idDetails = '(WhatsApp Newsletter)';
+      idType = 'CHANNEL';
+      idDetails = 'WhatsApp Channel';
     }
 
-    const text = `
-═══════════════════════════════════
-🆔 JID LOOKUP & ID TYPE
-═══════════════════════════════════
-
+    const text = `*✩ ${botName} JID LOOKUP ✩*
+${DIVIDER}
 📱 *Full JID:* \`${resolved}\`
 👤 *Clean ID:* ${cleanId}
 🏷️ *Type:* ${idType}
 ℹ️ *Details:* ${idDetails}
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📚 *ID Format Guide:*
-• \`xxx@s.whatsapp.net\` = Regular User
+${DIVIDER}
+📚 *ID Formats:*
+• \`xxx@s.whatsapp.net\` = User
 • \`xxx@g.us\` = Group
-• \`xxx@lid\` = Linked ID (Groups)
-• \`xxx@newsletter\` = Newsletter
-• \`xxx:yy@g.us\` = Broadcast
-
-⏰ Retrieved: ${new Date().toLocaleTimeString()}`.trim();
+• \`xxx@lid\` = Linked ID
+• \`xxx@newsletter\` = Channel
+${DIVIDER}
+🕐 *Time:* ${new Date().toLocaleTimeString()}`;
 
     await sock.sendMessage(chatId, {
       text: text

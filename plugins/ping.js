@@ -1,9 +1,11 @@
 const { performance } = require('perf_hooks');
 const settings = require('../settings');
 
+const DIVIDER = '━━━━━━━━━━━━━';
+
 module.exports = {
   command: 'ping',
-  aliases: ['p', 'pong', 'speed', 'pingweb', 'pweb'],
+  aliases: ['p', 'pong', 'speed', 'speedtest', 'pingweb', 'pweb'],
   category: 'general',
   description: 'Check real-time response latency, execution speed, or ping a website',
   usage: '.ping [website URL]',
@@ -32,7 +34,7 @@ module.exports = {
     if (numLatency > 200) statusEmoji = '🟡';
     if (numLatency > 800) statusEmoji = '🔴';
     
-    const botName = settings.botName || process.env.BOT_NAME || 'PGWIZ-MD';
+    const botName = (settings.botName || process.env.BOT_NAME || 'PGWIZ-MD').toUpperCase();
 
     // 1. Website ping mode if argument provided
     if (rawTarget) {
@@ -54,16 +56,15 @@ module.exports = {
         });
         const webLatency = Date.now() - webStart;
 
-        const webText = `${statusEmoji} *${botName.toUpperCase()} PING & WEB CHECK*
-        
-⚡ *Bot Latency:* ${displayLatency}
-⚙️ *Exec Speed:* ${execSpeed}ms
-
+        const webText = `*✩ ${botName} WEB PING ✩*
+${DIVIDER}
+⚡ *Latency:* ${displayLatency} ${statusEmoji}
+⚙️ *Exec:* ${execSpeed}ms
+${DIVIDER}
 🌐 *Host:* ${urlObj.hostname}
-📶 *Web Response:* ${webLatency}ms
-📡 *HTTP Status:* ${response.status} ${response.statusText || 'OK'}
-✅ *Reachability:* Operational
-⏰ *Time:* ${new Date().toLocaleTimeString()}`;
+📶 *Web:* ${webLatency}ms
+📡 *HTTP:* ${response.status} ${response.statusText || 'OK'}
+${DIVIDER}`;
 
         return await sock.sendMessage(chatId, {
           text: webText.trim(),
@@ -72,17 +73,17 @@ module.exports = {
 
       } catch (webErr) {
         let errReason = webErr.message;
-        if (webErr.code === 'ENOTFOUND') errReason = 'Domain not found / DNS failure';
-        else if (webErr.code === 'ETIMEDOUT' || webErr.code === 'ECONNABORTED') errReason = 'Connection timed out';
+        if (webErr.code === 'ENOTFOUND') errReason = 'DNS failure';
+        else if (webErr.code === 'ETIMEDOUT' || webErr.code === 'ECONNABORTED') errReason = 'Timed out';
 
-        const failText = `🏓 *${botName.toUpperCase()} WEB PING*
-        
-⚡ *Bot Latency:* ${displayLatency}
-⚙️ *Exec Speed:* ${execSpeed}ms
-
+        const failText = `*✩ ${botName} WEB PING ✩*
+${DIVIDER}
+⚡ *Latency:* ${displayLatency} ${statusEmoji}
+⚙️ *Exec:* ${execSpeed}ms
+${DIVIDER}
 🌐 *Target:* ${rawTarget}
-❌ *Status:* Unreachable (${errReason})
-⏰ *Time:* ${new Date().toLocaleTimeString()}`;
+❌ *Status:* Failed (${errReason})
+${DIVIDER}`;
 
         return await sock.sendMessage(chatId, {
           text: failText.trim(),
@@ -92,13 +93,11 @@ module.exports = {
     }
     
     // 2. Standard Bot Speed Ping
-    const text = `${statusEmoji} *${botName.toUpperCase()} PING*
-
-⚡ *Latency:* ${displayLatency}
-⚙️ *Exec Speed:* ${execSpeed}ms
-⏰ *Time:* ${new Date().toLocaleTimeString()}
-
-💡 *Tip:* Use \`.ping <url>\` to test website reachability`;
+    const text = `*✩ ${botName} PING ✩*
+${DIVIDER}
+⚡ *Latency:* ${displayLatency} ${statusEmoji}
+⚙️ *Exec:* ${execSpeed}ms
+${DIVIDER}`;
     
     await sock.sendMessage(chatId, {
       text: text.trim(),

@@ -3,6 +3,8 @@ const { addSudo, removeSudo, getSudoList } = require('../lib/index');
 const isOwnerOrSudo = require('../lib/isOwner');
 const { cleanJid } = require('../lib/isOwner');
 
+const DIVIDER = '━━━━━━━━━━━━━';
+
 function extractTargetJid(message, args) {
     if (message.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0]) {
         return message.message.extendedTextMessage.contextInfo.mentionedJid[0];
@@ -31,6 +33,7 @@ module.exports = {
         const chatId = context.chatId || message.key.remoteJid;
         const senderJid = message.key.participant || message.key.remoteJid;
         const isGroup = chatId.endsWith('@g.us');
+        const botName = (settings.botName || 'PGWIZ-MD').toUpperCase();
         
         const isOwner = message.key.fromMe || isOwnerOrSudo.isOwnerOnly(senderJid);
 
@@ -38,7 +41,7 @@ module.exports = {
 
         if (!sub || !['add', 'del', 'remove', 'list'].includes(sub)) {
             await sock.sendMessage(chatId, { 
-                text: '╭━━━〔 *SUDO MANAGER* 〕━━━┈\n┃\n┃ 📝 *Usage:*\n┃ ▢ .sudo add <@tag/reply/num>\n┃ ▢ .sudo del <@tag/reply/num>\n┃ ▢ .sudo list\n┃\n╰━━━━━━━━━━━━━━━━━━┈' 
+                text: `*✩ ${botName} SUDO MANAGER ✩*\n${DIVIDER}\n📝 *Usage:*\n• \`.sudo add <@tag/reply/num>\`\n• \`.sudo del <@tag/reply/num>\`\n• \`.sudo list\`\n${DIVIDER}` 
             }, { quoted: message });
             return;
         }
@@ -46,12 +49,12 @@ module.exports = {
         if (sub === 'list') {
             const list = await getSudoList();
             if (list.length === 0) {
-                await sock.sendMessage(chatId, { text: '❌ No sudo users found.' }, { quoted: message });
+                await sock.sendMessage(chatId, { text: `*✩ ${botName} SUDO USERS ✩*\n${DIVIDER}\n❌ No sudo users found.\n${DIVIDER}` }, { quoted: message });
                 return;
             }
-            const textList = list.map((j, i) => `┃ ${i + 1}. @${cleanJid(j)}`).join('\n');
+            const textList = list.map((j) => `• @${cleanJid(j)}`).join('\n');
             await sock.sendMessage(chatId, { 
-                text: `╭━━〔 *SUDO USERS* 〕━━┈\n┃\n${textList}\n┃\n╰━━━━━━━━━━━━━━━┈`,
+                text: `*✩ ${botName} SUDO USERS ✩*\n${DIVIDER}\n${textList}\n${DIVIDER}`,
                 mentions: list
             }, { quoted: message });
             return;
@@ -103,4 +106,3 @@ module.exports = {
         }
     }
 };
-

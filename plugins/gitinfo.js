@@ -1,8 +1,11 @@
 // Lazy-loaded: const simpleGit = require('simple-git');
+const settings = require('../settings');
+
+const DIVIDER = '━━━━━━━━━━━━━';
 
 module.exports = {
   command: 'gitinfo',
-  aliases: ['infogit', 'git'],
+  aliases: ['infogit'],
   category: 'owner',
   description: 'Show detailed git repository information',
   usage: '.gitinfo',
@@ -12,6 +15,7 @@ module.exports = {
     const simpleGit = require('simple-git');
     const chatId = message.key.remoteJid;
     const git = simpleGit();
+    const botName = (settings.botName || 'PGWIZ-MD').toUpperCase();
 
     try {
       const isRepo = await git.checkIsRepo();
@@ -35,17 +39,19 @@ module.exports = {
         ? remotes.map(r => `• ${r.name}: ${r.refs.fetch}`).join('\n')
         : 'None';
 
-      const warning = dirty ? '⚠️ Warning: Working tree has uncommitted changes!' : '';
+      const treeStatus = dirty ? 'Dirty (Uncommitted Changes)' : 'Clean';
 
-      const text =
-        `📦 *Git Repository Info*\n\n` +
-        `🌿 Branch: ${branch}\n` +
-        `🔖 Commit: ${commitHash}\n` +
-        `🧼 Working tree: ${dirty ? 'Dirty' : 'Clean'}\n` +
-        `${dirty ? warning + '\n\n' : ''}` +
-        `📊 Ahead: ${ahead}, Behind: ${behind}\n` +
-        `📁 Modified/Untracked files: ${modifiedCount}\n\n` +
-        `🔗 Remotes:\n${remoteText}`;
+      const text = `*✩ ${botName} GIT INFO ✩*
+${DIVIDER}
+🌿 *Branch:* ${branch}
+🔖 *Commit:* ${commitHash}
+🧼 *Tree:* ${treeStatus}
+📊 *Ahead:* ${ahead} | *Behind:* ${behind}
+📁 *Modified:* ${modifiedCount} files
+${DIVIDER}
+🔗 *Remotes:*
+${remoteText}
+${DIVIDER}`;
 
       await sock.sendMessage(chatId, { text });
 

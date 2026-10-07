@@ -1,5 +1,6 @@
 const store = require('../lib/lightweight_store');
 const fs = require('fs');
+const settings = require('../settings');
 
 const MONGO_URL = process.env.MONGO_URL;
 const POSTGRES_URL = process.env.POSTGRES_URL;
@@ -8,6 +9,7 @@ const SQLITE_URL = process.env.DB_URL;
 const HAS_DB = !!(MONGO_URL || POSTGRES_URL || MYSQL_URL || SQLITE_URL);
 
 const ANTICALL_PATH = './data/anticall.json';
+const DIVIDER = '━━━━━━━━━━━━━';
 
 function parseEnvBoolean(value, fallback) {
   if (value === undefined || value === null || String(value).trim() === '') return fallback;
@@ -24,13 +26,13 @@ async function readState() {
     const defaultEnabled = await getDefaultAnticallEnabled();
 
     if (HAS_DB) {
-      const settings = await store.getSetting('global', 'anticall');
-      if (!settings || typeof settings.enabled !== 'boolean') {
+      const dbSettings = await store.getSetting('global', 'anticall');
+      if (!dbSettings || typeof dbSettings.enabled !== 'boolean') {
         const initial = { enabled: defaultEnabled };
         await store.saveSetting('global', 'anticall', initial);
         return initial;
       }
-      return { enabled: !!settings.enabled };
+      return { enabled: !!dbSettings.enabled };
     } else {
       if (!fs.existsSync(ANTICALL_PATH)) {
         if (!fs.existsSync('./data')) fs.mkdirSync('./data', { recursive: true });
@@ -73,21 +75,26 @@ module.exports = {
   
   async handler(sock, message, args, context = {}) {
     const chatId = context.chatId || message.key.remoteJid;
+    const channelInfo = context.channelInfo || {};
     const state = await readState();
     const sub = args.join(' ').trim().toLowerCase();
+    const botName = (settings.botName || 'PGWIZ-MD').toUpperCase();
 
     if (!sub || !['on', 'off', 'status'].includes(sub)) {
       return await sock.sendMessage(
         chatId,
         {
-          text: '*ANTICALL SETTINGS*\n\n' +
-                '📵 Auto-block incoming calls\n\n' +
-                '*Usage:*\n' +
-                '• `.anticall on` - Enable\n' +
-                '• `.anticall off` - Disable\n' +
-                '• `.anticall status` - Current status\n\n' +
-                `*Current Status:* ${state.enabled ? '✅ ENABLED' : '❌ DISABLED'}\n` +
-                `*Storage:* ${HAS_DB ? 'Database' : 'File System'}`
+          text: `*✩ ${botName} ANTICALL ✩*\n${DIVIDER}\n` +
+                `📵 *Auto-block Incoming Calls*\n` +
+                `${state.enabled ? '🟢' : '🔴'} *Status:* ${state.enabled ? 'ENABLED' : 'DISABLED'}\n` +
+                `💾 *Storage:* ${HAS_DB ? 'Database' : 'Local File'}\n` +
+                `${DIVIDER}\n` +
+                `*Usage:*\n` +
+                `• \`.anticall on\` - Enable\n` +
+                `• \`.anticall off\` - Disable\n` +
+                `• \`.anticall status\` - Check status\n` +
+                `${DIVIDER}`,
+          ...channelInfo
         },
         { quoted: message }
       );
@@ -96,10 +103,12 @@ module.exports = {
       return await sock.sendMessage(
         chatId,
         { 
-          text: `📵 *Anticall Status*\n\n` +
-                `Current: ${state.enabled ? '✅ *ENABLED*' : '❌ *DISABLED*'}\n` +
-                `Storage: ${HAS_DB ? 'Database' : 'File System'}\n\n` +
-                `${state.enabled ? 'All incoming calls will be rejected and blocked.' : 'Incoming calls are allowed.'}`
+          text: `*✩ ${botName} ANTICALL STATUS ✩*\n${DIVIDER}\n` +
+                `${state.enabled ? '🟢' : '🔴'} *Status:* ${state.enabled ? 'ENABLED' : 'DISABLED'}\n` +
+                `💾 *Storage:* ${HAS_DB ? 'Database' : 'Local File'}\n` +
+                `ℹ️ *Policy:* ${state.enabled ? 'Auto-reject all calls' : 'Calls permitted'}\n` +
+                `${DIVIDER}`,
+          ...channelInfo
         },
         { quoted: message }
       );
@@ -111,8 +120,11 @@ module.exports = {
     await sock.sendMessage(
       chatId,
       { 
-        text: `📵 *Anticall ${enable ? 'ENABLED' : 'DISABLED'}*\n\n` +
-              `${enable ? '✅ Incoming calls will now be rejected and blocked automatically.' : '❌ Incoming calls are now allowed.'}`
+        text: `*✩ ${botName} ANTICALL ✩*\n${DIVIDER}\n` +
+              `${enable ? '🟢' : '🔴'} *Status:* ${enable ? 'ENABLED' : 'DISABLED'}\n` +
+              `ℹ️ *Result:* ${enable ? 'Calls will now be rejected automatically.' : 'Incoming calls are now allowed.'}\n` +
+              `${DIVIDER}`,
+        ...channelInfo
       },
       { quoted: message }
     );

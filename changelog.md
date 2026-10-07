@@ -2,6 +2,19 @@
 
 All notable changes to the PGWIZ-MD multi-device WhatsApp bot project are documented in this file.
 
+## [5.2.1] - 2026-10-08
+
+### Changed & Streamlined
+- **Standardized Clean Card Aesthetic Across All System Menus**:
+  - Eliminated ambiguous and noisy ASCII art borders and inconsistent box characters.
+  - Standardized on clean `*✩ {BOTNAME} {TITLE} ✩*` header format and uniform 13-character dividers (`━━━━━━━━━━━━━`) optimized for mobile screens.
+  - Implemented real-time colored status indicators (🟢, 🟡, 🔴) for system health and network latency.
+  - Updated `.status` / `.system` / `.alive` / `.botstatus` (`plugins/alive.js`) with structured telemetry (Uptime, Plugins, RAM, CPU, Time, Version).
+  - Enhanced `.ping` / `.speed` / `.speedtest` (`plugins/ping.js`) with dynamic latency color indicators and clean web ping diagnostics.
+  - Refactored primary menu and command info lookups (`plugins/menu.js`) into clean, consistent sections.
+  - Redesigned `.owner` (`plugins/owner.js`) and `.repo` (`plugins/repo.js`) with Native Flow action buttons (GitHub Repo, Official Channel, Support Group, Chat Owner, Website).
+  - Modernized secondary management and telemetry cards across `.version`, `.jid`, `.save`, `.sudo`, `.mode`, `.getcode`, `.gitinfo`, `.anticall`, and `.pmblocker`.
+
 ## [4.8.0] - 2026-10-07
 
 ### Added & Enhanced

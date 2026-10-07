@@ -1,5 +1,8 @@
 const { getPanelAccessCode } = require('../lib/server');
 const isOwnerOrSudo = require('../lib/isOwner');
+const settings = require('../settings');
+
+const DIVIDER = '━━━━━━━━━━━━━';
 
 module.exports = {
     command: 'getcode',
@@ -13,6 +16,7 @@ module.exports = {
         const chatId = context.chatId || message.key.remoteJid;
         const senderId = context.sender || message.key.participant || chatId;
         const channelInfo = context.channelInfo || {};
+        const botName = (settings.botName || 'PGWIZ-MD').toUpperCase();
 
         // Enforce owner / sudo permission
         const isOwner = await isOwnerOrSudo(senderId, sock, chatId);
@@ -42,28 +46,22 @@ module.exports = {
 
         let text = '';
         if (authInfo.type === 'env') {
-            text = `╔════════════════════════════════════╗\n` +
-                   `║     🔐 WEB PANEL ACCESS KEY        ║\n` +
-                   `╚════════════════════════════════════╝\n\n` +
-                   `🔑 *Active Key:* *${authInfo.key}*\n` +
+            text = `*✩ ${botName} ACCESS KEY ✩*\n${DIVIDER}\n` +
+                   `🔑 *Key:* \`${authInfo.key}\`\n` +
                    `📌 *Type:* Static Environment Secret\n` +
-                   `⏳ *Validity:* Permanent\n\n` +
-                   `🌐 *Direct Access Link:*\n${panelLink}\n\n` +
-                   `_To switch to dynamic rotating codes, unset PANEL_PASSWORD in environment settings._`;
+                   `⏳ *Validity:* Permanent\n${DIVIDER}\n` +
+                   `🌐 *Panel Link:*\n${panelLink}\n${DIVIDER}`;
         } else {
             const totalSec = typeof authInfo.expiresInSeconds === 'number' ? authInfo.expiresInSeconds : 0;
             const mins = Math.floor(totalSec / 60);
             const secs = totalSec % 60;
             const timeStr = `${mins}m ${secs}s`;
 
-            text = `╔════════════════════════════════════╗\n` +
-                   `║     🔐 WEB PANEL ACCESS KEY        ║\n` +
-                   `╚════════════════════════════════════╝\n\n` +
-                   `🔑 *Temporary Key:* *${authInfo.key}*\n` +
-                   `⏳ *Validity Remaining:* ${timeStr}\n` +
-                   `🔄 *Action:* ${forceNew ? 'Fresh Key Generated' : 'Active Key Retrieved'}\n\n` +
-                   `🌐 *Direct Access Link:*\n${panelLink}\n\n` +
-                   `💡 *Tip:* Type \`.getcode new\` to rotate and issue a fresh key immediately.`;
+            text = `*✩ ${botName} ACCESS KEY ✩*\n${DIVIDER}\n` +
+                   `🔑 *Key:* \`${authInfo.key}\`\n` +
+                   `⏳ *Remaining:* ${timeStr}\n` +
+                   `🔄 *Action:* ${forceNew ? 'Fresh Key Generated' : 'Active Key Retrieved'}\n${DIVIDER}\n` +
+                   `🌐 *Panel Link:*\n${panelLink}\n${DIVIDER}`;
         }
 
         await sock.sendMessage(chatId, {
