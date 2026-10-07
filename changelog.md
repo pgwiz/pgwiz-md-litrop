@@ -2,6 +2,33 @@
 
 All notable changes to the PGWIZ-MD multi-device WhatsApp bot project are documented in this file.
 
+## [4.8.0] - 2026-10-07
+
+### Added & Enhanced
+- **Global & Socket Convenience Helpers (`sock.reply`, `sock.react`, `sock.sendImage`, etc.)**:
+  - Implemented top-level helpers `getBuffer(url, options)` and `parseQuoted(message)` attached to `global` and exported via `lib/customBaileys.js`.
+  - Added socket convenience methods directly in `patchBaileysSocket`:
+    * `sock.reply(chatId, text, quoted, options)`
+    * `sock.react(targetMessageOrKey, emoji)`
+    * `sock.sendImage(chatId, bufferOrUrl, caption, quoted, options)`
+    * `sock.sendVideo(chatId, bufferOrUrl, caption, quoted, options)`
+    * `sock.sendAudio(chatId, bufferOrUrl, ptt, quoted, options)`
+    * `sock.sendSticker(chatId, buffer, quoted, options)`
+    * `sock.getBuffer(url, options)`
+    * `sock.downloadMedia(messageOrQuoted)`
+    * `sock.parseQuoted(message)`
+    * `sock.isOwner(jid)`
+  - Decorated incoming `message` and command `context` in `lib/messageHandler.js` / `lib/messageHandler_raw.js` with `message.reply`, `message.react`, `context.reply`, `context.react`, `context.getBuffer`, `context.downloadMedia`, `context.parseQuoted` to eliminate boilerplate across plugins.
+
+### Fixed & Refined
+- **Removed Channel Forwarding Banners & Replaced with Clean Interactive URL Buttons**:
+  - Completely purged `forwardedNewsletterMessageInfo`, `isForwarded: true`, and `forwardingScore` across all plugins, `lib/messageConfig.js`, and message interceptors.
+  - Text replies now cleanly present an interactive Native Flow "📢 Open Channel" URL button linking to `settings.channelLink`, keeping direct media (stickers, voice notes, audio) clean and unencumbered.
+- **Resilient Multi-Engine TikTok Downloader (`plugins/tiktok.js`)**:
+  - Implemented canonical URL redirect resolution (`vm.tiktok.com`, `vt.tiktok.com`, `/t/`).
+  - Added multi-engine fallback: TikWM GET -> SSSTik Scraper (`tikcdn.io`) -> TikWM POST.
+  - Direct URL streaming delivery (`{ video: { url } }`) with zero container memory overhead and automatic fallback to buffer download.
+
 ## [4.7.1] - 2026-10-07
 
 ### Fixed & Refined

@@ -180,3 +180,29 @@ The following downloaders were audited and flagged as currently non-functional d
      - Directly sends `{ video: { url: data.videoUrl }, caption, ...channelInfo }`, allowing WhatsApp's edge infrastructure to fetch the video stream instantaneously with zero container memory overhead.
      - Automatically falls back to arraybuffer download if direct streaming is rejected by WhatsApp servers.
 
+
+---
+
+### 🛠️ Core Redundancy Reducer & Convenience Utilities (`sock`, `global`, `context`, `message`):
+* **The Problem**: Over 100 plugins repeatedly re-implemented duplicate boilerplate:
+  - 54 plugins manually extracted quoted message captions and stanzas.
+  - 73 plugins manually wrapped `{ image: ... }` / `{ video: ... }` structures with channel metadata.
+  - 25 plugins constructed manual `{ react: { text, key } }` payloads.
+  - 24 plugins used manual `axios.get(url, { responseType: 'arraybuffer' })`.
+* **The Solution**:
+  1. **Global Utilities**:
+     - `global.getBuffer(url, options)`: Standardized high-reliability buffer fetcher with timeout and modern browser User-Agent headers.
+     - `global.parseQuoted(message)`: Universal context/quoted extractor returning `{ isQuoted, text, sender, type, stanzaId, message, contextInfo }`.
+  2. **Socket Methods** (`patchBaileysSocket` in `lib/customBaileys.js`):
+     - `sock.reply(chatId, text, quoted, options)`
+     - `sock.react(targetMessageOrKey, emoji)`
+     - `sock.sendImage(chatId, bufferOrUrl, caption, quoted, options)`
+     - `sock.sendVideo(chatId, bufferOrUrl, caption, quoted, options)`
+     - `sock.sendAudio(chatId, bufferOrUrl, ptt, quoted, options)`
+     - `sock.sendSticker(chatId, buffer, quoted, options)`
+     - `sock.getBuffer(url, options)`
+     - `sock.downloadMedia(messageOrQuoted)`
+     - `sock.parseQuoted(message)`
+     - `sock.isOwner(jid)`
+  3. **Context & Message Shortcuts**:
+     - Decorated in `lib/messageHandler.js`: `message.reply`, `message.react`, `context.reply`, `context.react`, `context.getBuffer`, `context.downloadMedia`, `context.parseQuoted`.
