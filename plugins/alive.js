@@ -87,16 +87,7 @@ ${cpuEmoji} *CPU:* ${cpuLoad} load avg
 ⏰ Timestamp: ${new Date().toLocaleString()}`.trim();
 
       await sock.sendMessage(chatId, {
-        text,
-        contextInfo: {
-          forwardingScore: 999,
-          isForwarded: true,
-          forwardedNewsletterMessageInfo: {
-            newsletterJid: settings.newsletterJid || '120363179639202475@newsletter',
-            newsletterName: settings.newsletterName || botName,
-            serverMessageId: -1
-          }
-        }
+        text
       }, { quoted: message });
 
     } catch (error) {

@@ -31,17 +31,7 @@ async function handleJoinEvent(sock, id, participants) {
   const groupName = groupMetadata.subject;
   const groupDesc = groupMetadata.desc || 'No description available';
 
-  const channelInfo = {
-    contextInfo: {
-      forwardingScore: 1,
-      isForwarded: true,
-      forwardedNewsletterMessageInfo: {
-        newsletterJid: settings.newsletterJid || '120363179639202475@newsletter',
-        newsletterName: settings.newsletterName || settings.botName || 'PGWIZ-MD',
-        serverMessageId: -1
-      }
-    }
-  };
+  const { channelInfo } = require('../lib/messageConfig');
 
   for (const participant of participants) {
     try {

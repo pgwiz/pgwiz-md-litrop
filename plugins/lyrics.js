@@ -1,17 +1,7 @@
 const axios = require('axios');
 const settings = require('../settings');
 
-const channelInfo = {
-    contextInfo: {
-        forwardingScore: 1,
-        isForwarded: true,
-        forwardedNewsletterMessageInfo: {
-            newsletterJid: settings.newsletterJid || '120363179639202475@newsletter',
-            newsletterName: settings.newsletterName || settings.botName || 'PGWIZ-MD',
-            serverMessageId: -1
-        }
-    }
-};
+const { channelInfo } = require('../lib/messageConfig');
 
 module.exports = {
     command: 'lyrics',

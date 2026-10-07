@@ -150,3 +150,10 @@ All notable changes to the PGWIZ-MD multi-device WhatsApp bot project are docume
   - Introduced natural human delay (total 3.5s – 8.0s) in `plugins/autostatus.js` split between viewing (2.0s – 4.5s) and reacting (1.5s – 3.5s).
   - Configurable via environment variables (`AUTO_STATUS_VIEW_DELAY_MIN/MAX` and `AUTO_STATUS_REACT_DELAY_MIN/MAX`).
   - Added revocation guards before view and reaction steps so deleted statuses are cleanly aborted and never reacted to.
+- **Channel Forwarding Header Removal & Native Flow Open Channel Button**:
+  - Stripped `forwardedNewsletterMessageInfo`, `isForwarded: true`, and `forwardingScore` across all plugins and message configs, eliminating the "Forwarded from channel" banner at the top of messages.
+  - Implemented universal Native Flow "📢 Open Channel" URL button for text and command responses via centralized `lib/messageConfig.js` and `lib/customBaileys.js`.
+  - Media guard: preserves clean transmission for audio, voice notes (PTT), reactions, and stickers without corrupting media attachments.
+- **TikTok Downloader Multi-Engine Pipeline & Direct Streaming**:
+  - Upgraded `plugins/tiktok.js` with multi-engine resilience (TikWM API + SSSTik Scraper + TikWM POST) supporting canonical redirect resolution (`vm.tiktok.com`, `vt.tiktok.com`, `/t/`).
+  - Implemented direct URL stream delivery (`{ video: { url } }`), eliminating high-RAM container buffer spikes, with automatic buffer fallback if direct stream delivery is rejected by WhatsApp servers.

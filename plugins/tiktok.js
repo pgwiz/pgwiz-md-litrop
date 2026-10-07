@@ -1,8 +1,12 @@
+'use strict';
+
 const axios = require('axios');
 const cheerio = require('cheerio');
+const settings = require('../settings');
+const { channelInfo } = require('../lib/messageConfig');
 
-const AXIOS_TIMEOUT = 60000;
-const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
+const AXIOS_TIMEOUT = 45000;
+const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
 function isValidTikTokUrl(url) {
   if (!url) return false;
@@ -10,6 +14,7 @@ function isValidTikTokUrl(url) {
 }
 
 function cleanTikTokUrl(text) {
+  if (!text) return null;
   const match = text.match(/https?:\/\/(?:[a-zA-Z0-9_-]+\.)?tiktok\.com\/[^\s]+/i);
   return match ? match[0] : null;
 }
@@ -33,13 +38,9 @@ async function resolveCanonicalUrl(url) {
   return url;
 }
 
-async function fetchTikTokData(rawUrl) {
-  const url = await resolveCanonicalUrl(rawUrl);
-  let errors = [];
-
-  // 1. Primary Engine: TikWM API (Standard/Lowest Quality No Watermark + MP3 + Photos)
+async function fetchFromTikWM(url) {
   try {
-    const res = await axios.get(`https://www.tikwm.com/api/?url=${encodeURIComponent(url)}`, {
+    const res = await axios.get(`https://www.tikwm.com/api/?url=${encodeURIComponent(url)}&hd=1`, {
       timeout: 15000,
       headers: {
         'User-Agent': USER_AGENT,
@@ -49,7 +50,6 @@ async function fetchTikTokData(rawUrl) {
 
     if (res.data?.code === 0 && res.data.data) {
       const d = res.data.data;
-      // Prioritize lowest/standard resolution watermark-free video (d.play), then with watermark (d.wmplay), last resort hdplay
       let videoUrl = d.play || d.wmplay || d.hdplay;
       if (videoUrl && !videoUrl.startsWith('http')) videoUrl = 'https://www.tikwm.com' + videoUrl;
       let musicUrl = d.music;
@@ -66,175 +66,177 @@ async function fetchTikTokData(rawUrl) {
         shares: d.share_count || 0,
         views: d.play_count || 0,
         sound: d.music_info?.title || d.music || 'Original Sound',
-        videoUrl: videoUrl,
-        musicUrl: musicUrl,
+        videoUrl,
+        musicUrl,
         images: Array.isArray(d.images) && d.images.length > 0 ? d.images : null,
-        isHD: false
+        provider: 'TikWM'
       };
     }
-  } catch (e1) {
-    errors.push(`TikWM: ${e1.message}`);
-  }
+  } catch (_) {}
+  return null;
+}
 
-  // 2. Secondary Engine: SaveTik.co API
+async function fetchFromSSSTik(url) {
   try {
-    const res = await axios.post('https://savetik.co/api/ajaxSearch', new URLSearchParams({ q: url, lang: 'en' }), {
+    const postData = new URLSearchParams({ id: url, locale: 'en', tt: 0 });
+    const res = await axios.post('https://ssstik.io/abc?url=dl', postData.toString(), {
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
         'User-Agent': USER_AGENT,
-        'Referer': 'https://savetik.co/en'
+        'HX-Request': 'true',
+        'HX-Trigger': '_gcaptcha_pt',
+        'HX-Target': 'target',
+        'HX-Current-URL': 'https://ssstik.io/en',
+        'Referer': 'https://ssstik.io/en'
       },
       timeout: 15000
     });
 
-    if (res.data && res.data.data) {
-      const $ = cheerio.load(res.data.data);
-      const title = $('.thumbnail h3').text().trim() || $('h3').text().trim() || 'TikTok Video';
-      const author = $('.thumbnail p').text().trim() || 'TikTok Creator';
-      let videoUrl = null;
-      let hdVideoUrl = null;
-      let musicUrl = null;
-      let images = [];
+    const $ = cheerio.load(res.data);
+    const videoLinks = [];
+    let musicUrl = null;
+    let author = $('.pure-u-18-24 h2').text().trim() || 'TikTok Creator';
+    let title = $('.maintext').text().trim() || 'TikTok Video';
 
-      $('a').each((_, el) => {
-        const href = $(el).attr('href');
-        const text = $(el).text().toLowerCase();
-        if (href && href.startsWith('http')) {
-          if (text.includes('mp4 hd') || text.includes('hd')) {
-            hdVideoUrl = href;
-          } else if (text.includes('mp4') || text.includes('download')) {
-            if (!videoUrl) videoUrl = href;
-          } else if (text.includes('mp3') || text.includes('audio')) {
-            musicUrl = href;
-          }
+    $('a.download_link').each((_, el) => {
+      const href = $(el).attr('href');
+      if (href && href.startsWith('http')) {
+        if (href.includes('tikcdn.io/ssstik/m/') || href.includes('music') || href.includes('mp3')) {
+          musicUrl = href;
+        } else {
+          videoLinks.push(href);
         }
-      });
-
-      $('.photo-list img').each((_, el) => {
-        const src = $(el).attr('src') || $(el).attr('data-src');
-        if (src) images.push(src);
-      });
-
-      // Prioritize lowest/standard quality videoUrl over hdVideoUrl
-      const finalVideo = videoUrl || hdVideoUrl;
-      if (finalVideo || images.length > 0) {
-        return {
-          title: title,
-          author: author,
-          username: author.replace(/[^a-zA-Z0-9._]/g, ''),
-          avatar: null,
-          duration: 'N/A',
-          likes: 0,
-          comments: 0,
-          shares: 0,
-          views: 0,
-          sound: 'Original Sound',
-          videoUrl: finalVideo,
-          musicUrl: musicUrl,
-          images: images.length > 0 ? images : null,
-          isHD: false
-        };
       }
-    }
-  } catch (e2) {
-    errors.push(`SaveTik: ${e2.message}`);
-  }
+    });
 
-  // 3. Fallback Engine: MusicalDown Scraper
+    const images = [];
+    $('.splide__slide img').each((_, el) => {
+      const src = $(el).attr('src') || $(el).attr('data-splide-lazy');
+      if (src && src.startsWith('http')) images.push(src);
+    });
+
+    if (videoLinks.length > 0 || images.length > 0) {
+      return {
+        title,
+        author,
+        username: author.replace(/[^a-zA-Z0-9._]/g, ''),
+        avatar: null,
+        duration: 'N/A',
+        likes: 0,
+        comments: 0,
+        shares: 0,
+        views: 0,
+        sound: 'Original Sound',
+        videoUrl: videoLinks[0] || null,
+        musicUrl,
+        images: images.length > 0 ? images : null,
+        provider: 'SSSTik'
+      };
+    }
+  } catch (_) {}
+  return null;
+}
+
+async function fetchFromTikWMPost(url) {
   try {
-    const sessionRes = await axios.get('https://musicaldown.com/en', {
-      headers: { 'User-Agent': USER_AGENT },
-      timeout: 12000
+    const postData = new URLSearchParams({ url, count: 12, cursor: 0, web: 1, hd: 1 });
+    const res = await axios.post('https://www.tikwm.com/api/', postData.toString(), {
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        'User-Agent': USER_AGENT,
+        'Referer': 'https://www.tikwm.com/'
+      },
+      timeout: 15000
     });
-    const $ = cheerio.load(sessionRes.data);
-    const form = {};
-    $('form input').each((_, el) => {
-      const name = $(el).attr('name');
-      const val = $(el).attr('value') || '';
-      if (name) form[name] = val;
-    });
-    const keys = Object.keys(form);
-    if (keys.length >= 2) {
-      const postData = new URLSearchParams();
-      postData.append(keys[0], url);
-      postData.append(keys[1], form[keys[1]]);
-      postData.append('verify', '1');
 
-      const cookies = sessionRes.headers['set-cookie']?.map(c => c.split(';')[0]).join('; ');
-      const postRes = await axios.post('https://musicaldown.com/download', postData, {
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'User-Agent': USER_AGENT,
-          'Cookie': cookies,
-          'Referer': 'https://musicaldown.com/en'
-        },
-        timeout: 15000
-      });
+    if (res.data?.code === 0 && res.data.data) {
+      const d = res.data.data;
+      let videoUrl = d.play || d.wmplay || d.hdplay;
+      if (videoUrl && !videoUrl.startsWith('http')) videoUrl = 'https://www.tikwm.com' + videoUrl;
+      let musicUrl = d.music;
+      if (musicUrl && !musicUrl.startsWith('http')) musicUrl = 'https://www.tikwm.com' + musicUrl;
 
-      const $res = cheerio.load(postRes.data);
-      let videoUrl = null;
-      let hdVideoUrl = null;
-      let musicUrl = null;
-
-      $res('a.btn[href]').each((_, el) => {
-        const href = $res(el).attr('href');
-        const text = $res(el).text().toLowerCase();
-        if (href && href.startsWith('http')) {
-          if (text.includes('hd')) hdVideoUrl = href;
-          else if (text.includes('mp4')) {
-            if (!videoUrl) videoUrl = href;
-          } else if (text.includes('mp3')) musicUrl = href;
-        }
-      });
-
-      // Prioritize lowest/standard quality videoUrl over hdVideoUrl
-      const finalVideo = videoUrl || hdVideoUrl;
-      if (finalVideo) {
-        return {
-          title: 'TikTok Video',
-          author: 'TikTok Creator',
-          username: '',
-          avatar: null,
-          duration: 'N/A',
-          likes: 0,
-          comments: 0,
-          shares: 0,
-          views: 0,
-          sound: 'Original Sound',
-          videoUrl: finalVideo,
-          musicUrl: musicUrl,
-          images: null,
-          isHD: false
-        };
-      }
+      return {
+        title: d.title || 'TikTok Video',
+        author: d.author?.nickname || d.author?.unique_id || 'TikTok User',
+        username: d.author?.unique_id || '',
+        avatar: d.author?.avatar,
+        duration: d.duration ? `${d.duration}s` : 'N/A',
+        likes: d.digg_count || 0,
+        comments: d.comment_count || 0,
+        shares: d.share_count || 0,
+        views: d.play_count || 0,
+        sound: d.music_info?.title || d.music || 'Original Sound',
+        videoUrl,
+        musicUrl,
+        images: Array.isArray(d.images) && d.images.length > 0 ? d.images : null,
+        provider: 'TikWM-POST'
+      };
     }
-  } catch (e3) {
-    errors.push(`MusicalDown: ${e3.message}`);
+  } catch (_) {}
+  return null;
+}
+
+async function fetchTikTokData(rawUrl) {
+  const url = await resolveCanonicalUrl(rawUrl);
+
+  // Try Engine 1: TikWM GET
+  let data = await fetchFromTikWM(url);
+  if (data) return data;
+
+  // If initial input was redirected or different, try raw URL with TikWM
+  if (url !== rawUrl) {
+    data = await fetchFromTikWM(rawUrl);
+    if (data) return data;
   }
 
-  throw new Error(`Failed to extract TikTok media from all providers: ${errors.join(' | ')}`);
+  // Try Engine 2: SSSTik Scraper
+  data = await fetchFromSSSTik(url);
+  if (data) return data;
+
+  if (url !== rawUrl) {
+    data = await fetchFromSSSTik(rawUrl);
+    if (data) return data;
+  }
+
+  // Try Engine 3: TikWM POST
+  data = await fetchFromTikWMPost(url);
+  if (data) return data;
+
+  throw new Error('All TikTok download providers are currently unreachable or the video is private/deleted.');
 }
 
 module.exports = {
   command: 'tiktok',
   aliases: ['tt', 'ttdl', 'tiktokdl', 'tiktoknowm'],
   category: 'download',
-  description: 'Download TikTok video (Lowest / Standard Quality), photo slides, or audio',
+  description: 'Download TikTok video (Direct Streaming & Lowest Quality Data Saver), photo slides, or audio',
   usage: '.tiktok <TikTok URL> [mp3/audio]',
 
   async handler(sock, message, args, context = {}) {
     const chatId = context.chatId || message.key.remoteJid;
-    const rawInput = args.join(' ').trim();
+    let rawInput = args.join(' ').trim();
+
+    if (!rawInput) {
+      const quoted = message.message?.extendedTextMessage?.contextInfo?.quotedMessage;
+      const quotedText = quoted?.conversation || quoted?.extendedTextMessage?.text;
+      if (quotedText) {
+        const match = quotedText.match(/https?:\/\/[^\s]+/);
+        if (match) rawInput = match[0];
+      }
+    }
+
     const url = cleanTikTokUrl(rawInput);
 
     if (!url || !isValidTikTokUrl(url)) {
       return await sock.sendMessage(chatId, {
-        text: '🎵 *TikTok Downloader (Lowest / Standard Quality)*\n\n' +
+        text: '🎵 *TikTok Downloader*\n\n' +
           '*Usage:*\n' +
           '• `.tiktok <TikTok link>` - Download Video or Photo Slide\n' +
           '• `.tiktok <TikTok link> audio` - Extract Audio only\n\n' +
           '*Example:*\n' +
-          '`.tiktok https://vm.tiktok.com/ZMxxxxxx/`'
+          '`.tiktok https://vm.tiktok.com/ZMxxxxxx/`',
+        ...channelInfo
       }, { quoted: message });
     }
 
@@ -248,13 +250,14 @@ module.exports = {
       // 1. Audio-only mode
       if (wantAudioOnly && data.musicUrl) {
         await sock.sendMessage(chatId, {
-          text: `🎧 *${data.title}*\n⏳ Downloading audio track...`
+          text: `🎧 *${data.title}*\n⏳ Downloading audio track...`,
+          ...channelInfo
         }, { quoted: message });
 
         const audioRes = await axios.get(data.musicUrl, {
           responseType: 'arraybuffer',
           timeout: AXIOS_TIMEOUT,
-          headers: { 'User-Agent': 'Mozilla/5.0' }
+          headers: { 'User-Agent': USER_AGENT }
         });
 
         await sock.sendMessage(chatId, {
@@ -280,7 +283,8 @@ module.exports = {
       // 2. Photo Slideshow mode
       if (data.images && data.images.length > 0) {
         await sock.sendMessage(chatId, {
-          text: `📸 *TikTok Photo Slide Detected*\nSending ${data.images.length} photos...`
+          text: `📸 *TikTok Photo Slide Detected*\nSending ${data.images.length} photos...`,
+          ...channelInfo
         }, { quoted: message });
 
         for (let i = 0; i < data.images.length; i++) {
@@ -294,7 +298,7 @@ module.exports = {
           }
         }
 
-        // Also send background music
+        // Send background audio if available
         if (data.musicUrl) {
           await sock.sendMessage(chatId, {
             audio: { url: data.musicUrl },
@@ -307,15 +311,15 @@ module.exports = {
         return;
       }
 
-      // 3. Video mode (lowest / standard quality)
+      // 3. Video mode: Direct URL streaming with buffer fallback
       if (!data.videoUrl) {
-        throw new Error('No downloadable video stream found');
+        throw new Error('No downloadable video stream found for this TikTok.');
       }
 
       const caption =
 `🎵 *TikTok Downloader*
 ━━━━━━━━━━━━━━━━━━━
-👤 *Author:* ${data.author} (@${data.username})
+👤 *Author:* ${data.author} ${data.username ? '(@' + data.username + ')' : ''}
 ⏱️ *Duration:* ${data.duration}
 ❤️ *Likes:* ${Number(data.likes).toLocaleString()}
 💬 *Comments:* ${Number(data.comments).toLocaleString()}
@@ -327,31 +331,52 @@ module.exports = {
 📝 *Caption:*
 ${data.title || 'No caption'}
 
-✨ *Quality:* ${data.isHD ? 'Standard (HD Fallback)' : 'Lowest / Standard (Data Saver)'}
+✨ *Source:* ${data.provider}
 ━━━━━━━━━━━━━━━━━━━
-> *Downloaded via MEGA-MD*`;
+> *Downloaded via ${settings.botName || 'PGWIZ-MD'}*`;
 
-      const videoRes = await axios.get(data.videoUrl, {
-        responseType: 'arraybuffer',
-        timeout: AXIOS_TIMEOUT,
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        }
-      });
+      let sent = false;
+      // Step A: Attempt Direct URL Stream (fastest, zero container RAM usage)
+      try {
+        await sock.sendMessage(chatId, {
+          video: { url: data.videoUrl },
+          mimetype: 'video/mp4',
+          fileName: `${data.author}_tiktok.mp4`,
+          caption: caption,
+          ...channelInfo
+        }, { quoted: message });
+        sent = true;
+      } catch (streamErr) {
+        console.warn('[TIKTOK] Direct URL stream delivery failed, falling back to buffer download:', streamErr.message);
+      }
 
-      await sock.sendMessage(chatId, {
-        video: videoRes.data,
-        mimetype: 'video/mp4',
-        fileName: `${data.author}_tiktok.mp4`,
-        caption: caption
-      }, { quoted: message });
+      // Step B: Buffer fallback if direct URL stream fails
+      if (!sent) {
+        const videoRes = await axios.get(data.videoUrl, {
+          responseType: 'arraybuffer',
+          timeout: AXIOS_TIMEOUT,
+          headers: {
+            'User-Agent': USER_AGENT,
+            'Referer': 'https://www.tiktok.com/'
+          }
+        });
+
+        await sock.sendMessage(chatId, {
+          video: videoRes.data,
+          mimetype: 'video/mp4',
+          fileName: `${data.author}_tiktok.mp4`,
+          caption: caption,
+          ...channelInfo
+        }, { quoted: message });
+      }
 
       await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
 
     } catch (error) {
       console.error('TikTok downloader error:', error);
       await sock.sendMessage(chatId, {
-        text: `❌ *Failed to download TikTok video!*\n\nReason: ${error.message || 'Service unavailable'}\n\nPlease verify the link and try again.`
+        text: `❌ *Failed to download TikTok video!*\n\nReason: ${error.message || 'Service unavailable'}\n\nPlease verify the link and try again.`,
+        ...channelInfo
       }, { quoted: message });
     }
   }

@@ -151,3 +151,32 @@ The following downloaders were audited and flagged as currently non-functional d
      - Status revocation events populate `revokedStatusIds`.
      - During the delay intervals, if `revokedStatusIds.has(key.id)` is detected, processing aborts immediately. The bot never marks deleted statuses as viewed or reacts to them.
 
+---
+
+### 📢 Channel Forwarding Removal & Native Flow "Open Channel" Button Architecture:
+* **The Problem**: Prepending `forwardedNewsletterMessageInfo: { newsletterJid, newsletterName }` with `isForwarded: true` displayed an intrusive "Forwarded from channel" header bar on every bot response, confusing users and adding clutter.
+* **The Solution**:
+  1. **Purged Channel Forwarding**:
+     - Stripped `forwardedNewsletterMessageInfo`, `isForwarded`, and `forwardingScore` across all plugins, `lib/messageConfig.js`, and `lib/messageHandler_raw.js`.
+     - Added automatic sanitization in `sock.sendMessage` interceptor to delete any residual forwarded channel badges from message `contextInfo`.
+  2. **Option 4 Native Flow "📢 Open Channel" URL Button**:
+     - Centralized in `lib/messageConfig.js`: exported `channelButton = { type: 'url', text: '📢 Open Channel', url: settings.channelLink }` and `channelInfo = { buttons: [channelButton] }`.
+     - In `lib/customBaileys.js`: `sock.sendMessage` intercepts text command messages and automatically renders a sleek Native Flow interactive button bar linking directly to the official WhatsApp channel.
+  3. **Media Corruption Guard**:
+     - Direct media (audio voice notes, stickers, reactions, PTV) strictly bypass button attachment so that WhatsApp binary media frames are never corrupted into invalid payloads.
+
+---
+
+### 🎵 TikTok Downloader Multi-Engine Pipeline & Direct URL Streaming:
+* **The Problem**: Reliance on single scrapers (SaveTik, MusicalDown) led to frequent failures when providers altered DOM markup or blocked datacenter IPs. Furthermore, buffering 20MB+ video files directly in container memory triggered high-RAM alerts and download timeouts.
+* **The Solution**:
+  1. **Multi-Engine Redundancy**:
+     - **Engine 1**: TikWM REST API (`https://www.tikwm.com/api/?url=...&hd=1`).
+     - **Engine 2**: SSSTik Scraper (`https://ssstik.io/abc?url=dl`) parsing unwatermarked `tikcdn.io` stream links.
+     - **Engine 3**: TikWM POST fallback with automated retry.
+  2. **Canonical URL Resolution**:
+     - Resolves shortened redirects (`vm.tiktok.com`, `vt.tiktok.com`, `/t/`) and strips tracking parameters prior to querying engines.
+  3. **Direct URL Stream Delivery**:
+     - Directly sends `{ video: { url: data.videoUrl }, caption, ...channelInfo }`, allowing WhatsApp's edge infrastructure to fetch the video stream instantaneously with zero container memory overhead.
+     - Automatically falls back to arraybuffer download if direct streaming is rejected by WhatsApp servers.
+

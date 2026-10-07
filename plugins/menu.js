@@ -144,15 +144,7 @@ module.exports = {
       const messageOptions = {
         image: thumbnail,
         caption: menuText,
-        contextInfo: {
-          forwardingScore: 1,
-          isForwarded: true,
-          forwardedNewsletterMessageInfo: {
-            newsletterJid: menuChannel.newsletterJid,
-            newsletterName: menuChannel.newsletterName,
-            serverMessageId: -1
-          }
-        }
+        ...channelInfo
       };
 
       await sock.sendMessage(chatId, messageOptions, { quoted: message });

@@ -17,17 +17,7 @@ module.exports = {
     const seconds = Math.floor(uptimeSeconds % 60);
     const uptimeStr = `${hours}h ${minutes}m ${seconds}s`;
 
-    const channelInfo = context.channelInfo || {
-      contextInfo: {
-        forwardingScore: 1,
-        isForwarded: true,
-        forwardedNewsletterMessageInfo: {
-          newsletterJid: settings.newsletterJid || '120363179639202475@newsletter',
-          newsletterName: settings.newsletterName || settings.botName || 'PGWIZ-MD',
-          serverMessageId: -1
-        }
-      }
-    };
+    const channelInfo = context.channelInfo || require('../lib/messageConfig').channelInfo;
 
     const text = `⚡ *${(settings.botName || 'PGWIZ-MD').toUpperCase()} EDITION & VERSION*
 

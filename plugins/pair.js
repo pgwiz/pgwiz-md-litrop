@@ -12,21 +12,13 @@ module.exports = {
     const axios = require('axios');
     const { chatId } = context;
 
-    const forwardInfo = {
-      forwardingScore: 1,
-      isForwarded: true,
-      forwardedNewsletterMessageInfo: {
-        newsletterJid: settings.newsletterJid || '120363179639202475@newsletter',
-        newsletterName: settings.newsletterName || settings.botName || 'PGWIZ-MD',
-        serverMessageId: -1
-      }
-    };
+    const { channelInfo } = require('../lib/messageConfig');
 
     let query = args.join('').trim();
     if (!query) {
       return await sock.sendMessage(chatId, {
         text: "❌ *Missing Number*\nExample: .pair 92305395XXXX",
-        contextInfo: forwardInfo
+        ...channelInfo
       }, { quoted: message });
     }
 
@@ -35,13 +27,13 @@ module.exports = {
     if (number.length < 10 || number.length > 15) {
       return await sock.sendMessage(chatId, {
         text: "❌ *Invalid Format*\nPlease provide the number with country code but without + or spaces.",
-        contextInfo: forwardInfo
+        ...channelInfo
       }, { quoted: message });
     }
 
     await sock.sendMessage(chatId, {
       text: "⚡ *Requesting code from server...*",
-      contextInfo: forwardInfo
+      ...channelInfo
     }, { quoted: message });
 
     try {
@@ -80,7 +72,7 @@ module.exports = {
 
         await sock.sendMessage(chatId, {
           text: successText,
-          contextInfo: forwardInfo
+          ...channelInfo
         }, { quoted: message });
 
       } else {
@@ -101,7 +93,7 @@ module.exports = {
 
       await sock.sendMessage(chatId, {
         text: errorMsg,
-        contextInfo: forwardInfo
+        ...channelInfo
       }, { quoted: message });
     }
   }

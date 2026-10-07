@@ -716,16 +716,7 @@ async function startPgwizDev() {
                     printLog('error', `Error in handleMessages: ${err.message}`);
                     if (mek.key && mek.key.remoteJid) {
                         await pgwizSocket.sendMessage(mek.key.remoteJid, {
-                            text: '❌ An error occurred while processing your message.',
-                            contextInfo: {
-                                forwardingScore: 1,
-                                isForwarded: true,
-                                forwardedNewsletterMessageInfo: {
-                                    newsletterJid: settings.newsletterJid || '120363179639202475@newsletter',
-                                    newsletterName: settings.newsletterName || 'PGWIZ-MD',
-                                    serverMessageId: -1
-                                }
-                            }
+                            text: '❌ An error occurred while processing your message.'
                         }).catch(console.error);
                     }
                 }
@@ -902,16 +893,7 @@ async function startPgwizDev() {
                         const ghostStatus = (ghostMode && ghostMode.enabled) ? '\n👻 Stealth Mode: ACTIVE' : '';
 
                         await pgwizSocket.sendMessage(botNumber, {
-                            text: `🤖 ${settings.botName || 'PGWIZ-MD'} Connected Successfully!\n\n⏰ Time: ${new Date().toLocaleString()}\n✅ Status: Online and Ready!${ghostStatus}\n\n✅Make sure to join below channel`,
-                            contextInfo: {
-                                forwardingScore: 1,
-                                isForwarded: true,
-                                forwardedNewsletterMessageInfo: {
-                                    newsletterJid: '120363179639202475@newsletter',
-                                    newsletterName: settings.newsletterName || settings.botName || 'PGWIZ-MD',
-                                    serverMessageId: -1
-                                }
-                            }
+                            text: `🤖 ${settings.botName || 'PGWIZ-MD'} Connected Successfully!\n\n⏰ Time: ${new Date().toLocaleString()}\n✅ Status: Online and Ready!${ghostStatus}\n\n✅ Make sure to join our official channel:`
                         });
 
                         // --- Startup debug: send quick health-check to primary owner once per boot ---
