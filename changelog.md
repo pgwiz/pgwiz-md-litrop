@@ -2,6 +2,13 @@
 
 All notable changes to the PGWIZ-MD multi-device WhatsApp bot project are documented in this file.
 
+## [4.7.1] - 2026-10-07
+
+### Fixed & Refined
+- **Native Flow Button Header Clean Display (Eliminated AI Tag)**:
+  - Removed `<bot biz_bot="1"/>` stanza node from `getButtonAdditionalNodes()` in `lib/customBaileys.js`.
+  - All native flow buttons (Quick Reply, CTA URL, Copy Code, Call, List Menu, and dynamic buttons) now render cleanly without the Meta AI badge, matching ButtonV2 (`sendButtonV2`).
+
 ## [4.7.0] - 2026-10-06
 
 ### Added & Enhanced

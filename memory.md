@@ -114,6 +114,9 @@ The following downloaders were audited and flagged as currently non-functional d
 * **Why Native Flow Buttons Failed ("Did Nothing")**:
   - `patchMessageBeforeSending` in `index_raw.js` was wrapping `interactiveMessage` in `viewOnceMessage` with `deviceListMetadataVersion: 2`. Modern WhatsApp clients silently ignore or drop interactive messages wrapped in view-once.
   - Fix: Passed messages through cleanly (`patchMessageBeforeSending: msg => msg`) and used Keith's direct `{ interactiveMessage }` payload with `messageParamsJson: ''` and `<biz>` stanza nodes.
+* **Elimination of Meta AI Header Badge on Buttons**:
+  - Native flow buttons in DMs previously had `<bot biz_bot="1"/>` appended to `additionalNodes`, which instructed WhatsApp clients to display an "AI" / "Meta AI" badge.
+  - Removing `<bot biz_bot="1"/>` from `getButtonAdditionalNodes()` in `lib/customBaileys.js` allows buttons 1-5 & 7 to render cleanly without the AI badge, exactly matching ButtonV2 (Button 6).
 * **Universal Button Fallback (`ButtonV2`)**:
   - Implemented classic `ButtonV2` (`buttonsMessage` with `headerType: 6` location header), which renders across all WhatsApp clients including older versions where native flow buttons are disabled.
 * **Test Suite**:
