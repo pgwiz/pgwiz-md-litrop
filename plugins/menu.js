@@ -196,6 +196,13 @@ function renderCategoryMenu({ botName, botOwner, version, prefix, categoryName, 
 function renderCommandHelp({ botName, botOwner, version, prefix, cmd }) {
   const isOff = CommandHandler.disabledCommands && CommandHandler.disabledCommands.has(cmd.command.toLowerCase());
   const icon = getCategoryIcon(cmd.category);
+  const usageText = cmd.usage
+    ? cmd.usage.replace(/^[.!/#_]/, prefix)
+    : `${prefix}${cmd.command}`;
+  const aliasesText = (cmd.aliases && Array.isArray(cmd.aliases) && cmd.aliases.length)
+    ? cmd.aliases.map(a => `${prefix}${a}`).join(', ')
+    : 'None';
+
   const lines = [
     `╭━━〔 ${botName} 〕━━⬣`,
     `┃ 🤖 Bot: ${botName}`,
@@ -204,9 +211,9 @@ function renderCommandHelp({ botName, botOwner, version, prefix, cmd }) {
     `┃`,
     `┃ ⚡ Command: ${prefix}${cmd.command}`,
     `┃ 📝 Description: ${cmd.description || 'No description provided'}`,
-    `┃ 📖 Usage: ${cmd.usage || `${prefix}${cmd.command}`}`,
+    `┃ 📖 Usage: ${usageText}`,
     `┃ 🏷️ Category: ${icon} ${(cmd.category || 'general').toUpperCase()}`,
-    `┃ 🔖 Aliases: ${cmd.aliases && cmd.aliases.length ? cmd.aliases.map(a => `${prefix}${a}`).join(', ') : 'None'}`
+    `┃ 🔖 Aliases: ${aliasesText}`
   ];
 
   if (isOff) {
@@ -271,7 +278,7 @@ function renderNotFound({ botName, botOwner, version, prefix, query, suggestion 
   ];
 
   if (suggestion) {
-    lines.push(`┃ 💡 Did you mean: ${prefix}${suggestion}`);
+    lines.push(`┃ 💡 Did you mean: ${suggestion}`);
   }
 
   lines.push(`┃`);
@@ -284,7 +291,7 @@ function renderNotFound({ botName, botOwner, version, prefix, query, suggestion 
 
 async function sendMenu(sock, chatId, text, channelInfo, message) {
   const imagePath = path.join(__dirname, '../assets/bot_image.jpg');
-  if (fs.existsSync(imagePath)) {
+  if (fs.existsSync(imagePath) && text.length <= 1024) {
     try {
       return await sock.sendMessage(chatId, {
         image: { url: imagePath },
@@ -330,7 +337,7 @@ module.exports = {
         }
       })();
 
-      // Build sorted active categories
+      // Build sorted active categories with alphabetically sorted commands
       const rawCategories = Array.from(CommandHandler.categories.keys()).sort();
       const activeCategories = [];
       for (const cat of rawCategories) {
@@ -339,15 +346,25 @@ module.exports = {
           activeCategories.push({
             name: cat,
             count: cmds.length,
-            commands: cmds
+            commands: [...cmds].sort()
           });
         }
       }
 
-      // Process input arguments
+      // Process and sanitize input arguments
       let rawQuery = (args && args.length) ? args.join(' ').trim() : '';
-      if (rawQuery.startsWith('+') || rawQuery.startsWith('#')) {
+
+      // Strip enclosing markdown, brackets, or quotes (e.g. [1], "admin", *1*, `ping`)
+      rawQuery = rawQuery.replace(/^[(\["'*_`]+|[)\]"'*_`]+$/g, '').trim();
+
+      // Strip leading plus or hash if passed (e.g. +1, #1, + 1, # 1)
+      if (/^[+#]\s*/.test(rawQuery)) {
         rawQuery = rawQuery.replace(/^[+#]\s*/, '').trim();
+      }
+
+      // Strip category word prefix if passed (e.g. "cat admin", "category 1")
+      if (/^(cat|category)\s+/i.test(rawQuery)) {
+        rawQuery = rawQuery.replace(/^(cat|category)\s+/i, '').trim();
       }
 
       // 1. Overview menu when no query is passed
@@ -386,12 +403,18 @@ module.exports = {
         return await sendMenu(sock, chatId, text, channelInfo, message);
       }
 
-      // 3. Numbered category lookup (e.g. "1", "4", "1.")
-      const cleanNum = lowerQuery.replace(/\.$/, '');
-      if (/^\d+$/.test(cleanNum)) {
-        const num = parseInt(cleanNum, 10);
-        if (num >= 1 && num <= activeCategories.length) {
-          const selected = activeCategories[num - 1];
+      // 3. Numbered category lookup (e.g. "1", "1.", "1. ADMIN", "1 ADMIN", "1 - admin", "1. admin (22)")
+      let catNumber = null;
+      const numMatch = lowerQuery.match(/^(\d+)(?:\.|\s+|-|\s*\()/);
+      if (numMatch) {
+        catNumber = parseInt(numMatch[1], 10);
+      } else if (/^\d+$/.test(lowerQuery)) {
+        catNumber = parseInt(lowerQuery, 10);
+      }
+
+      if (catNumber !== null) {
+        if (catNumber >= 1 && catNumber <= activeCategories.length) {
+          const selected = activeCategories[catNumber - 1];
           const text = renderCategoryMenu({
             botName,
             botOwner,
@@ -411,7 +434,7 @@ module.exports = {
             `┃ 👑 Owner: ${botOwner}`,
             `┃ 💎 Version: ${version}  •  🔧 Prefix: ${prefix}`,
             `┃`,
-            `┃ ❌ Category #${num} not found (choose 1-${activeCategories.length}).`,
+            `┃ ❌ Category #${catNumber} not found (choose 1-${activeCategories.length}).`,
             `┃`,
             `┃ 💡 ${prefix}menu — view category menu`,
             `╰━━━━━━━━━━━━━━⬣`
@@ -420,8 +443,9 @@ module.exports = {
         }
       }
 
-      // 4. Category name match (e.g. "admin", "download")
-      const matchedCat = activeCategories.find(c => c.name.toLowerCase() === lowerQuery);
+      // 4. Category name match (e.g. "admin", "download", "admin (22)")
+      const cleanCatQuery = lowerQuery.replace(/\s*\(\d+\)$/, '').trim();
+      const matchedCat = activeCategories.find(c => c.name.toLowerCase() === cleanCatQuery);
       const isHelpInvocation = context.commandName === 'help' || context.invokedCmd === 'help';
 
       if (matchedCat && !isHelpInvocation) {
@@ -439,13 +463,16 @@ module.exports = {
         return await sendMenu(sock, chatId, text, channelInfo, message);
       }
 
-      // 5. Command lookup (e.g. "ping", "help ping", "info ping")
+      // 5. Command lookup (e.g. "ping", ".ping", "!ping", "help ping", "info ping")
       let targetCmdName = lowerQuery;
       if ((lowerQuery.startsWith('help ') || lowerQuery.startsWith('info ')) && args.length > 1) {
         targetCmdName = args[1].toLowerCase();
       } else if (args.length > 0) {
         targetCmdName = args[0].toLowerCase();
       }
+
+      // Strip leading command prefixes (e.g. ".ping", "!ping", "/ping" -> "ping")
+      targetCmdName = targetCmdName.replace(/^[.!/#_+]+/, '').trim();
 
       let cmd = CommandHandler.commands.get(targetCmdName);
       if (!cmd && CommandHandler.aliases && CommandHandler.aliases.has(targetCmdName)) {
@@ -480,8 +507,25 @@ module.exports = {
         return await sendMenu(sock, chatId, text, channelInfo, message);
       }
 
-      // 6. Not found - with suggestion if available
-      const suggestion = typeof CommandHandler.findSuggestion === 'function' ? CommandHandler.findSuggestion(targetCmdName) : null;
+      // 6. Not found - with suggestion if available (checking commands, aliases, and categories)
+      let suggestion = null;
+      if (typeof CommandHandler.findSuggestion === 'function') {
+        const cmdSug = CommandHandler.findSuggestion(targetCmdName);
+        if (cmdSug) {
+          suggestion = `${prefix}${cmdSug}`;
+        }
+      }
+
+      if (!suggestion) {
+        const catNames = activeCategories.map(c => c.name.toLowerCase());
+        for (const catName of catNames) {
+          if (CommandHandler._levenshtein && CommandHandler._levenshtein(cleanCatQuery, catName) <= 2) {
+            suggestion = `${prefix}menu ${catName}`;
+            break;
+          }
+        }
+      }
+
       const text = renderNotFound({
         botName,
         botOwner,
