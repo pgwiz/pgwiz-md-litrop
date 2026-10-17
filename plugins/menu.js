@@ -165,7 +165,7 @@ function renderOverviewMenu({ botName, prefix, totalCommands, categories, mode, 
   lines.push(`┃`);
   lines.push(`┃ 💡 ${prefix}menu <number|name> — open a category`);
   lines.push(`┃ 🔍 ${prefix}menu <command> — command help`);
-  lines.push(`╰━━━━━━━━━━━━━━⬣`);
+  lines.push(`╰━━━━━━━━━━━━━⬣`);
   lines.push(botName);
 
   return lines.join('\n');
@@ -196,7 +196,7 @@ function renderCategoryMenu({ botName, prefix, categoryName, commands, mode, upt
   lines.push(`┃`);
   lines.push(`┃ 💡 ${prefix}menu <command> — command help`);
   lines.push(`┃ 🔙 ${prefix}menu — back to categories`);
-  lines.push(`╰━━━━━━━━━━━━━━⬣`);
+  lines.push(`╰━━━━━━━━━━━━━⬣`);
   lines.push(botName);
 
   return lines.join('\n');
@@ -234,7 +234,7 @@ function renderCommandHelp({ botName, prefix, cmd }) {
 
   lines.push(`┃`);
   lines.push(`┃ 💡 ${prefix}menu — back to categories`);
-  lines.push(`╰━━━━━━━━━━━━━━⬣`);
+  lines.push(`╰━━━━━━━━━━━━━⬣`);
   lines.push(botName);
 
   return lines.join('\n');
@@ -268,7 +268,7 @@ function renderAllMenu({ botName, prefix, totalCommands, categories, mode, uptim
   lines.push(`┃`);
   lines.push(`┃ 💡 ${prefix}menu <command> — command help`);
   lines.push(`┃ 🔙 ${prefix}menu — back to categories`);
-  lines.push(`╰━━━━━━━━━━━━━━⬣`);
+  lines.push(`╰━━━━━━━━━━━━━⬣`);
   lines.push(botName);
 
   return lines.join('\n');
@@ -289,7 +289,7 @@ function renderNotFound({ botName, prefix, query, suggestion }) {
   lines.push(`┃`);
   lines.push(`┃ 💡 ${prefix}menu — view category menu`);
   lines.push(`┃ 🔍 ${prefix}menu <command> — command help`);
-  lines.push(`╰━━━━━━━━━━━━━━⬣`);
+  lines.push(`╰━━━━━━━━━━━━━⬣`);
   lines.push(botName);
 
   return lines.join('\n');
@@ -437,7 +437,7 @@ module.exports = {
             `┃ ❌ Category #${catNumber} not found (choose 1-${activeCategories.length}).`,
             `┃`,
             `┃ 💡 ${prefix}menu — view category menu`,
-            `╰━━━━━━━━━━━━━━⬣`,
+            `╰━━━━━━━━━━━━━⬣`,
             botName
           ].join('\n');
           return await sendMenu(sock, chatId, notFoundText, channelInfo, message, botName);
@@ -538,7 +538,7 @@ module.exports = {
         `┃ ❌ Error displaying menu: ${error.message}`,
         `┃`,
         `┃ 💡 Try ${prefix}menu again`,
-        `╰━━━━━━━━━━━━━━⬣`,
+        `╰━━━━━━━━━━━━━⬣`,
         botName
       ].join('\n');
       try {
