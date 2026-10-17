@@ -42,10 +42,10 @@ function getTimeString() {
 
 module.exports = {
   command: 'alive',
-  aliases: ['status', 'system', 'botstatus', 'bot', 'uptime', 'runtime', 'info'],
+  aliases: ['status', 'system', 'botstatus', 'bot', 'uptime', 'runtime', 'info', 'botinfo'],
   category: 'general',
   description: 'Check bot status, active uptime, system telemetry, and runtime info',
-  usage: '.alive | .uptime | .status',
+  usage: '.alive | .uptime | .status | .info | .botinfo',
 
   async handler(sock, message, args, context = {}) {
     const chatId = context.chatId || message.key.remoteJid;

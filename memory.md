@@ -219,6 +219,8 @@ The following downloaders were audited and flagged as currently non-functional d
   - Primary menu (`plugins/list.js` in mega-main, `plugins/menu.js` in mega-light) omits redundant header lines (`🤖 Bot`, `👑 Owner`, `💎 Version`).
   - Top commands (`🔥 Top:`) omitted by default; conditionally displayed when `SHOW_TOP_COMMANDS=true`, `MENU_SHOW_TOP=true`, or `settings.showTopCommands === true`.
   - Category views omit `reply .menu + command:`.
-  - Comprehensive bot details (Bot, Owner, Version, Prefix, Platform, Uptime, Hardware Telemetry) centralized in `.owner` (`plugins/owner.js`) and `.alive` / `.info` (`plugins/alive.js`).
+  - Comprehensive bot details (Bot, Owner, Version, Prefix, Platform, Uptime, Hardware Telemetry) centralized in `.owner` (`plugins/owner.js`) and `.alive` / `.info` / `.botinfo` (`plugins/alive.js`).
+  - Added `.botinfo` alias to `plugins/alive.js` across both bots for full discovery parity.
+  - Parity maintained between `mega-main` (`plugins/list.js`, `plugins/smartmenu.js`) and `mega-light` (`plugins/menu.js`, `plugins/smartmenu.js`).
   - Card menus terminate cleanly with `╰━━━━━━━━━━━━━━⬣` followed by `${botName}` footer.
 

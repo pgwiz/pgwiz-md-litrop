@@ -10,7 +10,9 @@ All notable changes to the PGWIZ-MD multi-device WhatsApp bot project are docume
   - Omitted `🔥 Top:` commands list by default from the overview header; now configurable via `SHOW_TOP_COMMANDS` or `MENU_SHOW_TOP` environment variables / settings.
   - Removed `reply .menu + command:` prompt from category view headers.
   - Cleaned up overview categories title to `┃📂 Categories(${count})` removing legacy reply instructions.
-  - Moved full detailed bot, owner, version, prefix, and platform telemetry into `.owner` and `.alive` / `.info` (`plugins/owner.js`, `plugins/alive.js`).
+  - Moved full detailed bot, owner, version, prefix, and platform telemetry into `.owner` and `.alive` / `.info` / `.botinfo` (`plugins/owner.js`, `plugins/alive.js`).
+  - Added `.botinfo` alias to `plugins/alive.js` ensuring complete command discovery parity with `.alive` and `.info`.
+  - Added `plugins/smartmenu.js` delegation and parity with `mega-main`.
   - Standardized bottom footer text to `${botName}` across all menu views and message options.
 
 ## [5.2.1] - 2026-10-08
