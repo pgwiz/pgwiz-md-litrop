@@ -106,6 +106,13 @@ async function getBotMode() {
   return String(settings.commandMode || 'public').toLowerCase();
 }
 
+function shouldShowTopCommands() {
+  const envVal = (process.env.SHOW_TOP_COMMANDS || process.env.MENU_SHOW_TOP || '').toLowerCase().trim();
+  if (['true', '1', 'yes'].includes(envVal)) return true;
+  if (settings && (settings.showTopCommands === true || settings.menuShowTop === true)) return true;
+  return false;
+}
+
 function getTopCommands(prefix) {
   try {
     if (CommandHandler && typeof CommandHandler.getDiagnostics === 'function') {
@@ -120,24 +127,25 @@ function getTopCommands(prefix) {
   return `${prefix}alive (2×)  •  ${prefix}menu (1×)  •  ${prefix}ping (1×)`;
 }
 
-function buildHeader({ botName, botOwner, version, prefix, totalCommands, totalCategories, mode, uptime, time, topCommands }) {
-  return [
+function buildHeader({ botName, prefix, totalCommands, totalCategories, mode, uptime, time, topCommands }) {
+  const lines = [
     `╭━━〔 ${botName} 〕━━⬣`,
-    `┃ 🤖 Bot: ${botName}`,
-    `┃ 👑 Owner: ${botOwner}`,
-    `┃ 💎 Version: ${version}  •  🔧 Prefix: ${prefix}`,
-    `┃ 📦 Commands: ${totalCommands}  •  📂 Categories: ${totalCategories}`,
-    `┃ 🛠️ Mode: ${mode}  •  ⏱️ Uptime: ${uptime}  •  🕒 ${time}`,
-    `┃ 🔥 Top: ${topCommands}`,
-    `┃`
+    `┃🔧 Prefix: ${prefix}`,
+    `┃ 📂 Menu (${totalCategories})`,
+    `┃ 📦 Commands: ${totalCommands} `,
+    `┃ 🛠️ Mode: ${mode} `,
+    `┃⏱️ Uptime: ${uptime} { ${time} }`
   ];
+  if (shouldShowTopCommands() && topCommands) {
+    lines.push(`┃ 🔥 Top: ${topCommands}`);
+  }
+  lines.push(`┃`);
+  return lines;
 }
 
-function renderOverviewMenu({ botName, botOwner, version, prefix, totalCommands, categories, mode, uptime, time, topCommands }) {
+function renderOverviewMenu({ botName, prefix, totalCommands, categories, mode, uptime, time, topCommands }) {
   const lines = buildHeader({
     botName,
-    botOwner,
-    version,
     prefix,
     totalCommands,
     totalCategories: categories.length,
@@ -147,7 +155,8 @@ function renderOverviewMenu({ botName, botOwner, version, prefix, totalCommands,
     topCommands
   });
 
-  lines.push(`┃ 📂 CATEGORIES — reply ${prefix}menu + number:`);
+  lines.push(`┃📂 Categories(${categories.length})`);
+  lines.push(`┃`);
   categories.forEach((cat, idx) => {
     const icon = getCategoryIcon(cat.name);
     lines.push(`┃  ${icon} ${idx + 1}. ${cat.name.toUpperCase()} (${cat.count})`);
@@ -157,22 +166,21 @@ function renderOverviewMenu({ botName, botOwner, version, prefix, totalCommands,
   lines.push(`┃ 💡 ${prefix}menu <number|name> — open a category`);
   lines.push(`┃ 🔍 ${prefix}menu <command> — command help`);
   lines.push(`╰━━━━━━━━━━━━━━⬣`);
+  lines.push(botName);
 
   return lines.join('\n');
 }
 
-function renderCategoryMenu({ botName, botOwner, version, prefix, categoryName, commands, mode, uptime, time }) {
+function renderCategoryMenu({ botName, prefix, categoryName, commands, mode, uptime, time }) {
   const icon = getCategoryIcon(categoryName);
   const count = commands.length;
   const lines = [
     `╭━━〔 ${botName} 〕━━⬣`,
-    `┃ 🤖 Bot: ${botName}`,
-    `┃ 👑 Owner: ${botOwner}`,
-    `┃ 💎 Version: ${version}  •  🔧 Prefix: ${prefix}`,
+    `┃🔧 Prefix: ${prefix}`,
     `┃ 📂 Category: ${icon} ${categoryName.toUpperCase()} (${count})`,
-    `┃ 🛠️ Mode: ${mode}  •  ⏱️ Uptime: ${uptime}  •  🕒 ${time}`,
-    `┃`,
-    `┃ 📂 COMMANDS — reply ${prefix}menu + command:`
+    `┃ 🛠️ Mode: ${mode}`,
+    `┃⏱️ Uptime: ${uptime} { ${time} }`,
+    `┃`
   ];
 
   if (commands.length === 0) {
@@ -189,11 +197,12 @@ function renderCategoryMenu({ botName, botOwner, version, prefix, categoryName, 
   lines.push(`┃ 💡 ${prefix}menu <command> — command help`);
   lines.push(`┃ 🔙 ${prefix}menu — back to categories`);
   lines.push(`╰━━━━━━━━━━━━━━⬣`);
+  lines.push(botName);
 
   return lines.join('\n');
 }
 
-function renderCommandHelp({ botName, botOwner, version, prefix, cmd }) {
+function renderCommandHelp({ botName, prefix, cmd }) {
   const isOff = CommandHandler.disabledCommands && CommandHandler.disabledCommands.has(cmd.command.toLowerCase());
   const icon = getCategoryIcon(cmd.category);
   const usageText = cmd.usage
@@ -205,9 +214,7 @@ function renderCommandHelp({ botName, botOwner, version, prefix, cmd }) {
 
   const lines = [
     `╭━━〔 ${botName} 〕━━⬣`,
-    `┃ 🤖 Bot: ${botName}`,
-    `┃ 👑 Owner: ${botOwner}`,
-    `┃ 💎 Version: ${version}  •  🔧 Prefix: ${prefix}`,
+    `┃🔧 Prefix: ${prefix}`,
     `┃`,
     `┃ ⚡ Command: ${prefix}${cmd.command}`,
     `┃ 📝 Description: ${cmd.description || 'No description provided'}`,
@@ -228,15 +235,14 @@ function renderCommandHelp({ botName, botOwner, version, prefix, cmd }) {
   lines.push(`┃`);
   lines.push(`┃ 💡 ${prefix}menu — back to categories`);
   lines.push(`╰━━━━━━━━━━━━━━⬣`);
+  lines.push(botName);
 
   return lines.join('\n');
 }
 
-function renderAllMenu({ botName, botOwner, version, prefix, totalCommands, categories, mode, uptime, time, topCommands }) {
+function renderAllMenu({ botName, prefix, totalCommands, categories, mode, uptime, time, topCommands }) {
   const lines = buildHeader({
     botName,
-    botOwner,
-    version,
     prefix,
     totalCommands,
     totalCategories: categories.length,
@@ -263,16 +269,15 @@ function renderAllMenu({ botName, botOwner, version, prefix, totalCommands, cate
   lines.push(`┃ 💡 ${prefix}menu <command> — command help`);
   lines.push(`┃ 🔙 ${prefix}menu — back to categories`);
   lines.push(`╰━━━━━━━━━━━━━━⬣`);
+  lines.push(botName);
 
   return lines.join('\n');
 }
 
-function renderNotFound({ botName, botOwner, version, prefix, query, suggestion }) {
+function renderNotFound({ botName, prefix, query, suggestion }) {
   const lines = [
     `╭━━〔 ${botName} 〕━━⬣`,
-    `┃ 🤖 Bot: ${botName}`,
-    `┃ 👑 Owner: ${botOwner}`,
-    `┃ 💎 Version: ${version}  •  🔧 Prefix: ${prefix}`,
+    `┃🔧 Prefix: ${prefix}`,
     `┃`,
     `┃ ❌ Command or category "${query}" not found.`
   ];
@@ -285,17 +290,19 @@ function renderNotFound({ botName, botOwner, version, prefix, query, suggestion 
   lines.push(`┃ 💡 ${prefix}menu — view category menu`);
   lines.push(`┃ 🔍 ${prefix}menu <command> — command help`);
   lines.push(`╰━━━━━━━━━━━━━━⬣`);
+  lines.push(botName);
 
   return lines.join('\n');
 }
 
-async function sendMenu(sock, chatId, text, channelInfo, message) {
+async function sendMenu(sock, chatId, text, channelInfo, message, botName) {
   const imagePath = path.join(__dirname, '../assets/bot_image.jpg');
   if (fs.existsSync(imagePath) && text.length <= 1024) {
     try {
       return await sock.sendMessage(chatId, {
         image: { url: imagePath },
         caption: text,
+        footer: botName,
         ...channelInfo
       }, { quoted: message });
     } catch {}
@@ -303,6 +310,7 @@ async function sendMenu(sock, chatId, text, channelInfo, message) {
 
   return await sock.sendMessage(chatId, {
     text,
+    footer: botName,
     ...channelInfo
   }, { quoted: message });
 }
@@ -371,8 +379,6 @@ module.exports = {
       if (!rawQuery) {
         const text = renderOverviewMenu({
           botName,
-          botOwner,
-          version,
           prefix,
           totalCommands,
           categories: activeCategories,
@@ -381,7 +387,7 @@ module.exports = {
           time,
           topCommands
         });
-        return await sendMenu(sock, chatId, text, channelInfo, message);
+        return await sendMenu(sock, chatId, text, channelInfo, message, botName);
       }
 
       const lowerQuery = rawQuery.toLowerCase();
@@ -390,8 +396,6 @@ module.exports = {
       if (lowerQuery === 'all') {
         const text = renderAllMenu({
           botName,
-          botOwner,
-          version,
           prefix,
           totalCommands,
           categories: activeCategories,
@@ -400,7 +404,7 @@ module.exports = {
           time,
           topCommands
         });
-        return await sendMenu(sock, chatId, text, channelInfo, message);
+        return await sendMenu(sock, chatId, text, channelInfo, message, botName);
       }
 
       // 3. Numbered category lookup (e.g. "1", "1.", "1. ADMIN", "1 ADMIN", "1 - admin", "1. admin (22)")
@@ -417,8 +421,6 @@ module.exports = {
           const selected = activeCategories[catNumber - 1];
           const text = renderCategoryMenu({
             botName,
-            botOwner,
-            version,
             prefix,
             categoryName: selected.name,
             commands: selected.commands,
@@ -426,20 +428,19 @@ module.exports = {
             uptime,
             time
           });
-          return await sendMenu(sock, chatId, text, channelInfo, message);
+          return await sendMenu(sock, chatId, text, channelInfo, message, botName);
         } else {
           const notFoundText = [
             `╭━━〔 ${botName} 〕━━⬣`,
-            `┃ 🤖 Bot: ${botName}`,
-            `┃ 👑 Owner: ${botOwner}`,
-            `┃ 💎 Version: ${version}  •  🔧 Prefix: ${prefix}`,
+            `┃🔧 Prefix: ${prefix}`,
             `┃`,
             `┃ ❌ Category #${catNumber} not found (choose 1-${activeCategories.length}).`,
             `┃`,
             `┃ 💡 ${prefix}menu — view category menu`,
-            `╰━━━━━━━━━━━━━━⬣`
+            `╰━━━━━━━━━━━━━━⬣`,
+            botName
           ].join('\n');
-          return await sendMenu(sock, chatId, notFoundText, channelInfo, message);
+          return await sendMenu(sock, chatId, notFoundText, channelInfo, message, botName);
         }
       }
 
@@ -451,8 +452,6 @@ module.exports = {
       if (matchedCat && !isHelpInvocation) {
         const text = renderCategoryMenu({
           botName,
-          botOwner,
-          version,
           prefix,
           categoryName: matchedCat.name,
           commands: matchedCat.commands,
@@ -460,7 +459,7 @@ module.exports = {
           uptime,
           time
         });
-        return await sendMenu(sock, chatId, text, channelInfo, message);
+        return await sendMenu(sock, chatId, text, channelInfo, message, botName);
       }
 
       // 5. Command lookup (e.g. "ping", ".ping", "!ping", "help ping", "info ping")
@@ -483,20 +482,16 @@ module.exports = {
       if (cmd) {
         const text = renderCommandHelp({
           botName,
-          botOwner,
-          version,
           prefix,
           cmd
         });
-        return await sendMenu(sock, chatId, text, channelInfo, message);
+        return await sendMenu(sock, chatId, text, channelInfo, message, botName);
       }
 
       // If matchedCat existed but it was a help invocation and no command matched
       if (matchedCat) {
         const text = renderCategoryMenu({
           botName,
-          botOwner,
-          version,
           prefix,
           categoryName: matchedCat.name,
           commands: matchedCat.commands,
@@ -504,7 +499,7 @@ module.exports = {
           uptime,
           time
         });
-        return await sendMenu(sock, chatId, text, channelInfo, message);
+        return await sendMenu(sock, chatId, text, channelInfo, message, botName);
       }
 
       // 6. Not found - with suggestion if available (checking commands, aliases, and categories)
@@ -528,29 +523,26 @@ module.exports = {
 
       const text = renderNotFound({
         botName,
-        botOwner,
-        version,
         prefix,
         query: rawQuery,
         suggestion
       });
-      return await sendMenu(sock, chatId, text, channelInfo, message);
+      return await sendMenu(sock, chatId, text, channelInfo, message, botName);
 
     } catch (error) {
       console.error('Menu Error:', error);
       const errCard = [
         `╭━━〔 ${botName} 〕━━⬣`,
-        `┃ 🤖 Bot: ${botName}`,
-        `┃ 👑 Owner: ${botOwner}`,
-        `┃ 💎 Version: ${version}  •  🔧 Prefix: ${prefix}`,
+        `┃🔧 Prefix: ${prefix}`,
         `┃`,
         `┃ ❌ Error displaying menu: ${error.message}`,
         `┃`,
         `┃ 💡 Try ${prefix}menu again`,
-        `╰━━━━━━━━━━━━━━⬣`
+        `╰━━━━━━━━━━━━━━⬣`,
+        botName
       ].join('\n');
       try {
-        await sock.sendMessage(chatId, { text: errCard, ...channelInfo }, { quoted: message });
+        await sock.sendMessage(chatId, { text: errCard, footer: botName, ...channelInfo }, { quoted: message });
       } catch {}
     }
   }

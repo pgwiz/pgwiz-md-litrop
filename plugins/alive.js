@@ -84,11 +84,19 @@ module.exports = {
       else if (memPercent > 70 || cpuLoad > 0.7) statusColor = '🟡';
 
       const botName = (settings.botName || process.env.BOT_NAME || 'PGWIZ-MD').toUpperCase();
+      const botOwner = settings.botOwner || process.env.BOT_OWNER || 'pgwiz';
       const version = settings.version || '5.2.0';
+      const prefix = context.usedPrefix || (settings.prefixes ? settings.prefixes[0] : '.');
 
       const card = `*✩ ${botName} STATUS ✩*
 ${DIVIDER}
 ${statusColor} *Status:* ACTIVE
+${DIVIDER}
+👑 *Owner:* ${botOwner}
+🤖 *Bot:* ${botName}
+💎 *Version:* ${version}
+🔧 *Prefix:* ${prefix}
+🌐 *Platform:* https://pgwiz.cloud (${os.platform()})
 ${DIVIDER}
 ⏱️ *Uptime:* ${uptimeText}
 🔌 *Plugins:* ${commandCount}
@@ -97,11 +105,11 @@ ${DIVIDER}
 ⚙️ *CPU:* ${cpuLoad} load
 ${DIVIDER}
 🕐 *Time:* ${timeText}
-🤖 *Version:* ${version}
 ${DIVIDER}`;
 
       await sock.sendMessage(chatId, {
         text: card,
+        footer: botName,
         ...channelInfo
       }, { quoted: message });
 

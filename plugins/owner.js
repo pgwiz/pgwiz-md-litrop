@@ -21,11 +21,14 @@ module.exports = {
       const rawOwnerNum = (Array.isArray(settings.ownerNumber) && settings.ownerNumber[0]) || '254789462334';
       const cleanOwnerNumber = String(rawOwnerNum).replace(/[^0-9]/g, '') || '254789462334';
 
+      const prefix = context.usedPrefix || (settings.prefixes ? settings.prefixes[0] : '.');
+
       const ownerText = `*✩ ${botName} OWNER ✩*
 ${DIVIDER}
 👑 *Owner:* ${botOwner}
 🤖 *Bot:* ${botName}
-🤖 *Version:* ${version}
+💎 *Version:* ${version}
+🔧 *Prefix:* ${prefix}
 ${DIVIDER}
 🌐 *Platform:* https://pgwiz.cloud
 🐙 *GitHub:* https://github.com/pgwiz

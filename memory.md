@@ -215,4 +215,10 @@ The following downloaders were audited and flagged as currently non-functional d
 - **Interactive Action Buttons**: Multiple native-flow CTA URL buttons attached to `.owner` and `.repo` (`buttons` array via `sock.sendButtons` / `sock.sendMessage`) with automated text-message fallback. When spreading `channelInfo`, destruct `const { buttons: _b, ...safeChannelInfo } = channelInfo;` to prevent overriding custom button arrays.
 - **Dynamic Plugin Counting**: Evaluates `commandHandler.commands.size` with directory `.js` scan fallback to ensure 100% accurate plugin count metrics across light and main variants.
 - **Clean Format Coverage**: Alive/Status, Ping/Speed, Menu/Help, Owner, Repo, Version, JID, Save, Sudo, Mode, Getcode, Gitinfo, Anticall, PMBlocker, Welcome, TikTok, and Welcome/Goodbye Setup.
+- **Streamlined Menu Layout Architecture**:
+  - Primary menu (`plugins/list.js` in mega-main, `plugins/menu.js` in mega-light) omits redundant header lines (`🤖 Bot`, `👑 Owner`, `💎 Version`).
+  - Top commands (`🔥 Top:`) omitted by default; conditionally displayed when `SHOW_TOP_COMMANDS=true`, `MENU_SHOW_TOP=true`, or `settings.showTopCommands === true`.
+  - Category views omit `reply .menu + command:`.
+  - Comprehensive bot details (Bot, Owner, Version, Prefix, Platform, Uptime, Hardware Telemetry) centralized in `.owner` (`plugins/owner.js`) and `.alive` / `.info` (`plugins/alive.js`).
+  - Card menus terminate cleanly with `╰━━━━━━━━━━━━━━⬣` followed by `${botName}` footer.
 
